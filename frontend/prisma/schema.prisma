@@ -42,10 +42,15 @@ model User {
   withdrawals       Withdrawal[]
   oauthAccounts     OAuthAccount[]
   adminActions      AdminAction[]
+  consultationsProvided Consultation[]
+  registerClosures  RegisterClosure[]
+  reportsFiled      Report[]
 
-  // Multi-tenancy is opt-in per project: by default no resource is org-scoped.
-  // Apps that need it (marketplace, B2B SaaS, classifieds) wire owner relations
-  // on their domain models.
+  // Multi-tenancy: MediAfrica is a multi-tenant SaaS — each User belongs to
+  // exactly one Organization (health center) via `memberships`
+  // (OrganizationMember gets @@unique([userId]) once backfilled — see
+  // enforce_multitenancy_constraints migration). Platform ADMIN/SUPERADMIN
+  // accounts (role above) are independent of clinic membership.
   ownedOrganizations Organization[]      @relation("OrgOwner")
   memberships        OrganizationMember[] @relation("OrgMembership")
 
@@ -85,6 +90,17 @@ model AdminAction {
 }
 
 // ───────────────────────────────────────────────────────────────────────
+// Per-organization clinic settings — one row per health center tenant.
+// ───────────────────────────────────────────────────────────────────────
+model ClinicSettings {
+  id             String       @id @default(cuid())
+  organizationId String       @unique
+  organization   Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  name           String       @default("CSRéf Bamako V")
+  updatedAt      DateTime     @updatedAt
+}
+
+// ───────────────────────────────────────────────────────────────────────
 // Multi-tenancy primitives — opt-in.
 //
 // Default project surface stays user-owned (`Order.userId`, `Withdrawal.userId`).
@@ -94,6 +110,8 @@ model AdminAction {
 // Slug must be unique app-wide (not just within an owner) so it can be
 // used as a stable URL segment.
 // ───────────────────────────────────────────────────────────────────────
+// Organization = a health center tenant (MediAfrica is multi-tenant SaaS).
+// Each Organization has exactly one Subscription and one ClinicSettings row.
 model Organization {
   id        String   @id @default(cuid())
   slug      String   @unique
@@ -104,12 +122,24 @@ model Organization {
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
+  patients         Patient[]
+  registerClosures RegisterClosure[]
+  clinicSettings   ClinicSettings?
+  subscription     Subscription?
+  orders           Order[]
+  reports          Report[]
+
   @@index([ownerId])
 }
 
 // Role precedence: OWNER > ADMIN > MEMBER. The owner is also a member row
 // (created in the same tx as the org) so list-my-orgs queries can join
 // uniformly via memberships.
+//
+// `@@unique([userId])` enforces exactly one organization per user (locked
+// scope decision — no multi-org staff, no org-switcher UI). The compound
+// `@@unique([organizationId, userId])` stays for `requireOrgRole`'s lookup
+// shape.
 model OrganizationMember {
   id             String       @id @default(cuid())
   organizationId String
@@ -120,7 +150,7 @@ model OrganizationMember {
   createdAt      DateTime     @default(now())
 
   @@unique([organizationId, userId])
-  @@index([userId])
+  @@unique([userId])
 }
 
 // ───────────────────────────────────────────────────────────────────────
@@ -276,6 +306,13 @@ model Order {
   id              String    @id @default(cuid())
   userId          String? // nullable — guest checkout supported
   user            User?     @relation(fields: [userId], references: [id], onDelete: SetNull)
+  // Subscription billing — nullable so Order stays usable for non-subscription
+  // charges too. Set together: an Order created by the billing engine always
+  // carries both.
+  organizationId  String?
+  organization    Organization? @relation(fields: [organizationId], references: [id], onDelete: SetNull)
+  subscriptionId  String?
+  subscription    Subscription? @relation(fields: [subscriptionId], references: [id], onDelete: SetNull)
   amount          Int // gross amount, smallest unit
   currency        String    @default("XOF") // ISO 4217
   status          String    @default("PENDING") // PENDING | PAID | EXPIRED | FAILED | REFUNDED
@@ -308,6 +345,7 @@ model Order {
   @@index([userId, createdAt])
   @@index([status, expiresAt])
   @@index([provider, providerChargeId])
+  @@index([organizationId, createdAt])
 }
 
 model Withdrawal {
@@ -331,4 +369,147 @@ model Withdrawal {
   @@index([userId, requestedAt])
   @@index([status, requestedAt])
   @@index([provider, providerPayoutId])
+}
+
+model Patient {
+  id             String       @id @default(cuid())
+  organizationId String
+  organization   Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  dossierNumber String   @unique // "P-20250187"
+  nom           String
+  prenom        String
+  dateNaissance DateTime
+  sexe          String // M | F
+
+  telephonePrincipal      String
+  telephoneSecondaire     String?
+  communeResidence        String
+  quartierVillage         String?
+  contactUrgenceNom       String?
+  contactUrgenceTelephone String?
+  numeroRamed             String?
+  numeroAmo               String? // Assurance Maladie Obligatoire — distinct from RAMED
+
+  groupeSanguin           String? // A+ | A- | B+ | B- | AB+ | AB- | O+ | O- | Inconnu
+  allergiesConnues        String?
+  antecedentsPersonnels   String?
+  antecedentsChirurgicaux String?
+  antecedentsFamiliaux    String?
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  consultations Consultation[]
+
+  @@index([nom, prenom])
+  @@index([communeResidence])
+  @@index([createdAt])
+  @@index([organizationId])
+}
+
+model Consultation {
+  id         String   @id @default(cuid())
+  patientId  String
+  patient    Patient  @relation(fields: [patientId], references: [id], onDelete: Restrict)
+  providerId String?
+  provider   User?    @relation(fields: [providerId], references: [id], onDelete: SetNull)
+
+  date   DateTime @default(now())
+  motif  String
+  status String   @default("attente") // attente | consultation | traite | urgent
+
+  diagnostic         String?
+  traitementPrescrit String?
+  tensionArterielle  String? // "118/76"
+  poidsKg            Float?
+  tailleCm           Float?
+  perimetreBrachialCm Float? // PB - périmètre brachial (cm), dépistage malnutrition
+  statutPT           String? // P/T - statut nutritionnel poids/taille (texte libre, lu sur abaque OMS)
+  temperatureC       Float?
+
+  typeCas    String?  // NC | AC (Nouveau Cas | Ancien Cas)
+  mdo        Boolean  @default(false) // maladie à déclaration obligatoire
+  mdoMaladie String? // nom de la maladie si mdo=true
+
+  tdr String? // Test de Diagnostic Rapide (paludisme) - Positif | Négatif | Non fait
+  ge  String? // Goutte Épaisse (paludisme) - Positif | Négatif | Non fait
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([patientId, date])
+  @@index([status, date])
+}
+
+// Clôture mensuelle d'un registre (registre de consultation pour l'instant ;
+// registerType laisse la place à maternité/PEV/URENI plus tard). Une fois un
+// mois clôturé, les routes de mutation de Consultation le refusent
+// (REGISTER_CLOSED) — voir lib/server/registers/closure.ts.
+model RegisterClosure {
+  id             String       @id @default(cuid())
+  organizationId String
+  organization   Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  registerType String   @default("consultation")
+  month        String // "2026-01"
+  closedAt     DateTime @default(now())
+  closedById   String?
+  closedBy     User?    @relation(fields: [closedById], references: [id], onDelete: SetNull)
+  createdAt    DateTime @default(now())
+
+  @@unique([organizationId, registerType, month])
+}
+
+// ───────────────────────────────────────────────────────────────────────
+// Subscription billing — SaaS layer on top of the multi-tenant clinics.
+// Bictorys is checkout-link only (no stored-card silent recurring charge),
+// so billing is invoice-then-pay-through-link: the subscription-billing
+// cron creates a pending Order each period and emails the org owner a
+// "pay now" link; there is no automatic charge.
+// ───────────────────────────────────────────────────────────────────────
+model Plan {
+  id                  String   @id @default(cuid())
+  name                String
+  priceAmount         Int // smallest currency unit (XOF = FCFA, no decimals)
+  currency            String   @default("XOF")
+  billingIntervalDays Int      @default(30)
+  isActive            Boolean  @default(true)
+  createdAt           DateTime @default(now())
+  updatedAt           DateTime @updatedAt
+
+  subscriptions Subscription[]
+}
+
+model Subscription {
+  id               String   @id @default(cuid())
+  organizationId   String   @unique
+  organization     Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  planId           String
+  plan             Plan     @relation(fields: [planId], references: [id], onDelete: Restrict)
+  status           String   @default("TRIALING") // TRIALING | ACTIVE | PAST_DUE | CANCELED
+  trialEndsAt      DateTime?
+  currentPeriodEnd DateTime
+  createdAt        DateTime @default(now())
+  updatedAt        DateTime @updatedAt
+
+  orders Order[]
+
+  @@index([status, currentPeriodEnd])
+}
+
+// Staff-submitted reports/flags (bugs, support requests, billing issues) —
+// reviewed by the platform admin under /admin/signalements.
+model Report {
+  id             String    @id @default(cuid())
+  organizationId String
+  organization   Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  reporterId     String
+  reporter       User      @relation(fields: [reporterId], references: [id], onDelete: Restrict)
+  category       String // bug | support | billing | autre
+  message        String
+  status         String    @default("OPEN") // OPEN | RESOLVED
+  createdAt      DateTime  @default(now())
+  resolvedAt     DateTime?
+
+  @@index([status, createdAt])
+  @@index([organizationId])
 }
