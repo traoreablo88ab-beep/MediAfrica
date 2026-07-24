@@ -132,6 +132,27 @@ function StaffIcon({ className }: IconProps) {
   );
 }
 
+function LogoutIcon({ className }: IconProps) {
+  return (
+    <svg viewBox="0 0 24 24" fill="none" className={className} aria-hidden="true">
+      <path
+        d="M15 4.5H6a1.5 1.5 0 0 0-1.5 1.5v12A1.5 1.5 0 0 0 6 19.5h9"
+        stroke="currentColor"
+        strokeWidth="1.8"
+        strokeLinecap="round"
+        strokeLinejoin="round"
+      />
+      <path
+        d="M10 12h10m0 0-3.5-3.5M20 12l-3.5 3.5"
+        stroke="currentColor"
+        strokeWidth="1.8"
+        strokeLinecap="round"
+        strokeLinejoin="round"
+      />
+    </svg>
+  );
+}
+
 function CsrefAdminIcon({ className }: IconProps) {
   return (
     <svg viewBox="0 0 24 24" fill="none" className={className} aria-hidden="true">
@@ -222,11 +243,17 @@ function NavLink({
 }
 
 export function AppHeader({ active }: { active?: AppNavTab }) {
-  const { user } = useAuth();
+  const { user, logout } = useAuth();
   const router = useRouter();
   const displayName = user?.name ?? user?.email ?? '';
   const [mobileOpen, setMobileOpen] = useState(false);
   const panelRef = useRef<HTMLDivElement>(null);
+
+  async function onLogout() {
+    setMobileOpen(false);
+    await logout();
+    router.push('/login');
+  }
 
   // Google OAuth signup creates a User but no Organization (unlike
   // email/password signup, which creates both in one tx — see
@@ -338,21 +365,32 @@ export function AppHeader({ active }: { active?: AppNavTab }) {
             </span>
           </div>
 
-          <Link
-            href="/settings"
-            title="Paramètres du compte"
-            className="flex items-center gap-3 rounded-md px-2 py-1 hover:bg-[#f9f9f7] md:ml-auto"
-          >
-            <div className="hidden text-right sm:block">
-              <p className="text-sm font-medium text-[#0b0b0b]">
-                {user?.name ?? 'Nom non renseigné'}
-              </p>
-              <p className="text-xs text-[#898781]">{user?.email ?? '—'}</p>
-            </div>
-            <div className="flex h-9 w-9 items-center justify-center rounded-full bg-[#e1e0d9] text-sm font-semibold text-[#52514e] transition-transform duration-200 hover:scale-105">
-              {displayName ? initials(displayName) : '?'}
-            </div>
-          </Link>
+          <div className="flex items-center gap-1 md:ml-auto">
+            <Link
+              href="/settings"
+              title="Paramètres du compte"
+              className="flex items-center gap-3 rounded-md px-2 py-1 hover:bg-[#f9f9f7]"
+            >
+              <div className="hidden text-right sm:block">
+                <p className="text-sm font-medium text-[#0b0b0b]">
+                  {user?.name ?? 'Nom non renseigné'}
+                </p>
+                <p className="text-xs text-[#898781]">{user?.email ?? '—'}</p>
+              </div>
+              <div className="flex h-9 w-9 items-center justify-center rounded-full bg-[#e1e0d9] text-sm font-semibold text-[#52514e] transition-transform duration-200 hover:scale-105">
+                {displayName ? initials(displayName) : '?'}
+              </div>
+            </Link>
+            <button
+              type="button"
+              onClick={onLogout}
+              title="Se déconnecter"
+              aria-label="Se déconnecter"
+              className="flex h-9 w-9 items-center justify-center rounded-md text-[#52514e] hover:bg-[#f9f9f7] hover:text-[#d03b3b]"
+            >
+              <LogoutIcon className="h-[18px] w-[18px]" />
+            </button>
+          </div>
         </div>
 
         {mobileOpen && (
@@ -418,6 +456,14 @@ export function AppHeader({ active }: { active?: AppNavTab }) {
                 Admin App
               </Link>
             )}
+            <button
+              type="button"
+              onClick={onLogout}
+              className="animate-fade-in-up flex items-center gap-2 rounded-md px-3 py-2 text-left text-sm font-medium text-[#52514e] hover:bg-[#f9f9f7] hover:text-[#d03b3b]"
+            >
+              <LogoutIcon className="h-4 w-4" />
+              Se déconnecter
+            </button>
           </nav>
         )}
       </header>
