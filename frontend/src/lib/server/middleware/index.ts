@@ -39,6 +39,10 @@ export interface OrgContext extends AuthContext {
   orgMember: { organizationId: string; userId: string; role: OrgRole };
 }
 
+export interface OrgMemberContext extends AuthContext {
+  orgMember: { organizationId: string; role: OrgRole };
+}
+
 /**
  * Resolve the authenticated user from the cookie / Bearer header. Returns
  * `AuthContext` on success, or a 401 NextResponse on failure.
@@ -172,4 +176,67 @@ export async function requireOrgRole(
     user: auth.user,
     orgMember: { organizationId: membership.organizationId, userId: membership.userId, role },
   };
+}
+
+/**
+ * requireOrgMember — MediAfrica multi-tenancy: resolves the CALLER's own
+ * organization (every User belongs to exactly one, enforced by
+ * OrganizationMember's `@@unique([userId])`). Unlike `requireOrgRole`, no
+ * organizationId is passed in — there's nothing in the URL to trust or
+ * distrust, which is the point: a route using this can never be tricked
+ * into operating on a different clinic's data via a client-supplied id.
+ *
+ * Returns 403 NO_ORGANIZATION for authenticated users with no membership
+ * (e.g. a platform ADMIN/SUPERADMIN account that isn't also clinic staff —
+ * use `requireAdmin`/`requireAdminOrgAccess` for those routes instead, never
+ * this one).
+ */
+export async function requireOrgMember(
+  authHeader?: string | null,
+): Promise<OrgMemberContext | NextResponse> {
+  const auth = await requireAuth(authHeader);
+  if (auth instanceof NextResponse) return auth;
+
+  const membership = await prisma.organizationMember.findUnique({
+    where: { userId: auth.user.sub },
+    select: { organizationId: true, role: true },
+  });
+  if (!membership) {
+    return NextResponse.json(
+      { error: 'NO_ORGANIZATION', message: 'Account is not linked to a health center.' },
+      { status: 403 },
+    );
+  }
+  return {
+    user: auth.user,
+    orgMember: { organizationId: membership.organizationId, role: membership.role as OrgRole },
+  };
+}
+
+/**
+ * requireAdminOrgAccess — platform-admin read access to a SPECIFIC clinic's
+ * data (e.g. /api/admin/organizations/[id]/...). Deliberately separate from
+ * `requireOrgMember`: an admin is never implicitly "in" any organization,
+ * they explicitly name the one they're inspecting. Chains `requireAdmin`,
+ * never touches `OrganizationMember` — keeps the two authorization models
+ * (platform back-office vs. clinic staff) from ever overlapping.
+ */
+export async function requireAdminOrgAccess(
+  organizationId: string,
+  authHeader?: string | null,
+): Promise<AdminContext | NextResponse> {
+  const auth = await requireAdmin('ADMIN', authHeader);
+  if (auth instanceof NextResponse) return auth;
+
+  const org = await prisma.organization.findUnique({
+    where: { id: organizationId },
+    select: { id: true },
+  });
+  if (!org) {
+    return NextResponse.json(
+      { error: 'ORGANIZATION_NOT_FOUND', message: 'Organization not found' },
+      { status: 404 },
+    );
+  }
+  return auth;
 }

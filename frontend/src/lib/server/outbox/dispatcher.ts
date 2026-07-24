@@ -166,6 +166,15 @@ async function dispatchEvent(deps: OutboxDispatcherDeps, event: OutboxEvent): Pr
       await deps.emailQueue.enqueue({ to, subject: tpl.subject, html: tpl.html });
       return;
     }
+    case 'email.subscription_renewal_due': {
+      // Emitted by the subscription-billing cron when a clinic's period ends.
+      if (!deps.emailQueue) throw new Error('email queue not configured');
+      const { subscriptionRenewalDueEmail } = await import('../subscriptions/email-templates');
+      const { to, clinicName, billingUrl } = event.payload;
+      const tpl = subscriptionRenewalDueEmail({ clinicName, billingUrl });
+      await deps.emailQueue.enqueue({ to, subject: tpl.subject, html: tpl.html });
+      return;
+    }
     default: {
       // Exhaustive check — TS will yell if we add a new variant and forget it.
       const _exhaustive: never = event;

@@ -13,7 +13,8 @@ export type OutboxEvent =
   | NotificationPaymentReceivedEvent
   | EmailPaymentConfirmationEvent
   | EmailVerificationCodeEvent
-  | EmailPasswordResetEvent;
+  | EmailPasswordResetEvent
+  | EmailSubscriptionRenewalDueEvent;
 
 export interface NotificationPaymentReceivedEvent {
   kind: 'notification.payment_received';
@@ -58,6 +59,20 @@ export interface EmailPasswordResetEvent {
     to: string;
     code: string;
     expiresAt: string;
+  };
+}
+
+/**
+ * Emitted by the subscription-billing cron when a clinic's subscription
+ * period ends and payment is due. Consumed by the email-queue cron (calls
+ * subscriptionRenewalDueEmail() to render).
+ */
+export interface EmailSubscriptionRenewalDueEvent {
+  kind: 'email.subscription_renewal_due';
+  payload: {
+    to: string;
+    clinicName: string;
+    billingUrl: string;
   };
 }
 
