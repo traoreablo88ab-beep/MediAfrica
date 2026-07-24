@@ -236,7 +236,7 @@ export default function AdminOverviewPage() {
   if (!stats) {
     return (
       <div className="flex flex-col gap-6">
-        <div className="h-16 w-72 animate-pulse rounded-xl bg-[#e1e0d9]/50" />
+        <div className="h-16 w-72 max-w-full animate-pulse rounded-xl bg-[#e1e0d9]/50" />
         <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-4">
           {Array.from({ length: 4 }).map((_, i) => (
             <div key={i} className="h-28 animate-pulse rounded-xl bg-[#e1e0d9]/50" />
