@@ -51,13 +51,31 @@ beforeEach(() => {
   });
 });
 
+// Every genuinely-new signup also provisions a brand-new Organization (the
+// clinic), its OWNER membership, a TRIALING Subscription, and ClinicSettings
+// — all inside the same tx as the User row (see route.ts step 5).
+function mockNewClinicProvisioning() {
+  prismaMock.plan.findFirst.mockResolvedValue({ id: 'plan-1' } as never);
+  prismaMock.organization.create.mockResolvedValue({ id: 'org-1' } as never);
+  prismaMock.organizationMember.create.mockResolvedValue({} as never);
+  prismaMock.subscription.create.mockResolvedValue({} as never);
+  prismaMock.clinicSettings.create.mockResolvedValue({} as never);
+}
+
 describe('POST /api/auth/signup', () => {
   it('creates a new user, code, and outbox event for genuinely new emails', async () => {
     prismaMock.user.findUnique.mockResolvedValue(null);
     prismaMock.user.create.mockResolvedValue({ id: 'u-new' } as never);
     prismaMock.verificationCode.create.mockResolvedValue({} as never);
+    mockNewClinicProvisioning();
 
-    const res = await POST(makeReq({ email: 'new@example.com', password: 'a-strong-passphrase' }));
+    const res = await POST(
+      makeReq({
+        email: 'new@example.com',
+        password: 'a-strong-passphrase',
+        clinicName: 'Clinique Test',
+      }),
+    );
     expect(res.status).toBe(201);
     const body = await res.json();
     expect(body).toEqual({ ok: true });
@@ -67,6 +85,17 @@ describe('POST /api/auth/signup', () => {
     const codeArg = prismaMock.verificationCode.create.mock.calls[0]?.[0];
     expect(codeArg?.data?.type).toBe('EMAIL_VERIFY');
 
+    expect(prismaMock.organization.create).toHaveBeenCalledTimes(1);
+    const orgArg = prismaMock.organization.create.mock.calls[0]?.[0];
+    expect(orgArg?.data?.name).toBe('Clinique Test');
+    expect(orgArg?.data?.ownerId).toBe('u-new');
+    const memberArg = prismaMock.organizationMember.create.mock.calls[0]?.[0];
+    expect(memberArg?.data).toMatchObject({
+      organizationId: 'org-1',
+      userId: 'u-new',
+      role: 'OWNER',
+    });
+
     expect(enqueueOutbox).toHaveBeenCalledTimes(1);
     const outboxArg = (enqueueOutbox as unknown as ReturnType<typeof vi.fn>).mock.calls[0]?.[1];
     expect(outboxArg?.kind).toBe('email.verification_code');
@@ -75,9 +104,14 @@ describe('POST /api/auth/signup', () => {
 
   it('returns identical 201 + dummy-bcrypts on existing email (enumeration-resist)', async () => {
     prismaMock.user.findUnique.mockResolvedValue({ id: 'u-existing' } as never);
+    prismaMock.plan.findFirst.mockResolvedValue({ id: 'plan-1' } as never);
 
     const res = await POST(
-      makeReq({ email: 'existing@example.com', password: 'a-strong-passphrase' }),
+      makeReq({
+        email: 'existing@example.com',
+        password: 'a-strong-passphrase',
+        clinicName: 'Clinique Test',
+      }),
     );
     expect(res.status).toBe(201);
     const body = await res.json();
@@ -86,11 +120,14 @@ describe('POST /api/auth/signup', () => {
     expect(dummyBcryptCompare).toHaveBeenCalledTimes(1);
     expect(prismaMock.user.create).not.toHaveBeenCalled();
     expect(prismaMock.verificationCode.create).not.toHaveBeenCalled();
+    expect(prismaMock.organization.create).not.toHaveBeenCalled();
     expect(enqueueOutbox).not.toHaveBeenCalled();
   });
 
   it('rejects banned passwords with PASSWORD_BANNED before user lookup', async () => {
-    const res = await POST(makeReq({ email: 'foo@example.com', password: 'password' }));
+    const res = await POST(
+      makeReq({ email: 'foo@example.com', password: 'password', clinicName: 'Clinique Test' }),
+    );
     expect(res.status).toBe(400);
     const body = await res.json();
     expect(body.error).toBe('PASSWORD_BANNED');
@@ -98,7 +135,9 @@ describe('POST /api/auth/signup', () => {
   });
 
   it('rejects too-short passwords with PASSWORD_TOO_SHORT', async () => {
-    const res = await POST(makeReq({ email: 'foo@example.com', password: 'short' }));
+    const res = await POST(
+      makeReq({ email: 'foo@example.com', password: 'short', clinicName: 'Clinique Test' }),
+    );
     expect(res.status).toBe(400);
     const body = await res.json();
     expect(body.error).toBe('PASSWORD_TOO_SHORT');
@@ -107,17 +146,31 @@ describe('POST /api/auth/signup', () => {
   });
 
   it('returns VALIDATION_FAILED for malformed email', async () => {
-    const res = await POST(makeReq({ email: 'not-an-email', password: 'a-strong-passphrase' }));
+    const res = await POST(
+      makeReq({
+        email: 'not-an-email',
+        password: 'a-strong-passphrase',
+        clinicName: 'Clinique Test',
+      }),
+    );
     expect(res.status).toBe(400);
     const body = await res.json();
     expect(body.error).toBe('VALIDATION_FAILED');
     expect(Array.isArray(body.issues)).toBe(true);
   });
 
+  it('returns VALIDATION_FAILED when clinicName is missing', async () => {
+    const res = await POST(makeReq({ email: 'foo@example.com', password: 'a-strong-passphrase' }));
+    expect(res.status).toBe(400);
+    const body = await res.json();
+    expect(body.error).toBe('VALIDATION_FAILED');
+  });
+
   it('returns 429 TOO_MANY_SIGNUP_ATTEMPTS when the per-email limit is hit', async () => {
     prismaMock.user.findUnique.mockResolvedValue(null);
     prismaMock.user.create.mockResolvedValue({ id: 'u-rate' } as never);
     prismaMock.verificationCode.create.mockResolvedValue({} as never);
+    mockNewClinicProvisioning();
 
     const calls = await Promise.all(
       Array.from({ length: 6 }, () =>
@@ -125,6 +178,7 @@ describe('POST /api/auth/signup', () => {
           makeReq({
             email: 'rate-target@example.com',
             password: 'a-strong-passphrase',
+            clinicName: 'Clinique Test',
           }),
         ),
       ),
@@ -144,6 +198,7 @@ describe('POST /api/auth/signup', () => {
         makeReq({
           email: 'hibp@example.com',
           password: 'a-very-unique-passphrase-1234',
+          clinicName: 'Clinique Test',
         }),
       );
       expect(res.status).toBe(400);

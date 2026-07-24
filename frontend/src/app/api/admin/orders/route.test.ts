@@ -71,6 +71,25 @@ describe('/api/admin/orders [Wave 1] — list', () => {
     expect(where?.['status']).toBe('PAID');
   });
 
+  it('GET filters by organizationId', async () => {
+    prismaMock.order.findMany.mockResolvedValueOnce([] as never);
+    await GET(makeGet('http://test/api/admin/orders?organizationId=org-1'));
+    const args = prismaMock.order.findMany.mock.calls[0]?.[0];
+    const where = args?.where as Record<string, unknown> | undefined;
+    expect(where?.['organizationId']).toBe('org-1');
+  });
+
+  it('GET selects organizationId, subscriptionId, and organization name', async () => {
+    prismaMock.order.findMany.mockResolvedValueOnce([] as never);
+    await GET(makeGet('http://test/api/admin/orders'));
+    const args = prismaMock.order.findMany.mock.calls[0]?.[0];
+    expect(args?.select).toMatchObject({
+      organizationId: true,
+      subscriptionId: true,
+      organization: { select: { name: true } },
+    });
+  });
+
   it('GET filters by since/until window', async () => {
     prismaMock.order.findMany.mockResolvedValueOnce([] as never);
     await GET(

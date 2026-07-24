@@ -16,7 +16,7 @@ vi.mock('@/lib/server/auth', async () => {
 });
 
 import { verifyToken } from '@/lib/server/auth';
-import { GET } from './route';
+import { GET, PATCH } from './route';
 import { NextRequest } from 'next/server';
 
 function makeReq(opts: { tokenCookie?: string; bearer?: string } = {}): NextRequest {
@@ -25,6 +25,21 @@ function makeReq(opts: { tokenCookie?: string; bearer?: string } = {}): NextRequ
   return new NextRequest('https://test/api/auth/me', {
     method: 'GET',
     headers,
+  });
+}
+
+function makePatchReq(
+  body: unknown,
+  opts: { bearer?: string | null; csrf?: string | null } = {},
+): NextRequest {
+  const { bearer = 'valid-access-token', csrf = 'csrf-token' } = opts;
+  const headers: Record<string, string> = {};
+  if (bearer) headers.authorization = `Bearer ${bearer}`;
+  if (csrf) headers['x-csrf-token'] = csrf;
+  return new NextRequest('https://test/api/auth/me', {
+    method: 'PATCH',
+    headers,
+    body: JSON.stringify(body),
   });
 }
 
@@ -56,6 +71,43 @@ describe('GET /api/auth/me', () => {
     expect(await res.json()).toMatchObject({
       user: { sub: 'u1', email: 'a@b.com' },
     });
+  });
+
+  it('Test 1b: authed with an organization — returns the clinic-level orgRole', async () => {
+    vi.mocked(verifyToken).mockResolvedValue({
+      sub: 'u1',
+      email: 'a@b.com',
+      tokenVersion: 0,
+    });
+    prismaMock.user.findUnique.mockResolvedValue({
+      id: 'u1',
+      email: 'a@b.com',
+      tokenVersion: 0,
+    } as never);
+    prismaMock.organizationMember.findUnique.mockResolvedValue({ role: 'OWNER' } as never);
+
+    const res = await GET(makeReq({ bearer: 'valid-access-token' }));
+    expect(res.status).toBe(200);
+    const body = await res.json();
+    expect(body.user.orgRole).toBe('OWNER');
+  });
+
+  it('Test 1c: authed with no organization (e.g. fresh OAuth signup) — orgRole is null', async () => {
+    vi.mocked(verifyToken).mockResolvedValue({
+      sub: 'u1',
+      email: 'a@b.com',
+      tokenVersion: 0,
+    });
+    prismaMock.user.findUnique.mockResolvedValue({
+      id: 'u1',
+      email: 'a@b.com',
+      tokenVersion: 0,
+    } as never);
+    prismaMock.organizationMember.findUnique.mockResolvedValue(null);
+
+    const res = await GET(makeReq({ bearer: 'valid-access-token' }));
+    const body = await res.json();
+    expect(body.user.orgRole).toBeNull();
   });
 
   it('Test 2: no cookie + no bearer — 401 missing token', async () => {
@@ -91,5 +143,50 @@ describe('GET /api/auth/me', () => {
 
     const res = await GET(makeReq({ bearer: 'orphan-jwt' }));
     expect(res.status).toBe(401);
+  });
+});
+
+describe('PATCH /api/auth/me', () => {
+  it('returns 403 when the CSRF header is missing', async () => {
+    const res = await PATCH(makePatchReq({ name: 'Amadou Diallo' }, { csrf: null }));
+    expect(res.status).toBe(403);
+  });
+
+  it('returns 401 when unauthenticated', async () => {
+    const res = await PATCH(makePatchReq({ name: 'Amadou Diallo' }, { bearer: null }));
+    expect(res.status).toBe(401);
+  });
+
+  it('returns 400 VALIDATION_FAILED on an empty name', async () => {
+    vi.mocked(verifyToken).mockResolvedValue({ sub: 'u1', email: 'a@b.com', tokenVersion: 0 });
+    prismaMock.user.findUnique.mockResolvedValue({
+      id: 'u1',
+      email: 'a@b.com',
+      tokenVersion: 0,
+    } as never);
+
+    const res = await PATCH(makePatchReq({ name: '' }));
+    expect(res.status).toBe(400);
+    const body = await res.json();
+    expect(body.error).toBe('VALIDATION_FAILED');
+  });
+
+  it('happy path: updates the display name', async () => {
+    vi.mocked(verifyToken).mockResolvedValue({ sub: 'u1', email: 'a@b.com', tokenVersion: 0 });
+    prismaMock.user.findUnique.mockResolvedValue({
+      id: 'u1',
+      email: 'a@b.com',
+      tokenVersion: 0,
+    } as never);
+    prismaMock.user.update.mockResolvedValue({ name: 'Amadou Diallo' } as never);
+
+    const res = await PATCH(makePatchReq({ name: 'Amadou Diallo' }));
+    expect(res.status).toBe(200);
+    const body = await res.json();
+    expect(body.name).toBe('Amadou Diallo');
+
+    const arg = prismaMock.user.update.mock.calls[0]?.[0];
+    expect(arg?.where).toEqual({ id: 'u1' });
+    expect(arg?.data).toEqual({ name: 'Amadou Diallo' });
   });
 });

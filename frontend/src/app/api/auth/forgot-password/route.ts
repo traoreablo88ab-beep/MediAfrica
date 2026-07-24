@@ -25,11 +25,8 @@ import { redis } from '@/lib/server/redis';
 import { createEmailLimiter } from '@/lib/server/middleware/rate-limit-by-email';
 import { makeRequestContext, withRequestContext } from '@/lib/server/observability/request-context';
 import { log } from '@/lib/server/observability/log';
-import { generateVerificationCode } from '@/lib/server/auth';
 import { dummyBcryptCompare } from '@/lib/server/auth/dummy-bcrypt';
-import { enqueueOutbox } from '@/lib/server/outbox';
-
-const VERIFICATION_TTL_MS = Number(process.env.AUTH_VERIFICATION_TTL_MIN ?? 15) * 60 * 1000;
+import { issuePasswordReset } from '@/lib/server/auth/issue-password-reset';
 
 // CR-01 — wall-clock floor for both branches. 350ms covers a cost-12 bcrypt
 // compare worst-case + a single $transaction roundtrip + jitter, so the
@@ -84,26 +81,7 @@ export async function POST(req: NextRequest): Promise<Response> {
     });
 
     if (user) {
-      const code = generateVerificationCode();
-      const expiresAt = new Date(Date.now() + VERIFICATION_TTL_MS);
-      await prisma.$transaction(async (tx) => {
-        await tx.verificationCode.create({
-          data: {
-            userId: user.id,
-            code,
-            type: 'PASSWORD_RESET',
-            expiresAt,
-          },
-        });
-        await enqueueOutbox(tx, {
-          kind: 'email.password_reset',
-          payload: {
-            to: email,
-            code,
-            expiresAt: expiresAt.toISOString(),
-          },
-        });
-      });
+      await prisma.$transaction((tx) => issuePasswordReset(tx, { userId: user.id, email }));
       log.info('forgot-password code issued', { userId: user.id });
     } else {
       log.info('forgot-password no-user (enumeration-resist)');

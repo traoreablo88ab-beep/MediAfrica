@@ -21,6 +21,8 @@ import { makeRequestContext, withRequestContext } from '@/lib/server/observabili
 const ORDER_SELECT = {
   id: true,
   userId: true,
+  organizationId: true,
+  subscriptionId: true,
   amount: true,
   currency: true,
   status: true,
@@ -32,6 +34,7 @@ const ORDER_SELECT = {
   expiresAt: true,
   paidAt: true,
   createdAt: true,
+  organization: { select: { name: true } },
 } as const satisfies Prisma.OrderSelect;
 
 function parseDate(raw: string | null): Date | null {
@@ -52,12 +55,14 @@ export async function GET(req: NextRequest): Promise<NextResponse> {
     const url = req.nextUrl;
     const limit = clampLimit(url.searchParams.get('limit'));
     const status = url.searchParams.get('status');
+    const organizationId = url.searchParams.get('organizationId');
     const since = parseDate(url.searchParams.get('since'));
     const until = parseDate(url.searchParams.get('until'));
     const cursor = decodeCursor(url.searchParams.get('cursor'));
 
     const where: Prisma.OrderWhereInput = {
       ...(status ? { status } : {}),
+      ...(organizationId ? { organizationId } : {}),
       ...(since || until
         ? {
             createdAt: {

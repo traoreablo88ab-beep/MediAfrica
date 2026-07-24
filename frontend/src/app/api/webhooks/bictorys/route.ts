@@ -81,6 +81,26 @@ export const POST = createWebhookHandler({
       });
     }
 
+    // Subscription billing (frontend/src/lib/server/subscriptions/) — an
+    // Order created by POST /api/billing/pay carries subscriptionId. On
+    // paid, advance the period and clear PAST_DUE/TRIALING. State change,
+    // not a side-effect notification, so it happens in this same tx rather
+    // than via the outbox.
+    if (order.subscriptionId) {
+      const subscription = await tx.subscription.findUnique({
+        where: { id: order.subscriptionId },
+        include: { plan: true },
+      });
+      if (subscription) {
+        const nextPeriodEnd = new Date(subscription.currentPeriodEnd);
+        nextPeriodEnd.setDate(nextPeriodEnd.getDate() + subscription.plan.billingIntervalDays);
+        await tx.subscription.update({
+          where: { id: subscription.id },
+          data: { status: 'ACTIVE', currentPeriodEnd: nextPeriodEnd, trialEndsAt: null },
+        });
+      }
+    }
+
     return {};
   },
 

@@ -7,7 +7,7 @@
 // after change-password bumps tokenVersion). Returns AuthContext on success
 // or a 401 NextResponse on failure.
 //
-// Extra fields beyond { sub, email } (id, emailVerifiedAt, createdAt,
+// Extra fields beyond { sub, email } (id, name, emailVerifiedAt, createdAt,
 // updatedAt, hasPassword, linkedProviders) are fetched via a second DB hit
 // so the AuthContext / settings page can branch on them without an extra
 // round-trip. `hasPassword` distinguishes OAuth-only accounts (passwordHash
@@ -16,10 +16,17 @@
 // already wired (e.g. ['google']).
 //
 // No CSRF: GET is a safe method; verifyCsrf is a no-op for GET anyway.
+//
+// PATCH /api/auth/me — set the display name (e.g. the treating staff name
+// shown on the consultation register / dashboard). Email/password accounts
+// never get a name from anywhere else, unlike OAuth sign-in which populates
+// it from the provider profile.
 export const runtime = 'nodejs';
 
 import 'server-only';
 import { NextResponse, type NextRequest } from 'next/server';
+import { z } from 'zod';
+import { verifyCsrf } from '@/lib/server/auth';
 import { requireAuth } from '@/lib/server/middleware';
 import { prisma } from '@/lib/server/prisma';
 import { makeRequestContext, withRequestContext } from '@/lib/server/observability/request-context';
@@ -41,6 +48,8 @@ export async function GET(req: NextRequest): Promise<NextResponse> {
       select: {
         id: true,
         email: true,
+        name: true,
+        role: true,
         emailVerifiedAt: true,
         createdAt: true,
         updatedAt: true,
@@ -49,12 +58,22 @@ export async function GET(req: NextRequest): Promise<NextResponse> {
       },
     });
 
+    // Clinic-level role (OWNER/ADMIN/MEMBER), distinct from the platform
+    // `role` above — drives the /personnel /facturation header links.
+    // Null for accounts with no organization (e.g. a fresh OAuth signup).
+    const orgMember = await prisma.organizationMember.findUnique({
+      where: { userId: auth.user.sub },
+      select: { role: true },
+    });
+
     const user = {
       // Keep `sub` for back-compat with the AuthContext payload contract
       // (older callers may still read it). New code should use `id`.
       sub: auth.user.sub,
       id: dbUser?.id ?? auth.user.sub,
       email: dbUser?.email ?? auth.user.email,
+      name: dbUser?.name ?? null,
+      role: dbUser?.role ?? 'USER',
       emailVerifiedAt: dbUser?.emailVerifiedAt
         ? dbUser.emailVerifiedAt instanceof Date
           ? dbUser.emailVerifiedAt.toISOString()
@@ -72,8 +91,50 @@ export async function GET(req: NextRequest): Promise<NextResponse> {
         : null,
       hasPassword: !!dbUser?.passwordHash,
       linkedProviders: (dbUser?.oauthAccounts ?? []).map((a) => a.provider),
+      orgRole: orgMember?.role ?? null,
     };
 
     return NextResponse.json({ user }, { status: 200, headers: { 'x-request-id': ctx.requestId } });
+  });
+}
+
+const PatchMeBody = z.object({
+  name: z.string().trim().min(1).max(100),
+});
+
+export async function PATCH(req: NextRequest): Promise<NextResponse> {
+  const ctx = makeRequestContext(req.headers);
+  return withRequestContext(ctx, async () => {
+    const csrfFail = verifyCsrf(req);
+    if (csrfFail) return csrfFail;
+
+    const auth = await requireAuth(req.headers.get('authorization'));
+    if (auth instanceof NextResponse) {
+      auth.headers.set('x-request-id', ctx.requestId);
+      return auth;
+    }
+
+    const parsed = PatchMeBody.safeParse(await req.json().catch(() => null));
+    if (!parsed.success) {
+      return NextResponse.json(
+        {
+          error: 'VALIDATION_FAILED',
+          message: 'Invalid request body',
+          issues: parsed.error.issues,
+        },
+        { status: 400, headers: { 'x-request-id': ctx.requestId } },
+      );
+    }
+
+    const updated = await prisma.user.update({
+      where: { id: auth.user.sub },
+      data: { name: parsed.data.name },
+      select: { name: true },
+    });
+
+    return NextResponse.json(
+      { name: updated.name },
+      { status: 200, headers: { 'x-request-id': ctx.requestId } },
+    );
   });
 }
