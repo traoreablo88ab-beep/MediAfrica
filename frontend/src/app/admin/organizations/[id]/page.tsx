@@ -5,6 +5,14 @@ import { useParams } from 'next/navigation';
 import Link from 'next/link';
 import { api } from '@/lib/api';
 import { friendlyError } from '@/lib/errorMessages';
+import { useToast } from '@/contexts/ToastContext';
+
+interface OrgMemberRow {
+  id: string;
+  email: string;
+  name: string | null;
+  role: 'OWNER' | 'ADMIN' | 'MEMBER';
+}
 
 interface OrgDetail {
   id: string;
@@ -13,7 +21,7 @@ interface OrgDetail {
   owner: { id: string; email: string; name: string | null };
   patientCount: number;
   createdAt: string;
-  members: { id: string; email: string; name: string | null; role: string }[];
+  members: OrgMemberRow[];
   subscription: {
     id: string;
     status: string;
@@ -57,14 +65,48 @@ function initials(name: string): string {
 
 export default function AdminOrganizationDetailPage() {
   const params = useParams<{ id: string }>();
+  const { toast } = useToast();
   const [org, setOrg] = useState<OrgDetail | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const [isSuperadmin, setIsSuperadmin] = useState(false);
+  const [busyId, setBusyId] = useState<string | null>(null);
 
   useEffect(() => {
     api<OrgDetail>(`/api/admin/organizations/${params.id}`)
       .then(setOrg)
       .catch((err) => setError(friendlyError(err)));
+    api<{ admin: { role: 'ADMIN' | 'SUPERADMIN' } }>('/api/admin/me')
+      .then((res) => setIsSuperadmin(res.admin.role === 'SUPERADMIN'))
+      .catch(() => {});
   }, [params.id]);
+
+  async function onRoleChange(member: OrgMemberRow, role: OrgMemberRow['role']) {
+    if (!org || role === member.role) return;
+    if (
+      !window.confirm(
+        `Changer le rôle de ${member.name ?? member.email} : ${member.role} → ${role} ?`,
+      )
+    ) {
+      return;
+    }
+    setBusyId(member.id);
+    try {
+      await api(`/api/admin/organizations/${org.id}/members/${member.id}`, {
+        method: 'PATCH',
+        body: { role },
+      });
+      setOrg((prev) =>
+        prev
+          ? { ...prev, members: prev.members.map((m) => (m.id === member.id ? { ...m, role } : m)) }
+          : prev,
+      );
+      toast('Rôle mis à jour.');
+    } catch (err) {
+      toast(friendlyError(err), 'error');
+    } finally {
+      setBusyId(null);
+    }
+  }
 
   if (error) {
     return (
@@ -210,11 +252,24 @@ export default function AdminOrganizationDetailPage() {
                   <td className="px-5 py-3 font-medium text-[#0b0b0b]">{m.name ?? '—'}</td>
                   <td className="px-5 py-3 text-[#52514e]">{m.email}</td>
                   <td className="px-5 py-3">
-                    <span
-                      className={`inline-flex rounded-full px-2 py-0.5 text-xs font-medium ${ROLE_BADGE[m.role] ?? ''}`}
-                    >
-                      {m.role}
-                    </span>
+                    {isSuperadmin ? (
+                      <select
+                        value={m.role}
+                        disabled={busyId === m.id}
+                        onChange={(e) => onRoleChange(m, e.target.value as OrgMemberRow['role'])}
+                        className={`cursor-pointer rounded-full border-0 px-2 py-0.5 text-xs font-medium focus:outline-none focus:ring-2 focus:ring-[#2a78d6]/40 disabled:opacity-50 ${ROLE_BADGE[m.role] ?? ''}`}
+                      >
+                        <option value="MEMBER">MEMBER</option>
+                        <option value="ADMIN">ADMIN</option>
+                        <option value="OWNER">OWNER</option>
+                      </select>
+                    ) : (
+                      <span
+                        className={`inline-flex rounded-full px-2 py-0.5 text-xs font-medium ${ROLE_BADGE[m.role] ?? ''}`}
+                      >
+                        {m.role}
+                      </span>
+                    )}
                   </td>
                 </tr>
               ))}

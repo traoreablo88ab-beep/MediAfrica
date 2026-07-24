@@ -61,6 +61,7 @@ export default function PersonnelPage() {
   const [inviteEmail, setInviteEmail] = useState('');
   const [inviteRole, setInviteRole] = useState<'ADMIN' | 'MEMBER'>('MEMBER');
   const [inviting, setInviting] = useState(false);
+  const [busyId, setBusyId] = useState<string | null>(null);
 
   async function load() {
     setLoading(true);
@@ -101,8 +102,33 @@ export default function PersonnelPage() {
     }
   }
 
+  async function onRoleChange(member: MemberRow, role: 'OWNER' | 'ADMIN' | 'MEMBER') {
+    if (role === member.role) return;
+    if (
+      !window.confirm(
+        `Changer le rôle de ${member.name ?? member.email} : ${member.role} → ${role} ?`,
+      )
+    ) {
+      return;
+    }
+    setBusyId(member.id);
+    try {
+      await api(`/api/organizations/current/members/${member.id}`, {
+        method: 'PATCH',
+        body: { role },
+      });
+      setMembers((prev) => prev.map((m) => (m.id === member.id ? { ...m, role } : m)));
+      toast('Rôle mis à jour.');
+    } catch (err) {
+      toast(friendlyError(err), 'error');
+    } finally {
+      setBusyId(null);
+    }
+  }
+
   if (!user) return null;
   const canInvite = user.orgRole === 'OWNER' || user.orgRole === 'ADMIN';
+  const canChangeRole = user.orgRole === 'OWNER';
 
   return (
     <main className="min-h-screen bg-[#f9f9f7] md:pl-64">
@@ -231,11 +257,26 @@ export default function PersonnelPage() {
                     </td>
                     <td className="px-5 py-3 text-[#52514e]">{m.email}</td>
                     <td className="px-5 py-3">
-                      <span
-                        className={`inline-flex rounded-full px-2 py-0.5 text-xs font-medium ${ROLE_BADGE[m.role]}`}
-                      >
-                        {m.role}
-                      </span>
+                      {canChangeRole ? (
+                        <select
+                          value={m.role}
+                          disabled={busyId === m.id}
+                          onChange={(e) =>
+                            onRoleChange(m, e.target.value as 'OWNER' | 'ADMIN' | 'MEMBER')
+                          }
+                          className={`cursor-pointer rounded-full border-0 px-2 py-0.5 text-xs font-medium focus:outline-none focus:ring-2 focus:ring-[#2a78d6]/40 disabled:opacity-50 ${ROLE_BADGE[m.role]}`}
+                        >
+                          <option value="MEMBER">MEMBER</option>
+                          <option value="ADMIN">ADMIN</option>
+                          <option value="OWNER">OWNER</option>
+                        </select>
+                      ) : (
+                        <span
+                          className={`inline-flex rounded-full px-2 py-0.5 text-xs font-medium ${ROLE_BADGE[m.role]}`}
+                        >
+                          {m.role}
+                        </span>
+                      )}
                     </td>
                     <td className="px-5 py-3 text-[#898781]">{formatDate(m.createdAt)}</td>
                   </tr>
