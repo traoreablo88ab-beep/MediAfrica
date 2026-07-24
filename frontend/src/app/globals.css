@@ -1,1 +1,101 @@
 @import 'tailwindcss';
+
+/* Micro-animations — smooth, fast, and universally applied so no page is
+   left out. Kept as plain CSS (not per-component Tailwind classes) so every
+   button/link/row across the app gets consistent hover/press feedback
+   without touching dozens of files. */
+button,
+a,
+select,
+tr,
+input,
+textarea {
+  transition:
+    background-color 150ms ease-out,
+    color 150ms ease-out,
+    border-color 150ms ease-out,
+    opacity 150ms ease-out,
+    transform 150ms ease-out,
+    box-shadow 150ms ease-out;
+}
+
+button:active {
+  transform: scale(0.97);
+}
+
+/* Soft brand-tinted focus glow — pairs with the border-color transition
+   above so focusing a field feels like a smooth lift, not a hard snap. */
+input:focus,
+textarea:focus {
+  box-shadow: 0 0 0 3px rgba(42, 120, 214, 0.14);
+}
+
+@keyframes fade-in-up {
+  from {
+    opacity: 0;
+    transform: translateY(18px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+@keyframes scale-in {
+  from {
+    opacity: 0;
+    transform: scale(0.96);
+  }
+  to {
+    opacity: 1;
+    transform: scale(1);
+  }
+}
+
+.animate-fade-in-up {
+  animation: fade-in-up 0.6s cubic-bezier(0.16, 1, 0.3, 1) both;
+}
+
+.animate-scale-in {
+  animation: scale-in 0.15s ease-out both;
+}
+
+/* Brand mark pulse-line draw-in — see Logo.tsx `animated` prop. */
+@keyframes logo-draw {
+  to {
+    stroke-dashoffset: 0;
+  }
+}
+
+.logo-pulse-draw {
+  stroke-dasharray: 1;
+  stroke-dashoffset: 1;
+  animation: logo-draw 0.9s 0.2s cubic-bezier(0.4, 0, 0.2, 1) forwards;
+}
+
+/* Slow ambient float for the landing-page dashboard preview — subtle
+   enough to read as "alive", not distracting during the entrance fade. */
+@keyframes float-y {
+  0%,
+  100% {
+    transform: translateY(0);
+  }
+  50% {
+    transform: translateY(-6px);
+  }
+}
+
+.animate-float {
+  animation: float-y 5s ease-in-out 1.2s infinite;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+    scroll-behavior: auto !important;
+  }
+}

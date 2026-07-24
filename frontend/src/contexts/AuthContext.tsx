@@ -9,6 +9,10 @@ import { COOKIE_PREFIX } from '@/lib/constants';
 export interface User {
   id: string;
   email: string;
+  /** Display name, e.g. shown as "Soignant" on the consultation register. Null until set. */
+  name: string | null;
+  /** App-wide role. ADMIN/SUPERADMIN unlocks the /admin back-office link. */
+  role: 'USER' | 'ADMIN' | 'SUPERADMIN';
   emailVerifiedAt: string | null;
   createdAt: string;
   updatedAt: string;
@@ -16,6 +20,8 @@ export interface User {
   hasPassword: boolean;
   /** Provider names already linked, e.g. ['google']. Empty for pure email/password accounts. */
   linkedProviders: string[];
+  /** Clinic-level role (OWNER/ADMIN/MEMBER). Null when the account has no organization. */
+  orgRole: 'OWNER' | 'ADMIN' | 'MEMBER' | null;
 }
 
 interface AuthContextValue {

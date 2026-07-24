@@ -14,18 +14,69 @@
 //      - When already linked, we just show a "linked" pill — no unlink action
 //        yet (would need a /api/auth/oauth/google/unlink endpoint with a
 //        guard refusing to leave the user without any sign-in method).
+//   3. Rename the clinic (ADMIN/SUPERADMIN only)
+//      - Visibility is decided client-side by probing GET /api/admin/me
+//        (200 = admin, 403 = not) — the actual PATCH is re-gated server-side
+//        by requireAdmin, so a client that lies about admin-ness can't
+//        actually rename anything.
 'use client';
 
-import { useState, type FormEvent } from 'react';
-import Link from 'next/link';
+import { useEffect, useState, type FormEvent } from 'react';
 import { api, ApiError } from '@/lib/api';
 import { useAuth, useUser } from '@/contexts/AuthContext';
 import { useToast } from '@/contexts/ToastContext';
+import { useClinicName } from '@/lib/useClinicName';
+import { invalidateCache } from '@/lib/useApi';
+import { AppHeader } from '@/components/AppHeader';
+import { Skeleton } from '@/components/Skeleton';
 
 export default function SettingsPage() {
   const user = useUser();
   const { refresh } = useAuth();
   const { toast } = useToast();
+
+  // Clinic name section — only rendered once we know the user is an admin.
+  const clinicName = useClinicName();
+  const [isAdmin, setIsAdmin] = useState(false);
+  const [clinicNameInput, setClinicNameInput] = useState('');
+  const [clinicNameSynced, setClinicNameSynced] = useState(false);
+  const [clinicSubmitting, setClinicSubmitting] = useState(false);
+  const [clinicError, setClinicError] = useState<string | null>(null);
+
+  useEffect(() => {
+    api('/api/admin/me')
+      .then(() => setIsAdmin(true))
+      .catch(() => setIsAdmin(false));
+  }, []);
+
+  // Seed the input from the fetched name exactly once (avoid clobbering
+  // what the admin is typing on every background refresh of useClinicName).
+  useEffect(() => {
+    if (!clinicNameSynced && clinicName) {
+      setClinicNameInput(clinicName);
+      setClinicNameSynced(true);
+    }
+  }, [clinicName, clinicNameSynced]);
+
+  async function onSubmitClinicName(e: FormEvent) {
+    e.preventDefault();
+    setClinicError(null);
+    const trimmed = clinicNameInput.trim();
+    if (trimmed.length === 0) {
+      setClinicError('Saisis un nom.');
+      return;
+    }
+    setClinicSubmitting(true);
+    try {
+      await api('/api/settings/clinic', { method: 'PATCH', body: { name: trimmed } });
+      invalidateCache('/api/settings/clinic');
+      toast('Nom du centre mis à jour.', 'success');
+    } catch (err) {
+      setClinicError(err instanceof ApiError ? err.message : 'Erreur réseau. Réessaie.');
+    } finally {
+      setClinicSubmitting(false);
+    }
+  }
 
   // Password form state — fields used by either branch.
   const [currentPassword, setCurrentPassword] = useState('');
@@ -34,10 +85,34 @@ export default function SettingsPage() {
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
+  // Display name — shown as "Soignant" on the consultation register and
+  // dashboard. Only OAuth sign-in populates it automatically; email/password
+  // accounts start with name=null until set here.
+  const [name, setName] = useState(user?.name ?? '');
+  const [nameSubmitting, setNameSubmitting] = useState(false);
+  const [nameError, setNameError] = useState<string | null>(null);
+
+  useEffect(() => {
+    if (user) setName(user.name ?? '');
+  }, [user]);
+
   if (!user) {
     return (
-      <main className="mx-auto flex min-h-screen max-w-md flex-col items-center justify-center gap-2 px-4">
-        <p className="text-sm text-gray-600">Chargement…</p>
+      <main className="min-h-screen bg-[#f9f9f7] md:pl-64">
+        <AppHeader />
+        <div className="mx-auto flex max-w-md flex-col gap-8 px-4 py-12">
+          <div className="flex flex-col gap-1">
+            <Skeleton className="h-7 w-40" />
+            <Skeleton className="mt-1 h-4 w-56" />
+          </div>
+          {Array.from({ length: 3 }).map((_, i) => (
+            <div key={i} className="flex flex-col gap-3 rounded-lg border border-gray-200 p-5">
+              <Skeleton className="h-5 w-32" />
+              <Skeleton className="h-4 w-full" />
+              <Skeleton className="mt-2 h-9 w-full rounded-md" />
+            </div>
+          ))}
+        </div>
       </main>
     );
   }
@@ -97,108 +172,194 @@ export default function SettingsPage() {
     }
   }
 
-  return (
-    <main className="mx-auto flex min-h-screen max-w-md flex-col gap-8 px-4 py-12">
-      <header className="flex flex-col gap-1">
-        <h1 className="text-2xl font-bold">Paramètres</h1>
-        <p className="text-sm text-gray-600">Connecté en tant que {user.email}</p>
-      </header>
+  async function onSubmitName(e: FormEvent) {
+    e.preventDefault();
+    setNameError(null);
+    if (name.trim().length === 0) {
+      setNameError('Saisis un nom.');
+      return;
+    }
+    setNameSubmitting(true);
+    try {
+      await api('/api/auth/me', { method: 'PATCH', body: { name: name.trim() } });
+      toast('Nom mis à jour.', 'success');
+      await refresh();
+    } catch (err) {
+      setNameError(err instanceof ApiError ? err.message : 'Erreur réseau. Réessaie.');
+    } finally {
+      setNameSubmitting(false);
+    }
+  }
 
-      {/* ── Password section ─────────────────────────────────────────── */}
-      <section className="flex flex-col gap-3 rounded-lg border border-gray-200 p-5">
-        <h2 className="text-lg font-semibold">
-          {hasPassword ? 'Changer le mot de passe' : 'Définir un mot de passe'}
-        </h2>
-        <p className="text-sm text-gray-600">
-          {hasPassword
-            ? 'Tu peux modifier ton mot de passe ici. Les autres sessions seront déconnectées.'
-            : 'Tu t’es connecté via Google. Définis un mot de passe pour pouvoir aussi te connecter par email.'}
-        </p>
-        <form onSubmit={onSubmitPassword} className="mt-2 flex flex-col gap-4">
-          {hasPassword && (
+  return (
+    <main className="min-h-screen bg-[#f9f9f7] md:pl-64">
+      <AppHeader />
+      <div className="animate-fade-in-up mx-auto flex max-w-md flex-col gap-8 px-4 py-12">
+        <header className="flex flex-col gap-1">
+          <h1 className="text-2xl font-bold">Paramètres</h1>
+          <p className="text-sm text-gray-600">Connecté en tant que {user.email}</p>
+        </header>
+
+        {/* ── Display name section ────────────────────────────────────── */}
+        <section className="flex flex-col gap-3 rounded-lg border border-gray-200 p-5">
+          <h2 className="text-lg font-semibold">Nom complet</h2>
+          <p className="text-sm text-gray-600">
+            Affiché comme soignant sur le registre de consultation et le tableau de bord.
+          </p>
+          <form onSubmit={onSubmitName} className="mt-2 flex flex-col gap-4">
             <label className="flex flex-col gap-1 text-sm">
-              Mot de passe actuel
+              Nom complet
               <input
-                type="password"
+                type="text"
                 required
-                autoComplete="current-password"
-                value={currentPassword}
-                onChange={(e) => setCurrentPassword(e.target.value)}
+                placeholder="Ex: Amadou Diallo"
+                value={name}
+                onChange={(e) => setName(e.target.value)}
                 className="rounded-md border border-gray-300 px-3 py-2"
               />
             </label>
-          )}
-          <label className="flex flex-col gap-1 text-sm">
-            Nouveau mot de passe
-            <input
-              type="password"
-              required
-              autoComplete="new-password"
-              value={newPassword}
-              onChange={(e) => setNewPassword(e.target.value)}
-              className="rounded-md border border-gray-300 px-3 py-2"
-            />
-          </label>
-          <label className="flex flex-col gap-1 text-sm">
-            Confirmer le nouveau mot de passe
-            <input
-              type="password"
-              required
-              autoComplete="new-password"
-              value={confirmPassword}
-              onChange={(e) => setConfirmPassword(e.target.value)}
-              className="rounded-md border border-gray-300 px-3 py-2"
-            />
-          </label>
-          {error && (
-            <p role="alert" className="text-sm text-red-600">
-              {error}
-            </p>
-          )}
-          <button
-            type="submit"
-            disabled={submitting}
-            className="rounded-md bg-black px-5 py-2.5 text-sm font-medium text-white hover:bg-gray-800 disabled:opacity-50"
-          >
-            {submitting
-              ? 'Enregistrement…'
-              : hasPassword
-                ? 'Changer le mot de passe'
-                : 'Définir le mot de passe'}
-          </button>
-        </form>
-      </section>
-
-      {/* ── Linked providers section ────────────────────────────────── */}
-      <section className="flex flex-col gap-3 rounded-lg border border-gray-200 p-5">
-        <h2 className="text-lg font-semibold">Comptes liés</h2>
-        <div className="flex items-center justify-between gap-3">
-          <div className="flex flex-col">
-            <span className="text-sm font-medium">Google</span>
-            <span className="text-xs text-gray-500">
-              {googleLinked
-                ? 'Tu peux te connecter via Google.'
-                : 'Lie ton compte Google pour te connecter en un clic.'}
-            </span>
-          </div>
-          {googleLinked ? (
-            <span className="rounded-full border border-emerald-200 bg-emerald-50 px-3 py-1 text-xs font-medium text-emerald-700">
-              Lié
-            </span>
-          ) : (
-            <a
-              href="/api/auth/oauth/google/start?next=/settings"
-              className="rounded-md border border-gray-300 px-4 py-2 text-sm font-medium hover:bg-gray-50"
+            {nameError && (
+              <p role="alert" className="text-sm text-red-600">
+                {nameError}
+              </p>
+            )}
+            <button
+              type="submit"
+              disabled={nameSubmitting}
+              className="rounded-md bg-black px-5 py-2.5 text-sm font-medium text-white hover:bg-gray-800 disabled:opacity-50"
             >
-              Lier Google
-            </a>
-          )}
-        </div>
-      </section>
+              {nameSubmitting ? 'Enregistrement…' : 'Enregistrer le nom'}
+            </button>
+          </form>
+        </section>
 
-      <Link href="/dashboard" className="text-center text-sm text-gray-600 underline">
-        Retour au dashboard
-      </Link>
+        {/* ── Password section ─────────────────────────────────────────── */}
+        <section className="flex flex-col gap-3 rounded-lg border border-gray-200 p-5">
+          <h2 className="text-lg font-semibold">
+            {hasPassword ? 'Changer le mot de passe' : 'Définir un mot de passe'}
+          </h2>
+          <p className="text-sm text-gray-600">
+            {hasPassword
+              ? 'Tu peux modifier ton mot de passe ici. Les autres sessions seront déconnectées.'
+              : 'Tu t’es connecté via Google. Définis un mot de passe pour pouvoir aussi te connecter par email.'}
+          </p>
+          <form onSubmit={onSubmitPassword} className="mt-2 flex flex-col gap-4">
+            {hasPassword && (
+              <label className="flex flex-col gap-1 text-sm">
+                Mot de passe actuel
+                <input
+                  type="password"
+                  required
+                  autoComplete="current-password"
+                  value={currentPassword}
+                  onChange={(e) => setCurrentPassword(e.target.value)}
+                  className="rounded-md border border-gray-300 px-3 py-2"
+                />
+              </label>
+            )}
+            <label className="flex flex-col gap-1 text-sm">
+              Nouveau mot de passe
+              <input
+                type="password"
+                required
+                autoComplete="new-password"
+                value={newPassword}
+                onChange={(e) => setNewPassword(e.target.value)}
+                className="rounded-md border border-gray-300 px-3 py-2"
+              />
+            </label>
+            <label className="flex flex-col gap-1 text-sm">
+              Confirmer le nouveau mot de passe
+              <input
+                type="password"
+                required
+                autoComplete="new-password"
+                value={confirmPassword}
+                onChange={(e) => setConfirmPassword(e.target.value)}
+                className="rounded-md border border-gray-300 px-3 py-2"
+              />
+            </label>
+            {error && (
+              <p role="alert" className="text-sm text-red-600">
+                {error}
+              </p>
+            )}
+            <button
+              type="submit"
+              disabled={submitting}
+              className="rounded-md bg-black px-5 py-2.5 text-sm font-medium text-white hover:bg-gray-800 disabled:opacity-50"
+            >
+              {submitting
+                ? 'Enregistrement…'
+                : hasPassword
+                  ? 'Changer le mot de passe'
+                  : 'Définir le mot de passe'}
+            </button>
+          </form>
+        </section>
+
+        {/* ── Clinic name section (admin-only) ────────────────────────── */}
+        {isAdmin && (
+          <section className="flex flex-col gap-3 rounded-lg border border-gray-200 p-5">
+            <h2 className="text-lg font-semibold">Nom du centre</h2>
+            <p className="text-sm text-gray-600">
+              Affiché sur les pages de connexion, d’inscription et dans l’application.
+            </p>
+            <form onSubmit={onSubmitClinicName} className="mt-2 flex flex-col gap-4">
+              <label className="flex flex-col gap-1 text-sm">
+                Nom du centre
+                <input
+                  type="text"
+                  required
+                  maxLength={200}
+                  value={clinicNameInput}
+                  onChange={(e) => setClinicNameInput(e.target.value)}
+                  className="rounded-md border border-gray-300 px-3 py-2"
+                />
+              </label>
+              {clinicError && (
+                <p role="alert" className="text-sm text-red-600">
+                  {clinicError}
+                </p>
+              )}
+              <button
+                type="submit"
+                disabled={clinicSubmitting}
+                className="rounded-md bg-black px-5 py-2.5 text-sm font-medium text-white hover:bg-gray-800 disabled:opacity-50"
+              >
+                {clinicSubmitting ? 'Enregistrement…' : 'Enregistrer le nom'}
+              </button>
+            </form>
+          </section>
+        )}
+
+        {/* ── Linked providers section ────────────────────────────────── */}
+        <section className="flex flex-col gap-3 rounded-lg border border-gray-200 p-5">
+          <h2 className="text-lg font-semibold">Comptes liés</h2>
+          <div className="flex items-center justify-between gap-3">
+            <div className="flex flex-col">
+              <span className="text-sm font-medium">Google</span>
+              <span className="text-xs text-gray-500">
+                {googleLinked
+                  ? 'Tu peux te connecter via Google.'
+                  : 'Lie ton compte Google pour te connecter en un clic.'}
+              </span>
+            </div>
+            {googleLinked ? (
+              <span className="rounded-full border border-emerald-200 bg-emerald-50 px-3 py-1 text-xs font-medium text-emerald-700">
+                Lié
+              </span>
+            ) : (
+              <a
+                href="/api/auth/oauth/google/start?next=/settings"
+                className="rounded-md border border-gray-300 px-4 py-2 text-sm font-medium hover:bg-gray-50"
+              >
+                Lier Google
+              </a>
+            )}
+          </div>
+        </section>
+      </div>
     </main>
   );
 }
