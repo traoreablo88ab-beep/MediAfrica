@@ -3,9 +3,17 @@
 // sm:/md:/lg: breakpoints (single source, not two separate builds).
 // Palette matches /dashboard (#2a78d6 accent) for visual consistency.
 
+import type { Metadata } from 'next';
 import Link from 'next/link';
 import { Logo } from '@/components/Logo';
 import { Wordmark } from '@/components/Wordmark';
+
+export const metadata: Metadata = {
+  title: 'Gestion de centre de santé',
+  description:
+    'MediAfrica centralise les dossiers patients, les consultations et la file d’attente de votre équipe soignante.',
+  robots: { index: true, follow: true },
+};
 
 const features = [
   {
@@ -302,6 +310,9 @@ export default function Home() {
             <a href="#comment-ca-marche" className="text-xs text-white/60 hover:text-white">
               Comment ça marche
             </a>
+            <Link href="/conditions" className="text-xs text-white/60 hover:text-white">
+              Conditions d’utilisation
+            </Link>
             <Link href="/confidentialite" className="text-xs text-white/60 hover:text-white">
               Politique de confidentialité
             </Link>
