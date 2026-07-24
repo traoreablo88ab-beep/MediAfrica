@@ -9,6 +9,9 @@ export default defineConfig({
     // multiple globs; both are scoped under `frontend/` via cwd.
     include: ['src/**/*.test.ts', 'scripts/**/*.test.ts'],
     environment: 'node',
+    // cost-12 bcrypt hashing is intentionally slow; on a throttled/slower
+    // CPU some bcrypt-heavy tests exceed Vitest's 5000ms default.
+    testTimeout: 20000,
     // Wave 0 ships this config before any test files exist (Wave 1 plans add them).
     // Without this, Vitest 2.x exits 1 on zero tests, blocking the plan's own
     // acceptance criterion ("`pnpm --filter frontend test` exits 0").
