@@ -17,6 +17,8 @@ function errorMessage(err: unknown): string {
       return 'Ce code a expiré. Recommencez l’inscription pour en recevoir un nouveau.';
     case 'TOO_MANY_VERIFY_ATTEMPTS':
       return 'Trop de tentatives. Réessayez plus tard.';
+    case 'TOO_MANY_RESEND_ATTEMPTS':
+      return 'Trop de demandes de renvoi. Réessayez plus tard.';
     default:
       return err.message || 'Erreur inconnue. Réessayez.';
   }
@@ -30,6 +32,8 @@ function VerifyEmailForm() {
   const [code, setCode] = useState(params.get('code') ?? '');
   const [error, setError] = useState<string | null>(null);
   const [submitting, setSubmitting] = useState(false);
+  const [resending, setResending] = useState(false);
+  const [resendMessage, setResendMessage] = useState<string | null>(null);
 
   async function verify(emailValue: string, codeValue: string) {
     setSubmitting(true);
@@ -62,6 +66,24 @@ function VerifyEmailForm() {
   function onSubmit(e: FormEvent) {
     e.preventDefault();
     void verify(email, code);
+  }
+
+  async function onResend() {
+    if (!email) {
+      setError('Entrez votre email pour recevoir un nouveau code.');
+      return;
+    }
+    setResending(true);
+    setResendMessage(null);
+    setError(null);
+    try {
+      await api('/api/auth/resend-verification', { method: 'POST', body: { email } });
+      setResendMessage('Si un compte existe avec cet email, un nouveau code vient d’être envoyé.');
+    } catch (err) {
+      setError(errorMessage(err));
+    } finally {
+      setResending(false);
+    }
   }
 
   return (
@@ -122,6 +144,14 @@ function VerifyEmailForm() {
               {error}
             </p>
           )}
+          {resendMessage && (
+            <p
+              role="status"
+              className="rounded-md bg-[#2a78d6]/10 px-3 py-2 text-sm text-[#2a78d6]"
+            >
+              {resendMessage}
+            </p>
+          )}
 
           <button
             type="submit"
@@ -137,9 +167,14 @@ function VerifyEmailForm() {
           style={{ animationDelay: '260ms' }}
         >
           Pas reçu de code ?{' '}
-          <Link href="/signup" className="font-medium text-[#2a78d6] hover:underline">
-            Recommencer l’inscription
-          </Link>
+          <button
+            type="button"
+            onClick={() => void onResend()}
+            disabled={resending}
+            className="font-medium text-[#2a78d6] hover:underline disabled:opacity-50"
+          >
+            {resending ? 'Envoi…' : 'Renvoyer le code'}
+          </button>
         </p>
       </div>
     </main>

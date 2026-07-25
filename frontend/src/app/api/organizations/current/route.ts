@@ -72,17 +72,28 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
 
     const userId = auth.user.sub;
 
-    await prisma.$transaction(async (tx) => {
-      let org: { id: string } | null = null;
-      await ensureUniqueSlug(slugify(clinicName), async (candidate) => {
-        org = await tx.organization.create({
-          data: { slug: candidate, name: clinicName, ownerId: userId },
-          select: { id: true },
-        });
-        return org;
+    // Resolve the slug via plain (non-transactional) existence checks before
+    // opening the transaction below — see signup/route.ts for why retrying
+    // `tx.organization.create` inside an interactive transaction is unsafe
+    // (Postgres aborts the whole transaction on the first collision, so
+    // every subsequent retry fails too, even against free slugs).
+    const orgSlug = await ensureUniqueSlug(slugify(clinicName), async (candidate) => {
+      const existing = await prisma.organization.findUnique({
+        where: { slug: candidate },
+        select: { id: true },
       });
-      if (!org) throw new Error('ORG_CREATE_FAILED');
-      const organizationId = (org as { id: string }).id;
+      if (existing) {
+        throw Object.assign(new Error('slug taken'), { code: 'P2002' });
+      }
+      return candidate;
+    });
+
+    await prisma.$transaction(async (tx) => {
+      const org = await tx.organization.create({
+        data: { slug: orgSlug, name: clinicName, ownerId: userId },
+        select: { id: true },
+      });
+      const organizationId = org.id;
 
       await tx.organizationMember.create({
         data: { organizationId, userId, role: 'OWNER' },
