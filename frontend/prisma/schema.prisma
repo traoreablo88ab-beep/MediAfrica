@@ -41,6 +41,7 @@ model User {
   oauthAccounts     OAuthAccount[]
   adminActions      AdminAction[]
   consultationsProvided Consultation[]
+  materniteProvided Maternite[]
   registerClosures  RegisterClosure[]
   reportsFiled      Report[]
 
@@ -375,6 +376,7 @@ model Patient {
   updatedAt DateTime @updatedAt
 
   consultations Consultation[]
+  maternites    Maternite[]
 
   @@index([nom, prenom])
   @@index([communeResidence])
@@ -416,10 +418,83 @@ model Consultation {
   @@index([status, date])
 }
 
-// Clôture mensuelle d'un registre (registre de consultation pour l'instant ;
-// registerType laisse la place à maternité/PEV/URENI plus tard). Une fois un
-// mois clôturé, les routes de mutation de Consultation le refusent
-// (REGISTER_CLOSED) — voir lib/server/registers/closure.ts.
+// Une fiche de maternité — CPN (consultation prénatale), Accouchement ou CPoN
+// (consultation postnatale), discriminées par `type` dans une seule table à
+// plat (même principe que Consultation, qui mélange déjà anthropométrie +
+// paludisme + MDO). Contrairement à Consultation, il n'y a pas de file
+// d'attente ni de statut : une fiche est créée au moment de l'acte et reste
+// immuable (aucune route d'édition).
+model Maternite {
+  id         String   @id @default(cuid())
+  patientId  String
+  patient    Patient  @relation(fields: [patientId], references: [id], onDelete: Restrict)
+  providerId String?
+  provider   User?    @relation(fields: [providerId], references: [id], onDelete: SetNull)
+
+  date DateTime @default(now())
+  type String // CPN | ACCOUCHEMENT | CPON
+
+  // Communs
+  gestite      Int?
+  parite       Int?
+  dpa          DateTime?
+  ddr          DateTime?
+  observations String?
+
+  // CPN
+  cpnNumeroVisite         Int?
+  ageGestationnelSemaines Int?
+  poidsKg                 Float?
+  tensionArterielle       String?
+  hauteurUterineCm        Float?
+  bruitsCoeurFoetal       String? // Perçus | Non perçus
+  mouvementsFoetaux       String? // Perçus | Non perçus
+  oedemes                 Boolean?
+  tpiDose                 Int?
+  moustiquaireImpregnee   Boolean?
+  vatDose                 Int?
+  ferAcideFolique         Boolean?
+  albuminurie             String? // Positif | Négatif | Non fait
+  glycosurie              String? // Positif | Négatif | Non fait
+  vih                     String? // Positif | Négatif | Non fait | Connu positif
+  prochainRdv             DateTime?
+
+  // Accouchement
+  modeAccouchement          String? // Voie basse | Césarienne | Instrumental
+  dureeTravailHeures        Float?
+  assistePar                String? // Sage-femme | Médecin | Matrone | Auxiliaire
+  issueGrossesse            String? // Vivant | Mort-né frais | Mort-né macéré
+  sexeNouveauNe             String? // M | F
+  poidsNaissanceG           Float?
+  apgar1min                 Int?
+  apgar5min                 Int?
+  perimetreCranienCm        Float?
+  reanimationNouveauNe      Boolean?
+  complicationsAccouchement String?
+  episiotomie               Boolean?
+  placentaComplet           Boolean?
+
+  // CPoN
+  cponNumeroVisite       Int?
+  joursPostPartum        Int?
+  etatPerinee            String? // Normal | Déhiscence | Infecté
+  allaitement            String? // Exclusif | Mixte | Aucun
+  planificationFamiliale String?
+  etatNouveauNeCpon      String?
+  vaccinationBcgFait     Boolean?
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([patientId, date])
+  @@index([type, date])
+}
+
+// Clôture mensuelle d'un registre (registre de consultation et, depuis
+// maternité, un registre distinct par type d'acte — consultation |
+// maternite-cpn | maternite-accouchement | maternite-cpon). Une fois un mois
+// clôturé, les routes de mutation refusent (REGISTER_CLOSED) — voir
+// lib/server/registers/closure.ts.
 model RegisterClosure {
   id             String       @id @default(cuid())
   organizationId String
