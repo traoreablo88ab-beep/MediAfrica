@@ -21,7 +21,7 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
 
   const ctx = makeRequestContext(req.headers);
   return withRequestContext(ctx, async () => {
-    let result = { markedPastDue: 0, canceled: 0 };
+    let result = { markedPastDue: 0, canceled: 0, remindersSent: 0 };
 
     await withLease(redis ?? undefined, 'subscription-billing', LEASE_TTL_MS, async () => {
       result = await runSubscriptionBilling({ prisma });

@@ -10,6 +10,7 @@ import { NextResponse, type NextRequest } from 'next/server';
 import { z } from 'zod';
 import { verifyCsrf } from '@/lib/server/auth';
 import { requireOrgMember } from '@/lib/server/middleware';
+import { requireActiveSubscription } from '@/lib/server/subscriptions/access-guard';
 import { prisma } from '@/lib/server/prisma';
 import { zPhone } from '@/lib/server/zod-helpers';
 import { makeRequestContext, withRequestContext } from '@/lib/server/observability/request-context';
@@ -24,6 +25,12 @@ export async function GET(
   return withRequestContext(reqCtx, async () => {
     const auth = await requireOrgMember();
     if (auth instanceof NextResponse) return auth;
+
+    const subFail = await requireActiveSubscription(auth.orgMember.organizationId);
+    if (subFail) {
+      subFail.headers.set('x-request-id', reqCtx.requestId);
+      return subFail;
+    }
 
     const { id } = await ctx.params;
     const patient = await prisma.patient.findFirst({
@@ -107,6 +114,12 @@ export async function PATCH(
 
     const auth = await requireOrgMember();
     if (auth instanceof NextResponse) return auth;
+
+    const subFail = await requireActiveSubscription(auth.orgMember.organizationId);
+    if (subFail) {
+      subFail.headers.set('x-request-id', reqCtx.requestId);
+      return subFail;
+    }
 
     const { id } = await ctx.params;
 

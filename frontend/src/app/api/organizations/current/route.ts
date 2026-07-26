@@ -17,7 +17,7 @@ import { slugify, ensureUniqueSlug } from '@/lib/server/slug';
 import { getDefaultPlan } from '@/lib/server/subscriptions/default-plan';
 import { makeRequestContext, withRequestContext } from '@/lib/server/observability/request-context';
 
-const TRIAL_DAYS = 14;
+const TRIAL_DAYS = 30;
 
 const Body = z.object({
   clinicName: z.string().trim().min(1).max(200),

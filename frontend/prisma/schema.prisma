@@ -463,6 +463,14 @@ model Subscription {
   status           String   @default("TRIALING") // TRIALING | ACTIVE | PAST_DUE | CANCELED
   trialEndsAt      DateTime?
   currentPeriodEnd DateTime
+  // Reminder emails sent ahead of / just after `currentPeriodEnd`, one flag
+  // per stage so the daily billing cron never re-sends the same reminder.
+  // Cleared back to null whenever the period is renewed (paid or manually
+  // reactivated) so the next cycle's reminders fire again.
+  reminder7dSentAt     DateTime?
+  reminder5dSentAt     DateTime?
+  reminder3dSentAt     DateTime?
+  reminderOverdueSentAt DateTime?
   createdAt        DateTime @default(now())
   updatedAt        DateTime @updatedAt
 

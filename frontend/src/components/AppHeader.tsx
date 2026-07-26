@@ -14,8 +14,19 @@ import { useEffect, useRef, useState, type ComponentType } from 'react';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import { useAuth } from '@/contexts/AuthContext';
+import { api } from '@/lib/api';
 import { Logo } from '@/components/Logo';
 import { Wordmark } from '@/components/Wordmark';
+
+interface SubscriptionInfo {
+  subscription: { status: string; currentPeriodEnd: string };
+}
+
+const DAY_MS = 24 * 60 * 60 * 1000;
+
+function daysRemaining(iso: string): number {
+  return Math.ceil((new Date(iso).getTime() - Date.now()) / DAY_MS);
+}
 
 export type AppNavTab = 'dashboard' | 'patients' | 'consultations' | 'registres' | 'commentaires';
 
@@ -231,6 +242,52 @@ function StatusPill() {
   );
 }
 
+function SubscriptionBadge({ info }: { info: SubscriptionInfo | null }) {
+  if (!info) return null;
+  const { status, currentPeriodEnd } = info.subscription;
+
+  if (status === 'PAST_DUE' || status === 'CANCELED') {
+    return (
+      <Link
+        href="/facturation"
+        className="inline-flex items-center gap-1.5 rounded-full border border-[#d03b3b]/30 bg-[#d03b3b]/10 px-2.5 py-0.5 text-xs font-medium text-[#d03b3b] hover:bg-[#d03b3b]/20"
+      >
+        <span className="h-1.5 w-1.5 rounded-full bg-[#d03b3b]" />
+        Premium
+      </Link>
+    );
+  }
+
+  if (status === 'TRIALING') {
+    const daysLeft = Math.max(daysRemaining(currentPeriodEnd), 0);
+    const urgent = daysLeft <= 7;
+    return (
+      <Link
+        href="/facturation"
+        className={`inline-flex items-center gap-1.5 rounded-full border px-2.5 py-0.5 text-xs font-medium ${
+          urgent
+            ? 'border-[#d08a1c]/30 bg-[#d08a1c]/10 text-[#d08a1c] hover:bg-[#d08a1c]/20'
+            : 'border-[#e1e0d9] bg-[#f9f9f7] text-[#52514e] hover:bg-[#f0efe9]'
+        }`}
+      >
+        <span className={`h-1.5 w-1.5 rounded-full ${urgent ? 'bg-[#d08a1c]' : 'bg-[#2a78d6]'}`} />
+        Essai — {daysLeft}j
+      </Link>
+    );
+  }
+
+  // ACTIVE
+  return (
+    <Link
+      href="/facturation"
+      className="inline-flex items-center gap-1.5 rounded-full border border-[#e1e0d9] bg-[#0ca30c]/5 px-2.5 py-0.5 text-xs font-medium text-[#0ca30c] hover:bg-[#0ca30c]/10"
+    >
+      <span className="h-1.5 w-1.5 rounded-full bg-[#0ca30c]" />
+      Actif
+    </Link>
+  );
+}
+
 function NavLink({
   href,
   active,
@@ -267,12 +324,34 @@ export function AppHeader({ active }: { active?: AppNavTab }) {
   const displayName = user?.name ?? user?.email ?? '';
   const [mobileOpen, setMobileOpen] = useState(false);
   const panelRef = useRef<HTMLDivElement>(null);
+  const [subscriptionInfo, setSubscriptionInfo] = useState<SubscriptionInfo | null>(null);
 
   async function onLogout() {
     setMobileOpen(false);
     await logout();
     router.push('/login');
   }
+
+  // Any org member (not just OWNER/ADMIN) can see their clinic's
+  // subscription status — it affects everyone once access is locked out.
+  // Platform-only staff (orgRole: null) never see this.
+  useEffect(() => {
+    if (!user || user.orgRole === null) {
+      setSubscriptionInfo(null);
+      return;
+    }
+    let cancelled = false;
+    api<SubscriptionInfo>('/api/billing/subscription')
+      .then((info) => {
+        if (!cancelled) setSubscriptionInfo(info);
+      })
+      .catch(() => {
+        if (!cancelled) setSubscriptionInfo(null);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [user]);
 
   // Google OAuth signup creates a User but no Organization (unlike
   // email/password signup, which creates both in one tx — see
@@ -314,8 +393,9 @@ export function AppHeader({ active }: { active?: AppNavTab }) {
           <Logo />
           <Wordmark className="text-[#0b0b0b]" />
         </div>
-        <div className="px-5 py-3">
+        <div className="flex flex-wrap items-center gap-2 px-5 py-3">
           <StatusPill />
+          <SubscriptionBadge info={subscriptionInfo} />
         </div>
         <nav className="flex flex-1 flex-col gap-1 overflow-y-auto px-3 py-2">
           {TABS.map((tab) => (
@@ -379,8 +459,9 @@ export function AppHeader({ active }: { active?: AppNavTab }) {
             </button>
             <Logo />
             <Wordmark className="text-[#0b0b0b]" />
-            <span className="hidden sm:inline-flex">
+            <span className="hidden items-center gap-2 sm:inline-flex">
               <StatusPill />
+              <SubscriptionBadge info={subscriptionInfo} />
             </span>
           </div>
 
@@ -414,6 +495,10 @@ export function AppHeader({ active }: { active?: AppNavTab }) {
 
         {mobileOpen && (
           <nav className="flex flex-col gap-1 border-t border-[#e1e0d9] px-4 py-3 md:hidden">
+            <div className="mb-2 flex items-center gap-2 px-1 sm:hidden">
+              <StatusPill />
+              <SubscriptionBadge info={subscriptionInfo} />
+            </div>
             {TABS.map((tab, i) => {
               const Icon = TAB_ICONS[tab.key];
               return (

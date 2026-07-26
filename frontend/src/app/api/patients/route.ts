@@ -11,6 +11,7 @@ import { z } from 'zod';
 import type { Consultation, Patient, Prisma } from '@prisma/client';
 import { verifyCsrf } from '@/lib/server/auth';
 import { requireOrgMember } from '@/lib/server/middleware';
+import { requireActiveSubscription } from '@/lib/server/subscriptions/access-guard';
 import { prisma } from '@/lib/server/prisma';
 import { clampLimit, cursorWhere, buildPage, decodeCursor } from '@/lib/server/pagination/paginate';
 import { zPhone } from '@/lib/server/zod-helpers';
@@ -49,6 +50,12 @@ export async function GET(req: NextRequest): Promise<NextResponse> {
   return withRequestContext(ctx, async () => {
     const auth = await requireOrgMember();
     if (auth instanceof NextResponse) return auth;
+
+    const subFail = await requireActiveSubscription(auth.orgMember.organizationId);
+    if (subFail) {
+      subFail.headers.set('x-request-id', ctx.requestId);
+      return subFail;
+    }
 
     const url = req.nextUrl;
     const limit = clampLimit(url.searchParams.get('limit'));
@@ -128,6 +135,12 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
 
     const auth = await requireOrgMember();
     if (auth instanceof NextResponse) return auth;
+
+    const subFail = await requireActiveSubscription(auth.orgMember.organizationId);
+    if (subFail) {
+      subFail.headers.set('x-request-id', ctx.requestId);
+      return subFail;
+    }
 
     const parsed = CreatePatientBody.safeParse(await req.json().catch(() => null));
     if (!parsed.success) {

@@ -14,7 +14,8 @@ export type OutboxEvent =
   | EmailPaymentConfirmationEvent
   | EmailVerificationCodeEvent
   | EmailPasswordResetEvent
-  | EmailSubscriptionRenewalDueEvent;
+  | EmailSubscriptionRenewalDueEvent
+  | EmailSubscriptionReminderEvent;
 
 export interface NotificationPaymentReceivedEvent {
   kind: 'notification.payment_received';
@@ -73,6 +74,22 @@ export interface EmailSubscriptionRenewalDueEvent {
     to: string;
     clinicName: string;
     billingUrl: string;
+  };
+}
+
+/**
+ * Emitted by the subscription-billing cron ahead of / just after
+ * `currentPeriodEnd` — a 4-stage nudge sequence (J-7, J-5, J-3, and one day
+ * after the period ends) distinct from `email.subscription_renewal_due`
+ * (fired once, exactly at the day-0 transition to PAST_DUE).
+ */
+export interface EmailSubscriptionReminderEvent {
+  kind: 'email.subscription_reminder';
+  payload: {
+    to: string;
+    clinicName: string;
+    billingUrl: string;
+    stage: 'j7' | 'j5' | 'j3' | 'overdue1';
   };
 }
 

@@ -96,7 +96,17 @@ export const POST = createWebhookHandler({
         nextPeriodEnd.setDate(nextPeriodEnd.getDate() + subscription.plan.billingIntervalDays);
         await tx.subscription.update({
           where: { id: subscription.id },
-          data: { status: 'ACTIVE', currentPeriodEnd: nextPeriodEnd, trialEndsAt: null },
+          data: {
+            status: 'ACTIVE',
+            currentPeriodEnd: nextPeriodEnd,
+            trialEndsAt: null,
+            // New billing period — let the J-7/J-5/J-3/overdue reminder
+            // ladder fire again next cycle.
+            reminder7dSentAt: null,
+            reminder5dSentAt: null,
+            reminder3dSentAt: null,
+            reminderOverdueSentAt: null,
+          },
         });
       }
     }

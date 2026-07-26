@@ -50,6 +50,80 @@ interface RecentAction {
   time: string;
 }
 
+interface SubscriptionInfo {
+  subscription: { status: string; trialEndsAt: string | null; currentPeriodEnd: string };
+  plan: { name: string };
+}
+
+const DAY_MS = 24 * 60 * 60 * 1000;
+
+function daysRemaining(iso: string): number {
+  return Math.ceil((new Date(iso).getTime() - Date.now()) / DAY_MS);
+}
+
+function SubscriptionBanner({ info }: { info: SubscriptionInfo }) {
+  const { status, currentPeriodEnd } = info.subscription;
+  const planName = info.plan.name;
+
+  if (status === 'PAST_DUE' || status === 'CANCELED') {
+    return (
+      <div className="mb-6 flex flex-col gap-3 rounded-xl border border-[#d03b3b]/30 bg-[#d03b3b]/5 p-5 sm:flex-row sm:items-center sm:justify-between">
+        <div>
+          <p className="font-medium text-[#d03b3b]">Premium requis</p>
+          <p className="mt-0.5 text-sm text-[#52514e]">
+            {status === 'CANCELED'
+              ? 'Votre abonnement est résilié'
+              : 'Votre essai gratuit est terminé'}{' '}
+            — l&rsquo;accès aux patients, consultations et registres est suspendu. Passez à Premium
+            pour le réactiver.
+          </p>
+        </div>
+        <Link
+          href="/facturation"
+          className="whitespace-nowrap rounded-md bg-[#d03b3b] px-4 py-2 text-center text-sm font-medium text-white transition-colors hover:bg-[#d03b3b]/90"
+        >
+          Passer à Premium
+        </Link>
+      </div>
+    );
+  }
+
+  if (status === 'TRIALING') {
+    const daysLeft = daysRemaining(currentPeriodEnd);
+    const urgent = daysLeft <= 7;
+    return (
+      <div
+        className={`mb-6 flex flex-col gap-3 rounded-xl border p-4 sm:flex-row sm:items-center sm:justify-between ${
+          urgent ? 'border-[#d08a1c]/30 bg-[#d08a1c]/5' : 'border-[#e1e0d9] bg-white'
+        }`}
+      >
+        <p className={`text-sm ${urgent ? 'font-medium text-[#d08a1c]' : 'text-[#52514e]'}`}>
+          Période d&rsquo;essai gratuite — {Math.max(daysLeft, 0)} jour
+          {Math.max(daysLeft, 0) > 1 ? 's' : ''} restant{Math.max(daysLeft, 0) > 1 ? 's' : ''}
+        </p>
+        <Link
+          href="/facturation"
+          className={`whitespace-nowrap text-sm font-medium hover:underline ${urgent ? 'text-[#d08a1c]' : 'text-[#2a78d6]'}`}
+        >
+          Voir l&rsquo;abonnement →
+        </Link>
+      </div>
+    );
+  }
+
+  // ACTIVE — subtle, non-intrusive confirmation rather than a warning.
+  return (
+    <div className="mb-6 flex items-center justify-between rounded-xl border border-[#e1e0d9] bg-white px-4 py-2.5">
+      <p className="text-sm text-[#52514e]">
+        Abonnement <span className="font-medium text-[#0ca30c]">{planName}</span> actif
+      </p>
+      <Link href="/facturation" className="text-sm font-medium text-[#2a78d6] hover:underline">
+        Facturation →
+      </Link>
+    </div>
+  );
+}
+
 function todayIso(): string {
   return new Date().toISOString().slice(0, 10);
 }
@@ -143,6 +217,7 @@ export default function DashboardPage() {
   const [newPatients, setNewPatients] = useState<PatientRow[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const [subscriptionInfo, setSubscriptionInfo] = useState<SubscriptionInfo | null>(null);
 
   useEffect(() => {
     let cancelled = false;
@@ -150,6 +225,18 @@ export default function DashboardPage() {
       setLoading(true);
       setError(null);
       try {
+        const sub = await api<SubscriptionInfo>('/api/billing/subscription').catch(() => null);
+        if (cancelled) return;
+        setSubscriptionInfo(sub);
+
+        const blocked =
+          sub?.subscription.status === 'PAST_DUE' || sub?.subscription.status === 'CANCELED';
+        if (blocked) {
+          setQueue([]);
+          setNewPatients([]);
+          return;
+        }
+
         const [consultations, patients] = await Promise.all([
           loadAllConsultationsToday(),
           loadPatientsCreatedToday(),
@@ -195,6 +282,9 @@ export default function DashboardPage() {
   ];
   const sortedQueue = sortQueue(queue);
   const recentActions = buildRecentActions(queue, newPatients);
+  const blocked =
+    subscriptionInfo?.subscription.status === 'PAST_DUE' ||
+    subscriptionInfo?.subscription.status === 'CANCELED';
 
   return (
     <main className="min-h-screen bg-[#f9f9f7] md:pl-64">
@@ -208,21 +298,25 @@ export default function DashboardPage() {
               {today} · {clinicName}
             </p>
           </div>
-          <div className="flex flex-col gap-3 sm:flex-row sm:items-center">
-            <Link
-              href="/patients"
-              className="w-full rounded-md border border-[#e1e0d9] bg-white px-3 py-2 text-sm text-[#898781] transition-colors hover:bg-[#f9f9f7] sm:w-64"
-            >
-              Rechercher un patient…
-            </Link>
-            <Link
-              href="/patients/new"
-              className="flex items-center justify-center gap-2 whitespace-nowrap rounded-md bg-[#2a78d6] px-4 py-2 text-sm font-medium text-white transition-colors hover:bg-[#256abf]"
-            >
-              + Nouveau patient
-            </Link>
-          </div>
+          {!blocked && (
+            <div className="flex flex-col gap-3 sm:flex-row sm:items-center">
+              <Link
+                href="/patients"
+                className="w-full rounded-md border border-[#e1e0d9] bg-white px-3 py-2 text-sm text-[#898781] transition-colors hover:bg-[#f9f9f7] sm:w-64"
+              >
+                Rechercher un patient…
+              </Link>
+              <Link
+                href="/patients/new"
+                className="flex items-center justify-center gap-2 whitespace-nowrap rounded-md bg-[#2a78d6] px-4 py-2 text-sm font-medium text-white transition-colors hover:bg-[#256abf]"
+              >
+                + Nouveau patient
+              </Link>
+            </div>
+          )}
         </div>
+
+        {subscriptionInfo && <SubscriptionBanner info={subscriptionInfo} />}
 
         {error && (
           <p
@@ -233,153 +327,168 @@ export default function DashboardPage() {
           </p>
         )}
 
-        <div className="mb-6 grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-4">
-          {stats.map((stat) => (
-            <div
-              key={stat.label}
-              className={
-                stat.hero
-                  ? 'rounded-xl bg-[#2a78d6] p-5 text-white shadow-[0_1px_2px_rgba(11,11,11,0.04)] transition-shadow duration-300 hover:shadow-md'
-                  : 'rounded-xl border border-[#e1e0d9] bg-white p-5 shadow-[0_1px_2px_rgba(11,11,11,0.04)] transition-shadow duration-300 hover:shadow-md'
-              }
-            >
-              <p
-                className={`text-xs font-medium uppercase tracking-wide ${
-                  stat.hero ? 'text-white/80' : 'text-[#898781]'
-                }`}
-              >
-                {stat.label}
-              </p>
-              {loading ? (
-                <Skeleton className={`mt-2 h-8 w-16 ${stat.hero ? 'bg-white/20' : ''}`} />
-              ) : (
-                <p className="mt-2 text-3xl font-semibold">{stat.value}</p>
-              )}
-            </div>
-          ))}
-        </div>
-
-        <div className="grid grid-cols-1 gap-6 lg:grid-cols-3">
-          <div className="overflow-hidden rounded-xl border border-[#e1e0d9] bg-white shadow-[0_1px_2px_rgba(11,11,11,0.04)] lg:col-span-2">
-            <div className="flex items-center justify-between border-b border-[#e1e0d9] px-5 py-4">
-              <h2 className="font-semibold text-[#0b0b0b]">File du jour</h2>
-              <Link href="/patients" className="text-sm font-medium text-[#2a78d6] hover:underline">
-                Voir tous les patients →
-              </Link>
-            </div>
-            <div className="overflow-x-auto">
-              <table className="w-full text-left text-sm">
-                <thead>
-                  <tr className="border-b border-[#e1e0d9] text-xs uppercase tracking-wide text-[#898781]">
-                    <th className="px-5 py-2 font-medium">N° dossier</th>
-                    <th className="px-5 py-2 font-medium">Nom du patient</th>
-                    <th className="px-5 py-2 font-medium [font-variant-numeric:tabular-nums]">
-                      Âge
-                    </th>
-                    <th className="px-5 py-2 font-medium">Motif</th>
-                    <th className="px-5 py-2 font-medium [font-variant-numeric:tabular-nums]">
-                      Heure
-                    </th>
-                    <th className="px-5 py-2 font-medium">Statut</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {loading &&
-                    Array.from({ length: 5 }).map((_, i) => (
-                      <tr key={i} className="border-b border-[#e1e0d9] last:border-0">
-                        <td className="px-5 py-3">
-                          <Skeleton className="h-4 w-20" />
-                        </td>
-                        <td className="px-5 py-3">
-                          <Skeleton className="h-4 w-32" />
-                        </td>
-                        <td className="px-5 py-3">
-                          <Skeleton className="h-4 w-10" />
-                        </td>
-                        <td className="px-5 py-3">
-                          <Skeleton className="h-4 w-40" />
-                        </td>
-                        <td className="px-5 py-3">
-                          <Skeleton className="h-4 w-12" />
-                        </td>
-                        <td className="px-5 py-3">
-                          <Skeleton className="h-5 w-16 rounded-full" />
-                        </td>
-                      </tr>
-                    ))}
-                  {!loading &&
-                    sortedQueue.map((row) => (
-                      <tr
-                        key={row.id}
-                        className={`border-b border-[#e1e0d9] last:border-0 transition-colors hover:bg-[#f9f9f7] ${
-                          row.status === 'urgent'
-                            ? 'border-l-4 border-l-[#d03b3b] bg-[#d03b3b]/5'
-                            : row.status === 'consultation'
-                              ? 'bg-[#2a78d6]/5'
-                              : ''
-                        }`}
-                      >
-                        <td className="px-5 py-3 text-[#898781]">
-                          <Link href={`/patients/${row.patient.id}`} className="hover:underline">
-                            {row.patient.dossierNumber}
-                          </Link>
-                        </td>
-                        <td className="px-5 py-3 font-medium text-[#0b0b0b]">
-                          <Link href={`/patients/${row.patient.id}`} className="hover:underline">
-                            {row.patient.nom}, {row.patient.prenom}
-                          </Link>
-                        </td>
-                        <td className="px-5 py-3 text-[#52514e] [font-variant-numeric:tabular-nums]">
-                          {computeAge(row.patient.dateNaissance)} ans
-                        </td>
-                        <td className="px-5 py-3 text-[#52514e]">{row.motif}</td>
-                        <td className="px-5 py-3 text-[#52514e] [font-variant-numeric:tabular-nums]">
-                          {formatHeure(row.date)}
-                        </td>
-                        <td className="px-5 py-3">
-                          <ConsultationStatusBadge status={row.status} />
-                        </td>
-                      </tr>
-                    ))}
-                  {!loading && sortedQueue.length === 0 && !error && (
-                    <tr>
-                      <td colSpan={6} className="px-5 py-8 text-center text-sm text-[#898781]">
-                        Aucune consultation aujourd’hui.
-                      </td>
-                    </tr>
-                  )}
-                </tbody>
-              </table>
-            </div>
-          </div>
-
-          <div className="flex flex-col gap-6">
-            <div className="overflow-hidden rounded-xl border border-[#e1e0d9] bg-white shadow-[0_1px_2px_rgba(11,11,11,0.04)]">
-              <div className="border-b border-[#e1e0d9] px-5 py-4">
-                <h2 className="font-semibold text-[#0b0b0b]">Actions récentes</h2>
-              </div>
-              <ul>
-                {recentActions.map((action) => (
-                  <li
-                    key={action.key}
-                    className="flex items-center justify-between border-b border-[#e1e0d9] px-5 py-3 transition-colors last:border-0 hover:bg-[#f9f9f7]"
+        {!blocked && (
+          <>
+            <div className="mb-6 grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-4">
+              {stats.map((stat) => (
+                <div
+                  key={stat.label}
+                  className={
+                    stat.hero
+                      ? 'rounded-xl bg-[#2a78d6] p-5 text-white shadow-[0_1px_2px_rgba(11,11,11,0.04)] transition-shadow duration-300 hover:shadow-md'
+                      : 'rounded-xl border border-[#e1e0d9] bg-white p-5 shadow-[0_1px_2px_rgba(11,11,11,0.04)] transition-shadow duration-300 hover:shadow-md'
+                  }
+                >
+                  <p
+                    className={`text-xs font-medium uppercase tracking-wide ${
+                      stat.hero ? 'text-white/80' : 'text-[#898781]'
+                    }`}
                   >
-                    <div>
-                      <p className="text-sm font-medium text-[#0b0b0b]">{action.name}</p>
-                      <p className="text-xs text-[#898781]">{action.detail}</p>
-                    </div>
-                    <span className="text-xs text-[#898781] [font-variant-numeric:tabular-nums]">
-                      {formatHeure(action.time)}
-                    </span>
-                  </li>
-                ))}
-                {!loading && recentActions.length === 0 && (
-                  <li className="px-5 py-4 text-sm text-[#898781]">Aucune activité aujourd’hui.</li>
-                )}
-              </ul>
+                    {stat.label}
+                  </p>
+                  {loading ? (
+                    <Skeleton className={`mt-2 h-8 w-16 ${stat.hero ? 'bg-white/20' : ''}`} />
+                  ) : (
+                    <p className="mt-2 text-3xl font-semibold">{stat.value}</p>
+                  )}
+                </div>
+              ))}
             </div>
-          </div>
-        </div>
+
+            <div className="grid grid-cols-1 gap-6 lg:grid-cols-3">
+              <div className="overflow-hidden rounded-xl border border-[#e1e0d9] bg-white shadow-[0_1px_2px_rgba(11,11,11,0.04)] lg:col-span-2">
+                <div className="flex items-center justify-between border-b border-[#e1e0d9] px-5 py-4">
+                  <h2 className="font-semibold text-[#0b0b0b]">File du jour</h2>
+                  <Link
+                    href="/patients"
+                    className="text-sm font-medium text-[#2a78d6] hover:underline"
+                  >
+                    Voir tous les patients →
+                  </Link>
+                </div>
+                <div className="overflow-x-auto">
+                  <table className="w-full text-left text-sm">
+                    <thead>
+                      <tr className="border-b border-[#e1e0d9] text-xs uppercase tracking-wide text-[#898781]">
+                        <th className="px-5 py-2 font-medium">N° dossier</th>
+                        <th className="px-5 py-2 font-medium">Nom du patient</th>
+                        <th className="px-5 py-2 font-medium [font-variant-numeric:tabular-nums]">
+                          Âge
+                        </th>
+                        <th className="px-5 py-2 font-medium">Motif</th>
+                        <th className="px-5 py-2 font-medium [font-variant-numeric:tabular-nums]">
+                          Heure
+                        </th>
+                        <th className="px-5 py-2 font-medium">Statut</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {loading &&
+                        Array.from({ length: 5 }).map((_, i) => (
+                          <tr key={i} className="border-b border-[#e1e0d9] last:border-0">
+                            <td className="px-5 py-3">
+                              <Skeleton className="h-4 w-20" />
+                            </td>
+                            <td className="px-5 py-3">
+                              <Skeleton className="h-4 w-32" />
+                            </td>
+                            <td className="px-5 py-3">
+                              <Skeleton className="h-4 w-10" />
+                            </td>
+                            <td className="px-5 py-3">
+                              <Skeleton className="h-4 w-40" />
+                            </td>
+                            <td className="px-5 py-3">
+                              <Skeleton className="h-4 w-12" />
+                            </td>
+                            <td className="px-5 py-3">
+                              <Skeleton className="h-5 w-16 rounded-full" />
+                            </td>
+                          </tr>
+                        ))}
+                      {!loading &&
+                        sortedQueue.map((row) => (
+                          <tr
+                            key={row.id}
+                            className={`border-b border-[#e1e0d9] last:border-0 transition-colors hover:bg-[#f9f9f7] ${
+                              row.status === 'urgent'
+                                ? 'border-l-4 border-l-[#d03b3b] bg-[#d03b3b]/5'
+                                : row.status === 'consultation'
+                                  ? 'bg-[#2a78d6]/5'
+                                  : ''
+                            }`}
+                          >
+                            <td className="px-5 py-3 text-[#898781]">
+                              <Link
+                                href={`/patients/${row.patient.id}`}
+                                className="hover:underline"
+                              >
+                                {row.patient.dossierNumber}
+                              </Link>
+                            </td>
+                            <td className="px-5 py-3 font-medium text-[#0b0b0b]">
+                              <Link
+                                href={`/patients/${row.patient.id}`}
+                                className="hover:underline"
+                              >
+                                {row.patient.nom}, {row.patient.prenom}
+                              </Link>
+                            </td>
+                            <td className="px-5 py-3 text-[#52514e] [font-variant-numeric:tabular-nums]">
+                              {computeAge(row.patient.dateNaissance)} ans
+                            </td>
+                            <td className="px-5 py-3 text-[#52514e]">{row.motif}</td>
+                            <td className="px-5 py-3 text-[#52514e] [font-variant-numeric:tabular-nums]">
+                              {formatHeure(row.date)}
+                            </td>
+                            <td className="px-5 py-3">
+                              <ConsultationStatusBadge status={row.status} />
+                            </td>
+                          </tr>
+                        ))}
+                      {!loading && sortedQueue.length === 0 && !error && (
+                        <tr>
+                          <td colSpan={6} className="px-5 py-8 text-center text-sm text-[#898781]">
+                            Aucune consultation aujourd’hui.
+                          </td>
+                        </tr>
+                      )}
+                    </tbody>
+                  </table>
+                </div>
+              </div>
+
+              <div className="flex flex-col gap-6">
+                <div className="overflow-hidden rounded-xl border border-[#e1e0d9] bg-white shadow-[0_1px_2px_rgba(11,11,11,0.04)]">
+                  <div className="border-b border-[#e1e0d9] px-5 py-4">
+                    <h2 className="font-semibold text-[#0b0b0b]">Actions récentes</h2>
+                  </div>
+                  <ul>
+                    {recentActions.map((action) => (
+                      <li
+                        key={action.key}
+                        className="flex items-center justify-between border-b border-[#e1e0d9] px-5 py-3 transition-colors last:border-0 hover:bg-[#f9f9f7]"
+                      >
+                        <div>
+                          <p className="text-sm font-medium text-[#0b0b0b]">{action.name}</p>
+                          <p className="text-xs text-[#898781]">{action.detail}</p>
+                        </div>
+                        <span className="text-xs text-[#898781] [font-variant-numeric:tabular-nums]">
+                          {formatHeure(action.time)}
+                        </span>
+                      </li>
+                    ))}
+                    {!loading && recentActions.length === 0 && (
+                      <li className="px-5 py-4 text-sm text-[#898781]">
+                        Aucune activité aujourd’hui.
+                      </li>
+                    )}
+                  </ul>
+                </div>
+              </div>
+            </div>
+          </>
+        )}
       </div>
     </main>
   );

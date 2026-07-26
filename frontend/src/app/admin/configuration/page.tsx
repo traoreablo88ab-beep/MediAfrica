@@ -4,7 +4,7 @@ import Link from 'next/link';
 // that actually manage them. Not a general settings engine — pricing lives
 // in /admin/plans, per-clinic config lives in each clinic's own /settings.
 const CONSTANTS: { label: string; value: string }[] = [
-  { label: 'Durée d’essai gratuit', value: '14 jours' },
+  { label: 'Durée d’essai gratuit', value: '30 jours' },
   { label: 'Devise par défaut', value: 'XOF (FCFA)' },
   { label: 'Fournisseur de paiement', value: 'Bictorys (lien de paiement hébergé)' },
   { label: 'Fréquence de facturation', value: 'Cron quotidien — /api/cron/subscription-billing' },

@@ -91,6 +91,15 @@ afterEach(() => {
 });
 
 describe('GET /api/patients', () => {
+  it('returns 402 SUBSCRIPTION_INACTIVE when the clinic subscription is PAST_DUE', async () => {
+    prismaMock.subscription.findUnique.mockResolvedValue({ status: 'PAST_DUE' } as never);
+    const res = await GET(makeGet('http://test/api/patients'));
+    expect(res.status).toBe(402);
+    const body = await res.json();
+    expect(body.error).toBe('SUBSCRIPTION_INACTIVE');
+    expect(prismaMock.patient.findMany).not.toHaveBeenCalled();
+  });
+
   it('returns 401 when requireAuth bails', async () => {
     mockRequireOrgMember.mockResolvedValueOnce(
       NextResponse.json({ error: 'Missing token' }, { status: 401 }),

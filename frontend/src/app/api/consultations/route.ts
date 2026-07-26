@@ -8,6 +8,7 @@ import 'server-only';
 import { NextResponse, type NextRequest } from 'next/server';
 import type { Consultation, Patient, Prisma, User } from '@prisma/client';
 import { requireOrgMember } from '@/lib/server/middleware';
+import { requireActiveSubscription } from '@/lib/server/subscriptions/access-guard';
 import { prisma } from '@/lib/server/prisma';
 import { clampLimit, cursorWhere, buildPage, decodeCursor } from '@/lib/server/pagination/paginate';
 import { makeRequestContext, withRequestContext } from '@/lib/server/observability/request-context';
@@ -64,6 +65,12 @@ export async function GET(req: NextRequest): Promise<NextResponse> {
   return withRequestContext(ctx, async () => {
     const auth = await requireOrgMember();
     if (auth instanceof NextResponse) return auth;
+
+    const subFail = await requireActiveSubscription(auth.orgMember.organizationId);
+    if (subFail) {
+      subFail.headers.set('x-request-id', ctx.requestId);
+      return subFail;
+    }
 
     const url = req.nextUrl;
     const limit = clampLimit(url.searchParams.get('limit'));

@@ -73,6 +73,15 @@ export async function PATCH(
       data: {
         ...(d.planId !== undefined ? { planId: d.planId } : {}),
         ...(d.status !== undefined ? { status: d.status } : {}),
+        // Support reactivation — let the reminder ladder fire again.
+        ...(d.status === 'ACTIVE'
+          ? {
+              reminder7dSentAt: null,
+              reminder5dSentAt: null,
+              reminder3dSentAt: null,
+              reminderOverdueSentAt: null,
+            }
+          : {}),
       },
     });
 
