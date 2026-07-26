@@ -1,5 +1,7 @@
-// GET /api/admin/reports — platform admin list of staff-submitted reports
-// (bug/support/billing/autre), filterable by status.
+// GET /api/admin/reports — platform admin list of staff-submitted comments
+// on the application (rated 1-5, tagged by feature area), filterable by
+// status (internal triage: OPEN = not yet replied to, RESOLVED = replied /
+// acknowledged).
 export const runtime = 'nodejs';
 
 import 'server-only';
@@ -51,7 +53,10 @@ export async function GET(req: NextRequest): Promise<NextResponse> {
           reporterName: r.reporter.name,
           category: r.category,
           message: r.message,
+          rating: r.rating,
           status: r.status,
+          adminResponse: r.adminResponse,
+          adminRespondedAt: r.adminRespondedAt?.toISOString() ?? null,
           createdAt: r.createdAt.toISOString(),
           resolvedAt: r.resolvedAt?.toISOString() ?? null,
         })),

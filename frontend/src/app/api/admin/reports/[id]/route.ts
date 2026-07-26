@@ -1,4 +1,6 @@
-// PATCH /api/admin/reports/[id] — mark a report OPEN/RESOLVED.
+// PATCH /api/admin/reports/[id] — the platform admin replies to a staff
+// comment and/or marks it OPEN/RESOLVED (internal triage only — the staff
+// side never sees a ticket-style status, only `adminResponse` once set).
 export const runtime = 'nodejs';
 
 import 'server-only';
@@ -11,9 +13,14 @@ import { logAdminAction } from '@/lib/server/admin/audit';
 import { enforceAdminRateLimit } from '@/lib/server/middleware/rate-limit-by-userid';
 import { makeRequestContext, withRequestContext } from '@/lib/server/observability/request-context';
 
-const PatchReportBody = z.object({
-  status: z.enum(['OPEN', 'RESOLVED']),
-});
+const PatchReportBody = z
+  .object({
+    status: z.enum(['OPEN', 'RESOLVED']).optional(),
+    adminResponse: z.string().trim().min(1).max(2000).optional(),
+  })
+  .refine((v) => v.status !== undefined || v.adminResponse !== undefined, {
+    message: 'Provide at least one of status or adminResponse',
+  });
 
 export async function PATCH(
   req: NextRequest,
@@ -48,24 +55,35 @@ export async function PATCH(
       );
     }
 
+    const { status, adminResponse } = parsed.data;
     const updated = await prisma.report.update({
       where: { id },
       data: {
-        status: parsed.data.status,
-        resolvedAt: parsed.data.status === 'RESOLVED' ? new Date() : null,
+        ...(status !== undefined
+          ? { status, resolvedAt: status === 'RESOLVED' ? new Date() : null }
+          : {}),
+        ...(adminResponse !== undefined ? { adminResponse, adminRespondedAt: new Date() } : {}),
       },
     });
 
     await logAdminAction(prisma, {
       actorId: auth.admin.id,
-      action: 'report.status_update',
+      action: adminResponse !== undefined ? 'report.reply' : 'report.status_update',
       targetType: 'Report',
       targetId: id,
-      metadata: { from: existing.status, to: updated.status },
+      metadata: {
+        ...(status !== undefined ? { statusFrom: existing.status, statusTo: updated.status } : {}),
+        ...(adminResponse !== undefined ? { replied: true } : {}),
+      },
     });
 
     return NextResponse.json(
-      { id: updated.id, status: updated.status },
+      {
+        id: updated.id,
+        status: updated.status,
+        adminResponse: updated.adminResponse,
+        adminRespondedAt: updated.adminRespondedAt?.toISOString() ?? null,
+      },
       { headers: { 'x-request-id': reqCtx.requestId } },
     );
   });

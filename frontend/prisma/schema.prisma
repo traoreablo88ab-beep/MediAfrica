@@ -479,9 +479,17 @@ model Report {
   organization   Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
   reporterId     String
   reporter       User      @relation(fields: [reporterId], references: [id], onDelete: Restrict)
-  category       String // bug | support | billing | autre
+  category       String // feature area the comment is about: patients | consultations | registres | facturation | personnel | autre
   message        String
-  status         String    @default("OPEN") // OPEN | RESOLVED
+  // Optional 1-5 satisfaction rating — lets staff leave a quick pulse-check
+  // alongside (or instead of) free text.
+  rating         Int?
+  status         String    @default("OPEN") // internal admin triage only — never shown to staff as a ticket state
+  // A visible reply from the platform admin, shown back to the reporting
+  // clinic under their own comment — makes this a two-way feedback channel
+  // rather than a one-way report queue.
+  adminResponse    String?
+  adminRespondedAt DateTime?
   createdAt      DateTime  @default(now())
   resolvedAt     DateTime?
 

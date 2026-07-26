@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useState } from 'react';
+import { useEffect, useState, type FormEvent } from 'react';
 import Link from 'next/link';
 import { api } from '@/lib/api';
 import { friendlyError } from '@/lib/errorMessages';
@@ -14,29 +14,40 @@ interface ReportRow {
   reporterName: string | null;
   category: string;
   message: string;
+  rating: number | null;
   status: string;
+  adminResponse: string | null;
+  adminRespondedAt: string | null;
   createdAt: string;
-  resolvedAt: string | null;
 }
 
 const CATEGORY_LABEL: Record<string, string> = {
-  bug: 'Bug',
-  support: 'Support',
-  billing: 'Facturation',
+  general: 'Avis général',
+  patients: 'Patients',
+  consultations: 'Consultations',
+  registres: 'Registres',
+  personnel: 'Personnel',
+  facturation: 'Facturation',
   autre: 'Autre',
 };
 
 const CATEGORY_BADGE: Record<string, string> = {
-  bug: 'bg-[#d03b3b]/10 text-[#d03b3b]',
-  support: 'bg-[#2a78d6]/10 text-[#2a78d6]',
-  billing: 'bg-[#d08a1c]/10 text-[#d08a1c]',
+  general: 'bg-[#8a5cf6]/10 text-[#8a5cf6]',
+  patients: 'bg-[#2a78d6]/10 text-[#2a78d6]',
+  consultations: 'bg-[#0ca30c]/10 text-[#0ca30c]',
+  registres: 'bg-[#d08a1c]/10 text-[#d08a1c]',
+  personnel: 'bg-[#2a78d6]/10 text-[#2a78d6]',
+  facturation: 'bg-[#d08a1c]/10 text-[#d08a1c]',
   autre: 'bg-[#e1e0d9] text-[#52514e]',
 };
 
 const CATEGORY_ACCENT: Record<string, string> = {
-  bug: '#d03b3b',
-  support: '#2a78d6',
-  billing: '#d08a1c',
+  general: '#8a5cf6',
+  patients: '#2a78d6',
+  consultations: '#0ca30c',
+  registres: '#d08a1c',
+  personnel: '#2a78d6',
+  facturation: '#d08a1c',
   autre: '#c9c8c1',
 };
 
@@ -48,6 +59,118 @@ function formatDate(iso: string): string {
     hour: '2-digit',
     minute: '2-digit',
   });
+}
+
+function StarIcon({ filled }: { filled: boolean }) {
+  return (
+    <svg
+      viewBox="0 0 24 24"
+      className="h-4 w-4"
+      fill={filled ? '#d08a1c' : 'none'}
+      stroke={filled ? '#d08a1c' : '#c9c8c1'}
+      strokeWidth="1.6"
+      aria-hidden="true"
+    >
+      <path
+        d="M12 3.5l2.55 5.4 5.95.75-4.36 4.16 1.14 5.94L12 16.9l-5.28 2.85 1.14-5.94-4.36-4.16 5.95-.75L12 3.5z"
+        strokeLinejoin="round"
+      />
+    </svg>
+  );
+}
+
+function StarDisplay({ value }: { value: number }) {
+  return (
+    <span className="flex items-center gap-0.5" aria-label={`Note : ${value} sur 5`}>
+      {[1, 2, 3, 4, 5].map((n) => (
+        <StarIcon key={n} filled={n <= value} />
+      ))}
+    </span>
+  );
+}
+
+function ReplyForm({
+  report,
+  onSubmitted,
+}: {
+  report: ReportRow;
+  onSubmitted: (id: string, response: string) => void;
+}) {
+  const { toast } = useToast();
+  const [open, setOpen] = useState(false);
+  const [text, setText] = useState('');
+  const [sending, setSending] = useState(false);
+
+  async function onSubmit(e: FormEvent) {
+    e.preventDefault();
+    if (!text.trim()) return;
+    setSending(true);
+    try {
+      await api(`/api/admin/reports/${report.id}`, {
+        method: 'PATCH',
+        body: { adminResponse: text, status: 'RESOLVED' },
+      });
+      onSubmitted(report.id, text);
+      setText('');
+      setOpen(false);
+      toast('Réponse envoyée.');
+    } catch (err) {
+      toast(friendlyError(err), 'error');
+    } finally {
+      setSending(false);
+    }
+  }
+
+  if (report.adminResponse) {
+    return (
+      <div className="mt-3 rounded-lg bg-[#2a78d6]/5 px-3 py-2.5">
+        <p className="text-xs font-medium text-[#2a78d6]">Votre réponse</p>
+        <p className="mt-1 text-sm leading-relaxed text-[#0b0b0b]">{report.adminResponse}</p>
+      </div>
+    );
+  }
+
+  if (!open) {
+    return (
+      <button
+        type="button"
+        onClick={() => setOpen(true)}
+        className="mt-3 rounded-md border border-[#e1e0d9] px-3 py-1.5 text-xs font-medium text-[#52514e] transition-colors hover:bg-[#f9f9f7]"
+      >
+        Répondre
+      </button>
+    );
+  }
+
+  return (
+    <form onSubmit={onSubmit} className="mt-3 flex flex-col gap-2">
+      <textarea
+        autoFocus
+        rows={2}
+        maxLength={2000}
+        value={text}
+        onChange={(e) => setText(e.target.value)}
+        placeholder="Votre réponse, visible par le centre…"
+        className="w-full resize-none rounded-md border border-[#e1e0d9] px-3 py-2 text-sm focus:border-[#2a78d6] focus:outline-none"
+      />
+      <div className="flex items-center gap-2">
+        <button
+          type="submit"
+          disabled={sending || !text.trim()}
+          className="rounded-md bg-[#2a78d6] px-3 py-1.5 text-xs font-medium text-white transition-colors hover:bg-[#2a78d6]/90 disabled:opacity-50"
+        >
+          {sending ? 'Envoi…' : 'Envoyer la réponse'}
+        </button>
+        <button
+          type="button"
+          onClick={() => setOpen(false)}
+          className="rounded-md px-3 py-1.5 text-xs font-medium text-[#898781] hover:text-[#52514e]"
+        >
+          Annuler
+        </button>
+      </div>
+    </form>
+  );
 }
 
 export default function AdminSignalementsPage() {
@@ -82,19 +205,12 @@ export default function AdminSignalementsPage() {
     void load(true);
   }, [statusFilter]);
 
-  async function onResolve(report: ReportRow) {
-    setBusyId(report.id);
-    try {
-      await api(`/api/admin/reports/${report.id}`, {
-        method: 'PATCH',
-        body: { status: 'RESOLVED' },
-      });
-      setReports((prev) => prev.filter((r) => r.id !== report.id));
-      toast('Signalement résolu.');
-    } catch (err) {
-      toast(friendlyError(err), 'error');
-    } finally {
-      setBusyId(null);
+  function onReplySubmitted(id: string, response: string) {
+    setReports((prev) =>
+      prev.map((r) => (r.id === id ? { ...r, adminResponse: response, status: 'RESOLVED' } : r)),
+    );
+    if (statusFilter === 'OPEN') {
+      setReports((prev) => prev.filter((r) => r.id !== id));
     }
   }
 
@@ -103,7 +219,7 @@ export default function AdminSignalementsPage() {
     try {
       await api(`/api/admin/reports/${report.id}`, { method: 'PATCH', body: { status: 'OPEN' } });
       setReports((prev) => prev.map((r) => (r.id === report.id ? { ...r, status: 'OPEN' } : r)));
-      toast('Signalement rouvert.');
+      toast('Rouvert.');
     } catch (err) {
       toast(friendlyError(err), 'error');
     } finally {
@@ -117,8 +233,7 @@ export default function AdminSignalementsPage() {
         <div>
           <h1 className="text-2xl font-bold text-[#0b0b0b]">Signalements</h1>
           <p className="mt-1 text-sm text-[#52514e]">
-            Bugs, demandes de support et problèmes de facturation remontés par le personnel des
-            centres.
+            Avis et retours sur l&rsquo;application, laissés par le personnel de chaque centre.
           </p>
         </div>
         <select
@@ -126,8 +241,8 @@ export default function AdminSignalementsPage() {
           onChange={(e) => setStatusFilter(e.target.value)}
           className="cursor-pointer rounded-md border border-[#e1e0d9] bg-white px-3 py-2 text-sm text-[#0b0b0b] transition-colors hover:border-[#2a78d6] focus:border-[#2a78d6] focus:outline-none"
         >
-          <option value="OPEN">Ouverts</option>
-          <option value="RESOLVED">Résolus</option>
+          <option value="OPEN">Sans réponse</option>
+          <option value="RESOLVED">Déjà répondus</option>
           <option value="">Tous</option>
         </select>
       </div>
@@ -159,6 +274,7 @@ export default function AdminSignalementsPage() {
                     >
                       {CATEGORY_LABEL[r.category] ?? r.category}
                     </span>
+                    {r.rating !== null && <StarDisplay value={r.rating} />}
                     <Link
                       href={`/admin/organizations/${r.organizationId}`}
                       className="text-sm font-medium text-[#0b0b0b] hover:text-[#2a78d6] hover:underline"
@@ -172,27 +288,17 @@ export default function AdminSignalementsPage() {
                   <span className="text-xs text-[#898781]">{formatDate(r.createdAt)}</span>
                 </div>
                 <p className="mt-3 text-sm leading-relaxed text-[#52514e]">{r.message}</p>
-                <div className="mt-4 flex items-center gap-2">
-                  {r.status === 'OPEN' ? (
-                    <button
-                      type="button"
-                      onClick={() => onResolve(r)}
-                      disabled={busyId === r.id}
-                      className="rounded-md bg-[#0ca30c]/10 px-3 py-1.5 text-xs font-medium text-[#0ca30c] transition-colors hover:bg-[#0ca30c]/20 disabled:opacity-50"
-                    >
-                      Marquer comme résolu
-                    </button>
-                  ) : (
-                    <button
-                      type="button"
-                      onClick={() => onReopen(r)}
-                      disabled={busyId === r.id}
-                      className="rounded-md border border-[#e1e0d9] px-3 py-1.5 text-xs font-medium text-[#52514e] transition-colors hover:bg-[#f9f9f7] disabled:opacity-50"
-                    >
-                      Rouvrir
-                    </button>
-                  )}
-                </div>
+                <ReplyForm report={r} onSubmitted={onReplySubmitted} />
+                {r.status === 'RESOLVED' && (
+                  <button
+                    type="button"
+                    onClick={() => onReopen(r)}
+                    disabled={busyId === r.id}
+                    className="mt-2 text-xs font-medium text-[#898781] hover:text-[#52514e] disabled:opacity-50"
+                  >
+                    Rouvrir sans réponse
+                  </button>
+                )}
               </div>
             </div>
           </div>

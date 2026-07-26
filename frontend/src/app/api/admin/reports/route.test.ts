@@ -30,9 +30,12 @@ function reportRow(overrides: Partial<Record<string, unknown>> = {}) {
     id: 'rep-1',
     organization: { id: 'org-1', name: 'Centre A' },
     reporter: { email: 'staff@test.local', name: 'Staff' },
-    category: 'bug',
-    message: 'Le bouton ne fonctionne pas.',
+    category: 'patients',
+    message: 'Le formulaire patient est un peu long.',
+    rating: 4,
     status: 'OPEN',
+    adminResponse: null,
+    adminRespondedAt: null,
     createdAt: new Date('2026-07-01T00:00:00Z'),
     resolvedAt: null,
     ...overrides,
@@ -64,8 +67,10 @@ describe('GET /api/admin/reports', () => {
       organizationId: 'org-1',
       organizationName: 'Centre A',
       reporterEmail: 'staff@test.local',
-      category: 'bug',
+      category: 'patients',
+      rating: 4,
       status: 'OPEN',
+      adminResponse: null,
     });
   });
 

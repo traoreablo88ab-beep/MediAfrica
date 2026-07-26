@@ -17,13 +17,14 @@ import { useAuth } from '@/contexts/AuthContext';
 import { Logo } from '@/components/Logo';
 import { Wordmark } from '@/components/Wordmark';
 
-export type AppNavTab = 'dashboard' | 'patients' | 'consultations' | 'registres';
+export type AppNavTab = 'dashboard' | 'patients' | 'consultations' | 'registres' | 'commentaires';
 
 const TABS: Array<{ key: AppNavTab; label: string; href: string }> = [
   { key: 'dashboard', label: 'Tableau de bord', href: '/dashboard' },
   { key: 'patients', label: 'Patients', href: '/patients' },
   { key: 'consultations', label: 'Consultations', href: '/consultations' },
   { key: 'registres', label: 'Registres', href: '/registres/consultation' },
+  { key: 'commentaires', label: 'Commentaires', href: '/commentaires' },
 ];
 
 type IconProps = { className?: string };
@@ -100,6 +101,23 @@ function RegistresIcon({ className }: IconProps) {
         strokeWidth="1.8"
         strokeLinecap="round"
       />
+    </svg>
+  );
+}
+
+function CommentairesIcon({ className }: IconProps) {
+  return (
+    <svg viewBox="0 0 24 24" fill="none" className={className} aria-hidden="true">
+      <path
+        d="M12 4.5c4.7 0 8.5 3 8.5 6.7s-3.8 6.7-8.5 6.7c-.85 0-1.67-.1-2.44-.28L5 19.5l1.2-3.4C4.6 14.9 3.5 13.15 3.5 11.2c0-3.7 3.8-6.7 8.5-6.7z"
+        stroke="currentColor"
+        strokeWidth="1.8"
+        strokeLinecap="round"
+        strokeLinejoin="round"
+      />
+      <circle cx="8.6" cy="11.2" r="0.9" fill="currentColor" />
+      <circle cx="12" cy="11.2" r="0.9" fill="currentColor" />
+      <circle cx="15.4" cy="11.2" r="0.9" fill="currentColor" />
     </svg>
   );
 }
@@ -191,6 +209,7 @@ const TAB_ICONS: Record<AppNavTab, ComponentType<IconProps>> = {
   patients: PatientsIcon,
   consultations: ConsultationsIcon,
   registres: RegistresIcon,
+  commentaires: CommentairesIcon,
 };
 
 function initials(label: string): string {

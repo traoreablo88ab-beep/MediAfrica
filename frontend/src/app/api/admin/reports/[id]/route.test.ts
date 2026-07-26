@@ -107,4 +107,44 @@ describe('PATCH /api/admin/reports/[id]', () => {
     expect(res.status).toBe(400);
     expect(prismaMock.report.update).not.toHaveBeenCalled();
   });
+
+  it('400 VALIDATION_FAILED when neither status nor adminResponse is provided', async () => {
+    const { req, ctx } = makePatch('rep-1', {});
+    const res = await PATCH(req, ctx);
+    expect(res.status).toBe(400);
+    expect(prismaMock.report.update).not.toHaveBeenCalled();
+  });
+
+  it('replies to a comment and stamps adminRespondedAt, leaving status untouched', async () => {
+    prismaMock.report.findUnique.mockResolvedValue(existingReport() as never);
+    prismaMock.report.update.mockResolvedValue(
+      existingReport({ adminResponse: 'Merci, on regarde ça.' }) as never,
+    );
+
+    const { req, ctx } = makePatch('rep-1', { adminResponse: 'Merci, on regarde ça.' });
+    const res = await PATCH(req, ctx);
+
+    expect(res.status).toBe(200);
+    const args = prismaMock.report.update.mock.calls[0]?.[0];
+    expect(args?.data).toMatchObject({ adminResponse: 'Merci, on regarde ça.' });
+    expect(args?.data?.adminRespondedAt).toBeInstanceOf(Date);
+    expect(args?.data).not.toHaveProperty('status');
+    expect(mockLogAdminAction).toHaveBeenCalledWith(
+      expect.anything(),
+      expect.objectContaining({ action: 'report.reply', targetId: 'rep-1' }),
+    );
+  });
+
+  it('can set a reply and resolve in the same call', async () => {
+    prismaMock.report.findUnique.mockResolvedValue(existingReport() as never);
+    prismaMock.report.update.mockResolvedValue(
+      existingReport({ status: 'RESOLVED', adminResponse: 'Corrigé.' }) as never,
+    );
+
+    const { req, ctx } = makePatch('rep-1', { status: 'RESOLVED', adminResponse: 'Corrigé.' });
+    await PATCH(req, ctx);
+
+    const args = prismaMock.report.update.mock.calls[0]?.[0];
+    expect(args?.data).toMatchObject({ status: 'RESOLVED', adminResponse: 'Corrigé.' });
+  });
 });
