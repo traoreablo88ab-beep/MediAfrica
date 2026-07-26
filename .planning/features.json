@@ -2,7 +2,8 @@
   "$comment_1": "Declarative manifest of optional surfaces. Read by AI agents (per PRUNING.md) before atomically removing unused code. v1.2 corrects Prisma relation names against the live schema and removes implicit core references from cross_dependencies (the core layer is always present, so listing it as a dep was misleading).",
   "$comment_2": "Field semantics: `owns` = files the feature owns and that get DELETED on prune. `surgical_edits` = files that get EDITED (not deleted) — typically dispatcher cases, schema relations, type unions. `prune_complexity` = 'safe' | 'with-care' | 'never' (signals the AI must read PRUNING.md carefully).",
   "$comment_3": "`prune_complexity: never` means the codebase cannot be removed without breaking core flows (e.g. signup verification needs email-resend). The feature is still LISTED here because it has env vars / surgical_edits a fork-author should be aware of, but the AI MUST refuse a code-prune request and offer the configure-off (env-empty) alternative instead.",
-  "version": "1.2.0",
+  "$comment_4": "v1.3 adds the MediAfrica domain features built on top of the izikit starter (patients-consultations-registres, maternite-v2v3, subscriptions-billing, reports-commentaires, clinic-organizations). The original starter entries above this line are unchanged and still describe generic izikit surfaces only.",
+  "version": "1.3.0",
   "starter": "izikit@v1.1",
   "features": {
     "payments-bictorys": {
@@ -279,6 +280,183 @@
       "tripwires_to_update": [
         "frontend/src/lib/server/observability/instrumentation-shape.test.ts (relax Sentry assertions)"
       ]
+    },
+
+    "patients-consultations-registres": {
+      "description": "Core clinical module — patient records (dossiers), daily consultation queue, monthly consultation register with closure/lock. This IS the MediAfrica product, not an optional starter surface.",
+      "prune_complexity": "never",
+      "$prune_complexity_reason": "This is the reason MediAfrica exists. Never offer to remove it — if the request is 'change how X works', edit in place instead of pruning.",
+      "owns": {
+        "routes": [
+          "api/patients",
+          "api/patients/[id]",
+          "api/patients/[id]/consultations",
+          "api/consultations",
+          "api/consultations/[id]",
+          "api/registres/consultation/closure",
+          "api/registres/consultation/close"
+        ],
+        "libs": ["patients/", "registers/"],
+        "models": ["Patient", "Consultation", "RegisterClosure"],
+        "envVars": []
+      },
+      "cross_dependencies": ["clinic-organizations", "subscriptions-billing"],
+      "surgical_edits": [],
+      "cron_entries": [],
+      "prisma_user_relations": [
+        "consultationsProvided Consultation[]",
+        "registerClosures RegisterClosure[]"
+      ],
+      "outbox_event_kinds": [],
+      "tripwires_to_update": []
+    },
+
+    "maternite-v2v3": {
+      "description": "Maternité clinical module (CPN/Accouchement/CPoN) — schema, API, pages, and tests are fully built, but the feature is intentionally disabled: no AppHeader nav link, no entry point on the patient page. Scaffolded ahead of a planned V2/V3, not part of the active V1 product (decision made 2026-07-26).",
+      "prune_complexity": "safe",
+      "$prune_complexity_reason": "Nothing links to it, so it's inert either way. Safe to delete entirely if V2/V3 is dropped; equally safe to re-enable later by re-adding the AppHeader 'Registres' link and the patient-page 'Nouvelle fiche maternité' button (removed 2026-07-26, see git history on frontend/src/components/AppHeader.tsx and frontend/src/app/patients/[id]/page.tsx).",
+      "owns": {
+        "routes": ["api/maternite", "api/patients/[id]/maternite", "api/registres/maternite"],
+        "libs": [],
+        "models": ["Maternite"],
+        "envVars": []
+      },
+      "cross_dependencies": ["patients-consultations-registres"],
+      "surgical_edits": [
+        {
+          "file": "frontend/prisma/schema.prisma",
+          "action": "remove `materniteProvided Maternite[]` from User, `maternites Maternite[]` from Patient, and the Maternite model itself"
+        }
+      ],
+      "cron_entries": [],
+      "prisma_user_relations": ["materniteProvided Maternite[]"],
+      "outbox_event_kinds": [],
+      "tripwires_to_update": []
+    },
+
+    "subscriptions-billing": {
+      "description": "SaaS subscription billing for clinics — Plan/Subscription models, 30-day trial, daily billing cron, 4-stage reminder ladder (J-7/J-5/J-3/overdue+1), requireActiveSubscription() access-guard applied to every patients/consultations/registres/maternite route, /facturation UI, admin subscriptions+plans back-office.",
+      "prune_complexity": "with-care",
+      "$prune_complexity_reason": "requireActiveSubscription() is called from inside patients-consultations-registres route handlers (not just from subscriptions/ itself) — pruning means editing every one of those call sites, not just deleting the subscriptions/ lib. Only prune for a single-tenant / non-SaaS install with no billing concept.",
+      "owns": {
+        "routes": [
+          "api/billing/subscription",
+          "api/billing/pay",
+          "api/cron/subscription-billing",
+          "api/admin/subscriptions",
+          "api/admin/subscriptions/[id]",
+          "api/admin/plans",
+          "api/admin/plans/[id]"
+        ],
+        "libs": ["subscriptions/"],
+        "models": ["Plan", "Subscription"],
+        "envVars": []
+      },
+      "cross_dependencies": [
+        "patients-consultations-registres",
+        "maternite-v2v3",
+        "webhooks-bictorys",
+        "email-resend"
+      ],
+      "surgical_edits": [
+        {
+          "file": "frontend/src/app/api/patients/route.ts",
+          "action": "remove requireActiveSubscription(...) call"
+        },
+        {
+          "file": "frontend/src/app/api/patients/[id]/route.ts",
+          "action": "remove requireActiveSubscription(...) call (both GET and PATCH)"
+        },
+        {
+          "file": "frontend/src/app/api/patients/[id]/consultations/route.ts",
+          "action": "remove requireActiveSubscription(...) call"
+        },
+        {
+          "file": "frontend/src/app/api/consultations/route.ts",
+          "action": "remove requireActiveSubscription(...) call"
+        },
+        {
+          "file": "frontend/src/app/api/consultations/[id]/route.ts",
+          "action": "remove requireActiveSubscription(...) call"
+        },
+        {
+          "file": "frontend/src/app/api/registres/consultation/closure/route.ts",
+          "action": "remove requireActiveSubscription(...) call"
+        },
+        {
+          "file": "frontend/src/app/api/registres/consultation/close/route.ts",
+          "action": "remove requireActiveSubscription(...) call"
+        },
+        {
+          "file": "frontend/src/app/api/auth/signup/route.ts",
+          "action": "remove the Subscription-creation block (TRIAL_DAYS) from the signup transaction"
+        },
+        {
+          "file": "frontend/src/app/api/organizations/current/route.ts",
+          "action": "remove the Subscription-creation block (TRIAL_DAYS) from the org-creation transaction"
+        },
+        {
+          "file": "frontend/src/lib/server/outbox/dispatcher.ts",
+          "action": "remove case 'email.subscription_renewal_due' and case 'email.subscription_reminder'"
+        },
+        {
+          "file": "frontend/src/lib/server/outbox/types.ts",
+          "action": "remove EmailSubscriptionRenewalDueEvent + EmailSubscriptionReminderEvent from OutboxEvent union"
+        }
+      ],
+      "cron_entries": ["subscription-billing"],
+      "prisma_user_relations": [],
+      "outbox_event_kinds": ["email.subscription_renewal_due", "email.subscription_reminder"],
+      "tripwires_to_update": [
+        "frontend/src/lib/server/observability/vercel-json-shape.test.ts (remove subscription-billing assertion)"
+      ]
+    },
+
+    "reports-commentaires": {
+      "description": "Staff feedback/incident reports — any clinic staff member files a comment (category + optional 1-5 rating) scoped to their org; platform admin replies via /admin/signalements (sets adminResponse/adminRespondedAt).",
+      "prune_complexity": "safe",
+      "owns": {
+        "routes": ["api/reports", "api/admin/reports", "api/admin/reports/[id]"],
+        "libs": [],
+        "models": ["Report"],
+        "envVars": []
+      },
+      "cross_dependencies": [],
+      "surgical_edits": [
+        {
+          "file": "frontend/prisma/schema.prisma",
+          "action": "remove `reportsFiled Report[]` from User, `reports Report[]` from Organization, and the Report model"
+        }
+      ],
+      "cron_entries": [],
+      "prisma_user_relations": ["reportsFiled Report[]"],
+      "outbox_event_kinds": [],
+      "tripwires_to_update": []
+    },
+
+    "clinic-organizations": {
+      "description": "MediAfrica's self-service layer built on top of the starter's generic 'multi-tenancy' plumbing (see that entry below) — clinic signup creates an Organization+Subscription+ClinicSettings in one tx, /onboarding-centre covers OAuth signups with no org yet, staff/consultant member management, per-clinic settings.",
+      "prune_complexity": "never",
+      "$prune_complexity_reason": "Every clinic account needs an Organization to exist — signup, onboarding, and every patients/consultations/registres route reads auth.orgMember.organizationId. Core to the product, not an optional add-on.",
+      "owns": {
+        "routes": [
+          "api/organizations/current",
+          "api/organizations/current/members",
+          "api/organizations/current/members/[userId]",
+          "api/organizations/current/consultants",
+          "api/organizations/current/consultants/[id]",
+          "api/settings/clinic"
+        ],
+        "libs": [],
+        "models": ["ClinicSettings"],
+        "envVars": []
+      },
+      "cross_dependencies": ["multi-tenancy"],
+      "surgical_edits": [],
+      "cron_entries": [],
+      "prisma_user_relations": [],
+      "outbox_event_kinds": [],
+      "tripwires_to_update": []
     }
   },
 

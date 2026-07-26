@@ -19,6 +19,10 @@ interface OutboxSummary {
   items: { status: string }[];
 }
 
+interface EmailQueueSummary {
+  items: { status: string }[];
+}
+
 interface RateLimitBucket {
   bucket: string;
   totalKeys: number;
@@ -193,6 +197,8 @@ export default function AdminOverviewPage() {
   const [stats, setStats] = useState<Stats | null>(null);
   const [failedOutbox, setFailedOutbox] = useState<number | null>(null);
   const [deadOutbox, setDeadOutbox] = useState<number | null>(null);
+  const [failedEmails, setFailedEmails] = useState<number | null>(null);
+  const [deadEmails, setDeadEmails] = useState<number | null>(null);
   const [rateLimits, setRateLimits] = useState<RateLimitBucket[]>([]);
   const [error, setError] = useState<string | null>(null);
 
@@ -211,6 +217,16 @@ export default function AdminOverviewPage() {
         ]);
         setFailedOutbox(failed.items.length);
         setDeadOutbox(dead.items.length);
+      } catch {
+        // Non-critical widget — leave counts blank on failure.
+      }
+      try {
+        const [failedMail, deadMail] = await Promise.all([
+          api<EmailQueueSummary>('/api/admin/email-queue?status=FAILED&limit=1'),
+          api<EmailQueueSummary>('/api/admin/email-queue?status=DEAD&limit=1'),
+        ]);
+        setFailedEmails(failedMail.items.length);
+        setDeadEmails(deadMail.items.length);
       } catch {
         // Non-critical widget — leave counts blank on failure.
       }
@@ -249,7 +265,11 @@ export default function AdminOverviewPage() {
 
   const maxTrend = Math.max(1, ...stats.revenueTrend.map((t) => t.total));
   const totalTrend = stats.revenueTrend.reduce((sum, t) => sum + t.total, 0);
-  const systemHealthy = (failedOutbox ?? 0) === 0 && (deadOutbox ?? 0) === 0;
+  const systemHealthy =
+    (failedOutbox ?? 0) === 0 &&
+    (deadOutbox ?? 0) === 0 &&
+    (failedEmails ?? 0) === 0 &&
+    (deadEmails ?? 0) === 0;
   const activeRateLimitBuckets = rateLimits.filter((b) => b.totalKeys > 0);
 
   const kpis: Kpi[] = [
@@ -405,6 +425,32 @@ export default function AdminOverviewPage() {
                 className={`font-semibold ${(deadOutbox ?? 0) > 0 ? 'text-[#d03b3b]' : 'text-[#0b0b0b]'}`}
               >
                 {deadOutbox ?? '—'}
+              </dd>
+            </div>
+            <div className="flex items-center justify-between">
+              <dt className="flex items-center gap-2 text-[#52514e]">
+                <span
+                  className={`h-1.5 w-1.5 rounded-full ${(failedEmails ?? 0) > 0 ? 'bg-[#d03b3b]' : 'bg-[#0ca30c]'}`}
+                />
+                Emails en échec
+              </dt>
+              <dd
+                className={`font-semibold ${(failedEmails ?? 0) > 0 ? 'text-[#d03b3b]' : 'text-[#0b0b0b]'}`}
+              >
+                {failedEmails ?? '—'}
+              </dd>
+            </div>
+            <div className="flex items-center justify-between">
+              <dt className="flex items-center gap-2 text-[#52514e]">
+                <span
+                  className={`h-1.5 w-1.5 rounded-full ${(deadEmails ?? 0) > 0 ? 'bg-[#d03b3b]' : 'bg-[#0ca30c]'}`}
+                />
+                Emails morts (DEAD)
+              </dt>
+              <dd
+                className={`font-semibold ${(deadEmails ?? 0) > 0 ? 'text-[#d03b3b]' : 'text-[#0b0b0b]'}`}
+              >
+                {deadEmails ?? '—'}
               </dd>
             </div>
             {activeRateLimitBuckets.slice(0, 4).map((b) => (
