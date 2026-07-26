@@ -2,7 +2,8 @@
 
 import { useEffect, useState } from 'react';
 import Link from 'next/link';
-import { api, ApiError } from '@/lib/api';
+import { api } from '@/lib/api';
+import { friendlyError } from '@/lib/errorMessages';
 import {
   ConsultationStatusBadge,
   type ConsultationStatus,
@@ -247,13 +248,7 @@ export default function DashboardPage() {
         }
       } catch (err) {
         if (!cancelled) {
-          setError(
-            err instanceof ApiError
-              ? err.status === 401
-                ? 'Vous devez être connecté pour voir cette page.'
-                : err.message
-              : 'Erreur inconnue',
-          );
+          setError(friendlyError(err, 'Une erreur est survenue. Réessayez.'));
         }
       } finally {
         if (!cancelled) setLoading(false);

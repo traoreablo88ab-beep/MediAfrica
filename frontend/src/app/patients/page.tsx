@@ -2,7 +2,8 @@
 
 import { useEffect, useState, type FormEvent } from 'react';
 import Link from 'next/link';
-import { api, ApiError } from '@/lib/api';
+import { api } from '@/lib/api';
+import { friendlyError } from '@/lib/errorMessages';
 import {
   ConsultationStatusBadge,
   CONSULTATION_STATUS_CONFIG,
@@ -71,13 +72,7 @@ export default function PatientsPage() {
       setItems(reset ? page.items : [...items, ...page.items]);
       setNextCursor(page.nextCursor);
     } catch (err) {
-      setError(
-        err instanceof ApiError
-          ? err.status === 401
-            ? 'Vous devez être connecté pour voir cette page.'
-            : err.message
-          : 'Erreur inconnue',
-      );
+      setError(friendlyError(err, 'Une erreur est survenue. Réessayez.'));
     } finally {
       setLoading(false);
     }
@@ -113,7 +108,7 @@ export default function PatientsPage() {
       });
     } catch (err) {
       setItems(previous);
-      setError(err instanceof ApiError ? err.message : 'Erreur inconnue');
+      setError(friendlyError(err, 'Une erreur est survenue. Réessayez.'));
     } finally {
       setUpdatingId(null);
     }

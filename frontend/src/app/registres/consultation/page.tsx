@@ -2,7 +2,8 @@
 
 import { useEffect, useState, useCallback } from 'react';
 import Link from 'next/link';
-import { api, ApiError } from '@/lib/api';
+import { api } from '@/lib/api';
+import { friendlyError } from '@/lib/errorMessages';
 import { AppHeader } from '@/components/AppHeader';
 import { Skeleton } from '@/components/Skeleton';
 import { useClinicName } from '@/lib/useClinicName';
@@ -197,13 +198,7 @@ export default function RegistreConsultationPage() {
       all.sort((a, b) => a.date.localeCompare(b.date));
       setItems(all);
     } catch (err) {
-      setError(
-        err instanceof ApiError
-          ? err.status === 401
-            ? 'Vous devez être connecté pour voir cette page.'
-            : err.message
-          : 'Erreur inconnue',
-      );
+      setError(friendlyError(err, 'Une erreur est survenue. Réessayez.'));
     } finally {
       setLoading(false);
     }
@@ -227,7 +222,7 @@ export default function RegistreConsultationPage() {
       await api('/api/registres/consultation/close', { method: 'POST', body: { month } });
       await load(month);
     } catch (err) {
-      setError(err instanceof ApiError ? err.message : 'Erreur inconnue');
+      setError(friendlyError(err, 'Une erreur est survenue. Réessayez.'));
     } finally {
       setClosing(false);
     }

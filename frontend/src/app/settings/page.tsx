@@ -23,6 +23,7 @@
 
 import { useEffect, useState, type FormEvent } from 'react';
 import { api, ApiError } from '@/lib/api';
+import { friendlyError } from '@/lib/errorMessages';
 import { useAuth, useUser } from '@/contexts/AuthContext';
 import { useToast } from '@/contexts/ToastContext';
 import { useClinicName } from '@/lib/useClinicName';
@@ -72,7 +73,7 @@ export default function SettingsPage() {
       invalidateCache('/api/settings/clinic');
       toast('Nom du centre mis à jour.', 'success');
     } catch (err) {
-      setClinicError(err instanceof ApiError ? err.message : 'Erreur réseau. Réessaie.');
+      setClinicError(friendlyError(err, 'Erreur réseau. Réessaie.'));
     } finally {
       setClinicSubmitting(false);
     }
@@ -163,9 +164,9 @@ export default function SettingsPage() {
             'Un mot de passe est déjà défini. Utilise « changer le mot de passe ».',
           VALIDATION_FAILED: 'Champs invalides.',
         };
-        setError(map[err.code] ?? err.message);
+        setError(map[err.code] ?? friendlyError(err));
       } else {
-        setError('Erreur réseau. Réessaie.');
+        setError(friendlyError(err, 'Erreur réseau. Réessaie.'));
       }
     } finally {
       setSubmitting(false);
@@ -185,7 +186,7 @@ export default function SettingsPage() {
       toast('Nom mis à jour.', 'success');
       await refresh();
     } catch (err) {
-      setNameError(err instanceof ApiError ? err.message : 'Erreur réseau. Réessaie.');
+      setNameError(friendlyError(err, 'Erreur réseau. Réessaie.'));
     } finally {
       setNameSubmitting(false);
     }
