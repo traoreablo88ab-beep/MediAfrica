@@ -233,13 +233,13 @@ export default function RegistreMaterniteAccouchementPage() {
             <h1 className="text-2xl font-bold text-[#0b0b0b]">Registre d&rsquo;accouchement</h1>
             <p className="mt-1 text-sm text-[#52514e]">{clinicName}</p>
           </div>
-          <div className="flex items-center gap-3">
+          <div className="flex flex-col gap-3 sm:flex-row sm:items-center">
             <div className="flex items-center gap-1">
               <button
                 type="button"
                 aria-label="Mois précédent"
                 onClick={() => setMonth((m) => shiftMonth(m, -1))}
-                className="flex h-9 w-9 items-center justify-center rounded-md border border-[#e1e0d9] bg-white text-[#52514e] transition-colors hover:bg-[#f9f9f7]"
+                className="flex h-9 w-9 shrink-0 items-center justify-center rounded-md border border-[#e1e0d9] bg-white text-[#52514e] transition-colors hover:bg-[#f9f9f7]"
               >
                 ‹
               </button>
@@ -248,26 +248,28 @@ export default function RegistreMaterniteAccouchementPage() {
                 type="button"
                 aria-label="Mois suivant"
                 onClick={() => setMonth((m) => shiftMonth(m, 1))}
-                className="flex h-9 w-9 items-center justify-center rounded-md border border-[#e1e0d9] bg-white text-[#52514e] transition-colors hover:bg-[#f9f9f7]"
+                className="flex h-9 w-9 shrink-0 items-center justify-center rounded-md border border-[#e1e0d9] bg-white text-[#52514e] transition-colors hover:bg-[#f9f9f7]"
               >
                 ›
               </button>
             </div>
-            <button
-              type="button"
-              onClick={() => downloadCsv(month, items)}
-              disabled={items.length === 0}
-              className="rounded-md border border-[#e1e0d9] bg-white px-4 py-2 text-sm font-medium text-[#0b0b0b] transition-colors hover:bg-[#f9f9f7] disabled:opacity-50"
-            >
-              Exporter CSV
-            </button>
-            <button
-              type="button"
-              onClick={() => window.print()}
-              className="rounded-md border border-[#e1e0d9] bg-white px-4 py-2 text-sm font-medium text-[#0b0b0b] transition-colors hover:bg-[#f9f9f7]"
-            >
-              Imprimer
-            </button>
+            <div className="flex gap-3">
+              <button
+                type="button"
+                onClick={() => downloadCsv(month, items)}
+                disabled={items.length === 0}
+                className="flex-1 rounded-md border border-[#e1e0d9] bg-white px-4 py-2 text-sm font-medium text-[#0b0b0b] transition-colors hover:bg-[#f9f9f7] disabled:opacity-50 sm:flex-none"
+              >
+                Exporter CSV
+              </button>
+              <button
+                type="button"
+                onClick={() => window.print()}
+                className="flex-1 rounded-md border border-[#e1e0d9] bg-white px-4 py-2 text-sm font-medium text-[#0b0b0b] transition-colors hover:bg-[#f9f9f7] sm:flex-none"
+              >
+                Imprimer
+              </button>
+            </div>
           </div>
         </div>
 
