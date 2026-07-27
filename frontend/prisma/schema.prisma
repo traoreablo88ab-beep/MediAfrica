@@ -9,48 +9,48 @@ datasource db {
 }
 
 model User {
-  id                String    @id @default(cuid())
-  email             String    @unique
+  id              String    @id @default(cuid())
+  email           String    @unique
   // Nullable: OAuth-only users (e.g. signed up with Google) never set a
   // password. Email/password signup still requires it; the auth route
   // enforces presence at runtime.
-  passwordHash      String?
-  emailVerifiedAt   DateTime?
-  tokenVersion      Int       @default(0)
+  passwordHash    String?
+  emailVerifiedAt DateTime?
+  tokenVersion    Int       @default(0)
   // Optional display name — populated from OAuth profile on first sign-in.
   // Email/password users can fill it later via /api/auth/me PATCH (future).
-  name              String?
+  name            String?
   // Optional avatar URL — populated from OAuth profile on first sign-in.
-  avatarUrl         String?
+  avatarUrl       String?
   // App-wide role. USER is the default; ADMIN unlocks /admin back-office;
   // SUPERADMIN can promote/demote other admins. Bootstrap an initial
   // SUPERADMIN via `pnpm db:make-superadmin <email>` (see scripts).
-  role              String    @default("USER") // USER | ADMIN | SUPERADMIN
+  role            String    @default("USER") // USER | ADMIN | SUPERADMIN
   // Account status. ACTIVE = login + refresh allowed; SUSPENDED = both
   // refused with 403 ACCOUNT_SUSPENDED. Mutated via /api/admin/users/[id]/status
   // (ADMIN can suspend; only SUPERADMIN can restore).
-  status            String    @default("ACTIVE") // ACTIVE | SUSPENDED
-  createdAt         DateTime  @default(now())
-  updatedAt         DateTime  @updatedAt
+  status          String    @default("ACTIVE") // ACTIVE | SUSPENDED
+  createdAt       DateTime  @default(now())
+  updatedAt       DateTime  @updatedAt
 
-  verificationCodes VerificationCode[]
-  uploads           FileUpload[]
-  notifications     Notification[]
-  notifPrefs        NotificationPreferences?
-  orders            Order[]
-  oauthAccounts     OAuthAccount[]
-  adminActions      AdminAction[]
+  verificationCodes     VerificationCode[]
+  uploads               FileUpload[]
+  notifications         Notification[]
+  notifPrefs            NotificationPreferences?
+  orders                Order[]
+  oauthAccounts         OAuthAccount[]
+  adminActions          AdminAction[]
   consultationsProvided Consultation[]
-  materniteProvided Maternite[]
-  registerClosures  RegisterClosure[]
-  reportsFiled      Report[]
+  materniteProvided     Maternite[]
+  registerClosures      RegisterClosure[]
+  reportsFiled          Report[]
 
   // Multi-tenancy: MediAfrica is a multi-tenant SaaS — each User belongs to
   // exactly one Organization (health center) via `memberships`
   // (OrganizationMember gets @@unique([userId]) once backfilled — see
   // enforce_multitenancy_constraints migration). Platform ADMIN/SUPERADMIN
   // accounts (role above) are independent of clinic membership.
-  ownedOrganizations Organization[]      @relation("OrgOwner")
+  ownedOrganizations Organization[]       @relation("OrgOwner")
   memberships        OrganizationMember[] @relation("OrgMembership")
 
   @@index([email])
@@ -112,14 +112,14 @@ model ClinicSettings {
 // Organization = a health center tenant (MediAfrica is multi-tenant SaaS).
 // Each Organization has exactly one Subscription and one ClinicSettings row.
 model Organization {
-  id        String   @id @default(cuid())
-  slug      String   @unique
+  id        String               @id @default(cuid())
+  slug      String               @unique
   name      String
   ownerId   String
-  owner     User     @relation("OrgOwner", fields: [ownerId], references: [id], onDelete: Restrict)
+  owner     User                 @relation("OrgOwner", fields: [ownerId], references: [id], onDelete: Restrict)
   members   OrganizationMember[]
-  createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt
+  createdAt DateTime             @default(now())
+  updatedAt DateTime             @updatedAt
 
   patients         Patient[]
   registerClosures RegisterClosure[]
@@ -302,28 +302,28 @@ model WebhookLog {
 // at the call site — the schema is currency-agnostic.
 // ───────────────────────────────────────────────────────────────────────
 model Order {
-  id              String    @id @default(cuid())
-  userId          String? // nullable — guest checkout supported
-  user            User?     @relation(fields: [userId], references: [id], onDelete: SetNull)
+  id             String        @id @default(cuid())
+  userId         String? // nullable — guest checkout supported
+  user           User?         @relation(fields: [userId], references: [id], onDelete: SetNull)
   // Subscription billing — nullable so Order stays usable for non-subscription
   // charges too. Set together: an Order created by the billing engine always
   // carries both.
-  organizationId  String?
-  organization    Organization? @relation(fields: [organizationId], references: [id], onDelete: SetNull)
-  subscriptionId  String?
-  subscription    Subscription? @relation(fields: [subscriptionId], references: [id], onDelete: SetNull)
-  amount          Int // gross amount, smallest unit
-  currency        String    @default("XOF") // ISO 4217
-  status          String    @default("PENDING") // PENDING | PAID | EXPIRED | FAILED | REFUNDED
-  customerEmail   String?
-  customerPhone   String?
-  customerName    String?
-  metadata        Json? // app-specific fields
+  organizationId String?
+  organization   Organization? @relation(fields: [organizationId], references: [id], onDelete: SetNull)
+  subscriptionId String?
+  subscription   Subscription? @relation(fields: [subscriptionId], references: [id], onDelete: SetNull)
+  amount         Int // gross amount, smallest unit
+  currency       String        @default("XOF") // ISO 4217
+  status         String        @default("PENDING") // PENDING | PAID | EXPIRED | FAILED | REFUNDED
+  customerEmail  String?
+  customerPhone  String?
+  customerName   String?
+  metadata       Json? // app-specific fields
 
   // Stripe-grade idempotency. Required header on POST /api/orders; replay
   // with same value returns the original Order row instead of double-charging.
   // Nullable so existing rows pre-migration don't break the @unique constraint.
-  idempotencyKey  String?   @unique
+  idempotencyKey String? @unique
 
   // Provider reference
   provider         String // e.g. "bictorys"
@@ -351,11 +351,11 @@ model Patient {
   id             String       @id @default(cuid())
   organizationId String
   organization   Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
-  dossierNumber String   @unique // "P-20250187"
-  nom           String
-  prenom        String
-  dateNaissance DateTime
-  sexe          String // M | F
+  dossierNumber  String       @unique // "P-20250187"
+  nom            String
+  prenom         String
+  dateNaissance  DateTime
+  sexe           String // M | F
 
   telephonePrincipal      String
   telephoneSecondaire     String?
@@ -385,27 +385,27 @@ model Patient {
 }
 
 model Consultation {
-  id         String   @id @default(cuid())
+  id         String  @id @default(cuid())
   patientId  String
-  patient    Patient  @relation(fields: [patientId], references: [id], onDelete: Restrict)
+  patient    Patient @relation(fields: [patientId], references: [id], onDelete: Restrict)
   providerId String?
-  provider   User?    @relation(fields: [providerId], references: [id], onDelete: SetNull)
+  provider   User?   @relation(fields: [providerId], references: [id], onDelete: SetNull)
 
   date   DateTime @default(now())
   motif  String
   status String   @default("attente") // attente | consultation | traite | urgent
 
-  diagnostic         String?
-  traitementPrescrit String?
-  tensionArterielle  String? // "118/76"
-  poidsKg            Float?
-  tailleCm           Float?
+  diagnostic          String?
+  traitementPrescrit  String?
+  tensionArterielle   String? // "118/76"
+  poidsKg             Float?
+  tailleCm            Float?
   perimetreBrachialCm Float? // PB - périmètre brachial (cm), dépistage malnutrition
-  statutPT           String? // P/T - statut nutritionnel poids/taille (texte libre, lu sur abaque OMS)
-  temperatureC       Float?
+  statutPT            String? // P/T - statut nutritionnel poids/taille (texte libre, lu sur abaque OMS)
+  temperatureC        Float?
 
-  typeCas    String?  // NC | AC (Nouveau Cas | Ancien Cas)
-  mdo        Boolean  @default(false) // maladie à déclaration obligatoire
+  typeCas    String? // NC | AC (Nouveau Cas | Ancien Cas)
+  mdo        Boolean @default(false) // maladie à déclaration obligatoire
   mdoMaladie String? // nom de la maladie si mdo=true
 
   tdr String? // Test de Diagnostic Rapide (paludisme) - Positif | Négatif | Non fait
@@ -425,54 +425,90 @@ model Consultation {
 // d'attente ni de statut : une fiche est créée au moment de l'acte et reste
 // immuable (aucune route d'édition).
 model Maternite {
-  id         String   @id @default(cuid())
+  id         String  @id @default(cuid())
   patientId  String
-  patient    Patient  @relation(fields: [patientId], references: [id], onDelete: Restrict)
+  patient    Patient @relation(fields: [patientId], references: [id], onDelete: Restrict)
   providerId String?
-  provider   User?    @relation(fields: [providerId], references: [id], onDelete: SetNull)
+  provider   User?   @relation(fields: [providerId], references: [id], onDelete: SetNull)
 
   date DateTime @default(now())
   type String // CPN | ACCOUCHEMENT | CPON
 
   // Communs
-  gestite      Int?
-  parite       Int?
-  dpa          DateTime?
-  ddr          DateTime?
-  observations String?
+  gestite           Int?
+  parite            Int?
+  dpa               DateTime?
+  ddr               DateTime?
+  statutMatrimonial String? // colonne "Statut matrimonial" des registres papier CPN/Accouchement
+  observations      String?
 
-  // CPN
-  cpnNumeroVisite         Int?
-  ageGestationnelSemaines Int?
-  poidsKg                 Float?
-  tensionArterielle       String?
-  hauteurUterineCm        Float?
-  bruitsCoeurFoetal       String? // Perçus | Non perçus
-  mouvementsFoetaux       String? // Perçus | Non perçus
-  oedemes                 Boolean?
-  tpiDose                 Int?
-  moustiquaireImpregnee   Boolean?
-  vatDose                 Int?
-  ferAcideFolique         Boolean?
-  albuminurie             String? // Positif | Négatif | Non fait
-  glycosurie              String? // Positif | Négatif | Non fait
-  vih                     String? // Positif | Négatif | Non fait | Connu positif
-  prochainRdv             DateTime?
+  // CPN — champs alignés sur le registre papier "Consultation prénatale"
+  cpnNumeroVisite           Int? // colonnes "CPN 1ère/2ème/3ème/4ème" du registre
+  ageGestationnelSemaines   Int?
+  poidsKg                   Float?
+  tailleCm                  Float? // taille de la mère (cm)
+  perimetreBrachialCm       Float? // PB de la mère (cm), dépistage malnutrition
+  temperatureC              Float?
+  tensionArterielle         String?
+  hauteurUterineCm          Float?
+  bruitsCoeurFoetal         String? // Perçus | Non perçus
+  mouvementsFoetaux         String? // Perçus | Non perçus
+  oedemes                   Boolean?
+  nombreAvortements         Int?
+  nombreEnfantsVivants      Int? // colonne "Nbre enfant en vie"
+  groupeSanguin             String?
+  testEmmel                 String? // dépistage drépanocytose - Positif | Négatif | Non fait
+  bw                        String? // B.W. (syphilis) - Positif | Négatif | Non fait
+  tauxHb                    Float? // taux d'hémoglobine (g/dl)
+  tpiDose                   Int? // colonnes "SP 1ère à 6ème dose"
+  moustiquaireImpregnee     Boolean? // colonne "MILD1"
+  vatDose                   Int? // colonnes "Td 1ère dose/2ème dose/Rappel" (Rappel = 3)
+  ferAcideFolique           Boolean?
+  ferAcideFoliqueDoseNumero Int? // numéro de dose (1 à 4) remise à cette visite
+  albendazoleMebendazole    Boolean? // colonne partagée CPN + Accouchement
+  albuminurie               String? // Positif | Négatif | Non fait
+  glycosurie                String? // Positif | Négatif | Non fait
+  vih                       String? // Positif | Négatif | Non fait | Connu positif
+  planAccouchement          String?
+  risqueGrossesse           String?
+  maladieDetectee           String?
+  prochainRdv               DateTime?
 
-  // Accouchement
-  modeAccouchement          String? // Voie basse | Césarienne | Instrumental
-  dureeTravailHeures        Float?
-  assistePar                String? // Sage-femme | Médecin | Matrone | Auxiliaire
-  issueGrossesse            String? // Vivant | Mort-né frais | Mort-né macéré
-  sexeNouveauNe             String? // M | F
-  poidsNaissanceG           Float?
-  apgar1min                 Int?
-  apgar5min                 Int?
-  perimetreCranienCm        Float?
-  reanimationNouveauNe      Boolean?
-  complicationsAccouchement String?
-  episiotomie               Boolean?
-  placentaComplet           Boolean?
+  // Accouchement — champs alignés sur le registre papier "Accouchement"
+  dateHeureEntree             DateTime? // date/heure d'admission, distincte de `date` (accouchement)
+  enfantPrecedent             String? // Vivant | Décédé | Mort-né | Avortement
+  intervalleGrossessesMois    Int? // intervalle entre les 2 dernières grossesses, en mois
+  lieuAccouchement            String? // Maternité | Domicile
+  natureAccouchement          String? // Avant terme | À terme | Post-terme
+  presentation                String?
+  modeAccouchement            String? // Voie basse | Césarienne | Instrumental
+  gatpa                       Boolean?
+  avortementType              String? // colonne "Type" (Avortement)
+  methodeEvacuationAvortement String?
+  dureeTravailHeures          Float?
+  assistePar                  String? // Sage-femme | Médecin | Matrone | Auxiliaire
+  vitamineA                   Boolean?
+  issueGrossesse              String? // Vivant | Mort-né frais | Mort-né macéré
+  sexeNouveauNe               String? // M | F
+  misAuSein                   Boolean?
+  smk                         Boolean? // Soins Mère Kangourou
+  tetracyclinePommade         Boolean?
+  chlorhexidineDigluconate    Boolean?
+  poidsNaissanceG             Float?
+  tailleNaissanceCm           Float? // taille du nouveau-né (cm)
+  apgar1min                   Int?
+  apgar5min                   Int?
+  perimetreCranienCm          Float?
+  reanimationNouveauNe        Boolean?
+  decesNouveauNeDelai         String? // 24 heures | 7 jours | 28 jours
+  causesDeces                 String? // causes de décès du nouveau-né
+  decesMaternelMoment         String? // Avant | Pendant | Après (l'accouchement)
+  causesDecesMaternel         String?
+  praticienQualification      String?
+  complicationsAccouchement   String? // complications - mère
+  complicationsNouveauNe      String?
+  episiotomie                 Boolean?
+  placentaComplet             Boolean?
 
   // CPoN
   cponNumeroVisite       Int?
@@ -499,12 +535,12 @@ model RegisterClosure {
   id             String       @id @default(cuid())
   organizationId String
   organization   Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
-  registerType String   @default("consultation")
-  month        String // "2026-01"
-  closedAt     DateTime @default(now())
-  closedById   String?
-  closedBy     User?    @relation(fields: [closedById], references: [id], onDelete: SetNull)
-  createdAt    DateTime @default(now())
+  registerType   String       @default("consultation")
+  month          String // "2026-01"
+  closedAt       DateTime     @default(now())
+  closedById     String?
+  closedBy       User?        @relation(fields: [closedById], references: [id], onDelete: SetNull)
+  createdAt      DateTime     @default(now())
 
   @@unique([organizationId, registerType, month])
 }
@@ -530,24 +566,24 @@ model Plan {
 }
 
 model Subscription {
-  id               String   @id @default(cuid())
-  organizationId   String   @unique
-  organization     Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
-  planId           String
-  plan             Plan     @relation(fields: [planId], references: [id], onDelete: Restrict)
-  status           String   @default("TRIALING") // TRIALING | ACTIVE | PAST_DUE | CANCELED
-  trialEndsAt      DateTime?
-  currentPeriodEnd DateTime
+  id                    String       @id @default(cuid())
+  organizationId        String       @unique
+  organization          Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  planId                String
+  plan                  Plan         @relation(fields: [planId], references: [id], onDelete: Restrict)
+  status                String       @default("TRIALING") // TRIALING | ACTIVE | PAST_DUE | CANCELED
+  trialEndsAt           DateTime?
+  currentPeriodEnd      DateTime
   // Reminder emails sent ahead of / just after `currentPeriodEnd`, one flag
   // per stage so the daily billing cron never re-sends the same reminder.
   // Cleared back to null whenever the period is renewed (paid or manually
   // reactivated) so the next cycle's reminders fire again.
-  reminder7dSentAt     DateTime?
-  reminder5dSentAt     DateTime?
-  reminder3dSentAt     DateTime?
+  reminder7dSentAt      DateTime?
+  reminder5dSentAt      DateTime?
+  reminder3dSentAt      DateTime?
   reminderOverdueSentAt DateTime?
-  createdAt        DateTime @default(now())
-  updatedAt        DateTime @updatedAt
+  createdAt             DateTime     @default(now())
+  updatedAt             DateTime     @updatedAt
 
   orders Order[]
 
@@ -557,24 +593,24 @@ model Subscription {
 // Staff-submitted reports/flags (bugs, support requests, billing issues) —
 // reviewed by the platform admin under /admin/signalements.
 model Report {
-  id             String    @id @default(cuid())
-  organizationId String
-  organization   Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
-  reporterId     String
-  reporter       User      @relation(fields: [reporterId], references: [id], onDelete: Restrict)
-  category       String // feature area the comment is about: patients | consultations | registres | facturation | personnel | autre
-  message        String
+  id               String       @id @default(cuid())
+  organizationId   String
+  organization     Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  reporterId       String
+  reporter         User         @relation(fields: [reporterId], references: [id], onDelete: Restrict)
+  category         String // feature area the comment is about: patients | consultations | registres | facturation | personnel | autre
+  message          String
   // Optional 1-5 satisfaction rating — lets staff leave a quick pulse-check
   // alongside (or instead of) free text.
-  rating         Int?
-  status         String    @default("OPEN") // internal admin triage only — never shown to staff as a ticket state
+  rating           Int?
+  status           String       @default("OPEN") // internal admin triage only — never shown to staff as a ticket state
   // A visible reply from the platform admin, shown back to the reporting
   // clinic under their own comment — makes this a two-way feedback channel
   // rather than a one-way report queue.
   adminResponse    String?
   adminRespondedAt DateTime?
-  createdAt      DateTime  @default(now())
-  resolvedAt     DateTime?
+  createdAt        DateTime     @default(now())
+  resolvedAt       DateTime?
 
   @@index([status, createdAt])
   @@index([organizationId])

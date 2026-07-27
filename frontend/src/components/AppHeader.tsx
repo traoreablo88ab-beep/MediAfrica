@@ -1,6 +1,7 @@
-// Shared staff-app nav — used by /dashboard, /consultations,
-// /registres/consultation, /patients, /settings, /personnel, /facturation so
-// the nav stays identical everywhere instead of drifting page to page.
+// Shared staff-app nav — used by /dashboard, /consultations, /registres
+// (index + consultation/maternité sub-registers), /patients, /settings,
+// /personnel, /facturation so the nav stays identical everywhere instead of
+// drifting page to page.
 //
 // On `md` and up, the tab list lives in a fixed left sidebar (`<aside>`) and
 // pages reserve space for it via `md:pl-64` on their root `<main>`. Below
@@ -34,7 +35,7 @@ const TABS: Array<{ key: AppNavTab; label: string; href: string }> = [
   { key: 'dashboard', label: 'Tableau de bord', href: '/dashboard' },
   { key: 'patients', label: 'Patients', href: '/patients' },
   { key: 'consultations', label: 'Consultations', href: '/consultations' },
-  { key: 'registres', label: 'Registres', href: '/registres/consultation' },
+  { key: 'registres', label: 'Registres', href: '/registres' },
   { key: 'commentaires', label: 'Commentaires', href: '/commentaires' },
 ];
 

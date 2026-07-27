@@ -8,25 +8,40 @@ import { Skeleton } from '@/components/Skeleton';
 import { useClinicName } from '@/lib/useClinicName';
 import { MonthPicker } from '@/components/MonthPicker';
 
-const REGISTER_COLUMN_COUNT = 14;
+const REGISTER_COLUMN_COUNT = 27;
 
 interface MaterniteRow {
   id: string;
   date: string;
   type: string;
+  statutMatrimonial: string | null;
   cpnNumeroVisite: number | null;
   ageGestationnelSemaines: number | null;
   poidsKg: number | null;
+  tailleCm: number | null;
+  perimetreBrachialCm: number | null;
+  temperatureC: number | null;
   tensionArterielle: string | null;
   hauteurUterineCm: number | null;
   bruitsCoeurFoetal: string | null;
   mouvementsFoetaux: string | null;
+  nombreAvortements: number | null;
+  nombreEnfantsVivants: number | null;
+  groupeSanguin: string | null;
+  testEmmel: string | null;
+  bw: string | null;
+  tauxHb: number | null;
   tpiDose: number | null;
   vatDose: number | null;
   ferAcideFolique: boolean | null;
+  ferAcideFoliqueDoseNumero: number | null;
+  albendazoleMebendazole: boolean | null;
   albuminurie: string | null;
   glycosurie: string | null;
   vih: string | null;
+  planAccouchement: string | null;
+  risqueGrossesse: string | null;
+  maladieDetectee: string | null;
   prochainRdv: string | null;
   patient: {
     id: string;
@@ -101,19 +116,34 @@ function downloadCsv(month: string, rows: MaterniteRow[]): void {
     'Date',
     'N° dossier',
     'Nom et prénom',
+    'Statut matrimonial',
     'Visite',
     'SA',
-    'TA',
     'Poids (kg)',
+    'Taille (cm)',
+    'PB (cm)',
+    'Température',
+    'TA',
     'HU (cm)',
     'BCF',
     'MAF',
+    'Avortements',
+    'Enfants en vie',
+    'Groupe sanguin',
+    'Test Emmel',
+    'B.W.',
+    'Taux Hb',
     'TPI',
     'VAT',
     'Fer/AF',
+    'Dose Fer/AF',
+    'Albendazole/Mébendazole',
     'Albuminurie',
     'Glycosurie',
     'VIH',
+    'Plan accouchement',
+    'Risque',
+    'Maladie détectée',
     'Prochain RDV',
     'Soignant',
   ];
@@ -122,19 +152,34 @@ function downloadCsv(month: string, rows: MaterniteRow[]): void {
     formatDate(m.date),
     m.patient.dossierNumber,
     `${m.patient.nom}, ${m.patient.prenom}`,
+    m.statutMatrimonial ?? '',
     m.cpnNumeroVisite != null ? String(m.cpnNumeroVisite) : '',
     m.ageGestationnelSemaines != null ? String(m.ageGestationnelSemaines) : '',
-    m.tensionArterielle ?? '',
     m.poidsKg != null ? String(m.poidsKg) : '',
+    m.tailleCm != null ? String(m.tailleCm) : '',
+    m.perimetreBrachialCm != null ? String(m.perimetreBrachialCm) : '',
+    m.temperatureC != null ? String(m.temperatureC) : '',
+    m.tensionArterielle ?? '',
     m.hauteurUterineCm != null ? String(m.hauteurUterineCm) : '',
     m.bruitsCoeurFoetal ?? '',
     m.mouvementsFoetaux ?? '',
+    m.nombreAvortements != null ? String(m.nombreAvortements) : '',
+    m.nombreEnfantsVivants != null ? String(m.nombreEnfantsVivants) : '',
+    m.groupeSanguin ?? '',
+    m.testEmmel ?? '',
+    m.bw ?? '',
+    m.tauxHb != null ? String(m.tauxHb) : '',
     m.tpiDose != null ? String(m.tpiDose) : '',
     m.vatDose != null ? String(m.vatDose) : '',
     m.ferAcideFolique ? 'Oui' : '',
+    m.ferAcideFoliqueDoseNumero != null ? String(m.ferAcideFoliqueDoseNumero) : '',
+    m.albendazoleMebendazole ? 'Oui' : '',
     m.albuminurie ?? '',
     m.glycosurie ?? '',
     m.vih ?? '',
+    m.planAccouchement ?? '',
+    m.risqueGrossesse ?? '',
+    m.maladieDetectee ?? '',
     m.prochainRdv ? formatDate(m.prochainRdv) : '',
     m.providerName ?? '',
   ]);
@@ -314,13 +359,27 @@ export default function RegistreMaterniteCpnPage() {
                 <th className="px-3 py-2 font-medium">Date</th>
                 <th className="px-3 py-2 font-medium">N° dossier</th>
                 <th className="px-3 py-2 font-medium">Nom et prénom</th>
+                <th className="px-3 py-2 font-medium">Statut matrimonial</th>
                 <th className="px-3 py-2 font-medium">Visite</th>
                 <th className="px-3 py-2 font-medium">SA</th>
-                <th className="px-3 py-2 font-medium">TA</th>
                 <th className="px-3 py-2 font-medium">Poids</th>
+                <th className="px-3 py-2 font-medium">Taille</th>
+                <th className="px-3 py-2 font-medium">PB</th>
+                <th className="px-3 py-2 font-medium">Temp.</th>
+                <th className="px-3 py-2 font-medium">TA</th>
                 <th className="px-3 py-2 font-medium">HU</th>
                 <th className="px-3 py-2 font-medium">BCF</th>
+                <th className="px-3 py-2 font-medium">Avort.</th>
+                <th className="px-3 py-2 font-medium">Enf. vie</th>
+                <th className="px-3 py-2 font-medium">Groupe</th>
+                <th className="px-3 py-2 font-medium">Emmel</th>
+                <th className="px-3 py-2 font-medium">B.W.</th>
+                <th className="px-3 py-2 font-medium">Hb</th>
+                <th className="px-3 py-2 font-medium">Fer/AF</th>
+                <th className="px-3 py-2 font-medium">Alb/Meb</th>
                 <th className="px-3 py-2 font-medium">VIH</th>
+                <th className="px-3 py-2 font-medium">Plan acc.</th>
+                <th className="px-3 py-2 font-medium">Risque</th>
                 <th className="px-3 py-2 font-medium">Prochain RDV</th>
                 <th className="px-3 py-2 font-medium">Soignant</th>
               </tr>
@@ -352,13 +411,29 @@ export default function RegistreMaterniteCpnPage() {
                   <td className="px-3 py-2 font-medium text-[#0b0b0b]">
                     {m.patient.nom}, {m.patient.prenom}
                   </td>
+                  <td className="px-3 py-2 text-[#52514e]">{m.statutMatrimonial ?? '—'}</td>
                   <td className="px-3 py-2 text-[#52514e]">{m.cpnNumeroVisite ?? '—'}</td>
                   <td className="px-3 py-2 text-[#52514e]">{m.ageGestationnelSemaines ?? '—'}</td>
-                  <td className="px-3 py-2 text-[#52514e]">{m.tensionArterielle ?? '—'}</td>
                   <td className="px-3 py-2 text-[#52514e]">{m.poidsKg ?? '—'}</td>
+                  <td className="px-3 py-2 text-[#52514e]">{m.tailleCm ?? '—'}</td>
+                  <td className="px-3 py-2 text-[#52514e]">{m.perimetreBrachialCm ?? '—'}</td>
+                  <td className="px-3 py-2 text-[#52514e]">{m.temperatureC ?? '—'}</td>
+                  <td className="px-3 py-2 text-[#52514e]">{m.tensionArterielle ?? '—'}</td>
                   <td className="px-3 py-2 text-[#52514e]">{m.hauteurUterineCm ?? '—'}</td>
                   <td className="px-3 py-2 text-[#52514e]">{m.bruitsCoeurFoetal ?? '—'}</td>
+                  <td className="px-3 py-2 text-[#52514e]">{m.nombreAvortements ?? '—'}</td>
+                  <td className="px-3 py-2 text-[#52514e]">{m.nombreEnfantsVivants ?? '—'}</td>
+                  <td className="px-3 py-2 text-[#52514e]">{m.groupeSanguin ?? '—'}</td>
+                  <td className="px-3 py-2 text-[#52514e]">{m.testEmmel ?? '—'}</td>
+                  <td className="px-3 py-2 text-[#52514e]">{m.bw ?? '—'}</td>
+                  <td className="px-3 py-2 text-[#52514e]">{m.tauxHb ?? '—'}</td>
+                  <td className="px-3 py-2 text-[#52514e]">{m.ferAcideFolique ? 'Oui' : '—'}</td>
+                  <td className="px-3 py-2 text-[#52514e]">
+                    {m.albendazoleMebendazole ? 'Oui' : '—'}
+                  </td>
                   <td className="px-3 py-2 text-[#52514e]">{m.vih ?? '—'}</td>
+                  <td className="px-3 py-2 text-[#52514e]">{m.planAccouchement ?? '—'}</td>
+                  <td className="px-3 py-2 text-[#52514e]">{m.risqueGrossesse ?? '—'}</td>
                   <td className="px-3 py-2 text-[#52514e]">
                     {m.prochainRdv ? formatDate(m.prochainRdv) : '—'}
                   </td>

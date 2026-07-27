@@ -1,5 +1,6 @@
-// GET /api/patients/[id] — full patient record + consultation history
-// (most recent 20, provider name included via relation).
+// GET /api/patients/[id] — full patient record + consultation history and
+// maternité history (CPN/Accouchement only — CPoN stays scaffolded/hidden
+// for V2/V3), most recent 20 each, provider name included via relation.
 // PATCH /api/patients/[id] — partial update of the patient's own fields
 // (identity, contact, medical background). Never touches dossierNumber or
 // consultations.
@@ -16,6 +17,7 @@ import { zPhone } from '@/lib/server/zod-helpers';
 import { makeRequestContext, withRequestContext } from '@/lib/server/observability/request-context';
 
 const CONSULTATION_HISTORY_LIMIT = 20;
+const MATERNITE_HISTORY_LIMIT = 20;
 
 export async function GET(
   req: NextRequest,
@@ -41,6 +43,12 @@ export async function GET(
           take: CONSULTATION_HISTORY_LIMIT,
           include: { provider: { select: { name: true } } },
         },
+        maternites: {
+          where: { type: { in: ['CPN', 'ACCOUCHEMENT'] } },
+          orderBy: { date: 'desc' },
+          take: MATERNITE_HISTORY_LIMIT,
+          include: { provider: { select: { name: true } } },
+        },
       },
     });
     if (!patient) {
@@ -50,7 +58,7 @@ export async function GET(
       );
     }
 
-    const { consultations, ...fields } = patient;
+    const { consultations, maternites, ...fields } = patient;
     return NextResponse.json(
       {
         ...fields,
@@ -76,6 +84,20 @@ export async function GET(
           tdr: c.tdr,
           ge: c.ge,
           providerName: c.provider?.name ?? null,
+        })),
+        maternites: maternites.map((m) => ({
+          id: m.id,
+          date: m.date.toISOString(),
+          type: m.type,
+          cpnNumeroVisite: m.cpnNumeroVisite,
+          ageGestationnelSemaines: m.ageGestationnelSemaines,
+          prochainRdv: m.prochainRdv?.toISOString() ?? null,
+          modeAccouchement: m.modeAccouchement,
+          issueGrossesse: m.issueGrossesse,
+          sexeNouveauNe: m.sexeNouveauNe,
+          poidsNaissanceG: m.poidsNaissanceG,
+          observations: m.observations,
+          providerName: m.provider?.name ?? null,
         })),
       },
       { headers: { 'x-request-id': reqCtx.requestId } },

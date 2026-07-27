@@ -8,7 +8,7 @@ Voir [STATUS.md](STATUS.md) pour l'historique du portage depuis le starter, et [
 
 - **Dossiers patients** — création/édition, numéro de dossier auto-généré, antécédents médicaux, historique.
 - **Consultations** — file d'attente journalière triée par statut, anthropométrie, dépistage paludisme (TDR/GE), maladies à déclaration obligatoire (MDO).
-- **Registres** — registre de consultation mensuel imprimable/exportable CSV, avec clôture de mois (verrouillage définitif). _Un module Maternité (CPN/Accouchement/CPoN) est scaffoldé dans le code (schéma, routes, pages) mais volontairement désactivé de la navigation — prévu pour une V2/V3, pas actif en V1._
+- **Registres** — registres mensuels imprimables/exportables CSV, avec clôture de mois (verrouillage définitif) : Consultation, et Maternité CPN + Accouchement (fiche liée au dossier patient, immuable une fois créée). _CPoN (post-natal) reste scaffoldé dans le code (schéma, routes, pages) mais volontairement désactivé de la navigation — prévu pour une V2/V3._
 - **Commentaires** — le personnel d'un centre remonte un avis/incident (catégorie + note 1-5 étoiles) ; l'équipe plateforme répond depuis `/admin/signalements`.
 - **Facturation par abonnement (SaaS)** — chaque centre a un essai gratuit de 15 jours puis un `Plan` payant ; cron quotidien qui facture, relance par email (J-7/J-5/J-3/impayé), et bloque l'accès (402 `SUBSCRIPTION_INACTIVE`) aux routes patients/consultations/registres si l'abonnement tombe en `PAST_DUE`/`CANCELED`.
 - **Multi-tenancy** — chaque centre (`Organization`) a ses propres patients, son personnel (`OrganizationMember`, rôles OWNER/ADMIN/MEMBER), ses paramètres (`ClinicSettings`).
@@ -94,10 +94,10 @@ Référence env complète avec toutes les flags : voir [`.env.example`](.env.exa
 | Webhooks                                             |      1 | `/api/webhooks/bictorys` (HMAC provider + replay window 60s)                                                                                                                                             |
 | Cron (toutes `Authorization: Bearer ${CRON_SECRET}`) |      7 | outbox-drain (1min), email-queue-drain (1min), verification-cleanup (horaire), order-expiration (5min), webhook-log-purge (quotidien), email-job-purge (quotidien), subscription-billing (quotidien 06h) |
 | Health                                               |      2 | `/api/health` (liveness), `/api/readyz` (readiness)                                                                                                                                                      |
-| **Patients**                                         |      4 | CRUD dossier + sous-ressources `consultations`, `maternite` (scaffoldée, inactive)                                                                                                                       |
+| **Patients**                                         |      4 | CRUD dossier + sous-ressources `consultations`, `maternite`                                                                                                                                              |
 | **Consultations**                                    |      2 | liste/filtre cross-patient + `/[id]` (annulation)                                                                                                                                                        |
-| **Registres**                                        |      8 | clôture mensuelle consultation (2) + maternité CPN/Accouchement/CPoN (6, scaffoldées, inactives)                                                                                                         |
-| **Maternité (listing cross-patient)**                |      1 | `/api/maternite` — scaffoldée, inactive en V1                                                                                                                                                            |
+| **Registres**                                        |      8 | clôture mensuelle consultation (2) + maternité CPN/Accouchement/CPoN (6 — CPoN scaffoldée, inactive)                                                                                                     |
+| **Maternité (listing cross-patient)**                |      1 | `/api/maternite` — CPN/Accouchement actives en V1, CPoN scaffoldée                                                                                                                                        |
 | **Organizations** (self-service centre)              |      5 | org courante, membres (+ rôle), consultants                                                                                                                                                              |
 | **Facturation (abonnement SaaS)**                    |      2 | `/api/billing/{subscription,pay}`                                                                                                                                                                        |
 | **Commentaires**                                     |      1 | `/api/reports`                                                                                                                                                                                           |
@@ -179,12 +179,11 @@ MediAfrica/
 | Sujet                                         | Statut                                                                                                 |
 | --------------------------------------------- | ------------------------------------------------------------------------------------------------------ |
 | Paiement des patients                         | Interface `PaymentProvider` prête, Bictorys non configuré — en attente de bascule vers Chariow         |
-| Module Maternité (CPN/Accouchement/CPoN)      | Code scaffoldé (schéma, routes, pages), volontairement caché de la navigation — prévu V2/V3            |
+| Module Maternité — CPoN (post-natal)          | Code scaffoldé (schéma, routes, pages), volontairement caché de la navigation — prévu V2/V3            |
 | Circuit breaker distribué                     | Limite single-instance côté paiements ; à remplacer par une variante Redis en multi-instance           |
 | Framework de test frontend (Playwright / RTL) | Vitest couvre `lib/server/**` + routes ; pas de tests UI automatisés                                   |
 | i18n au-delà du français / FCFA               | Non prévu à ce stade                                                                                   |
 | TOTP / 2FA                                    | Non implémenté                                                                                         |
-| `.planning/features.json` à jour              | Décrit encore uniquement les surfaces génériques du starter, pas les fonctionnalités métier MediAfrica |
 
 ## Invariants critiques
 

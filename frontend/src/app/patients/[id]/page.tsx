@@ -30,6 +30,21 @@ interface ConsultationDetail {
   providerName: string | null;
 }
 
+interface MaterniteDetail {
+  id: string;
+  date: string;
+  type: string;
+  cpnNumeroVisite: number | null;
+  ageGestationnelSemaines: number | null;
+  prochainRdv: string | null;
+  modeAccouchement: string | null;
+  issueGrossesse: string | null;
+  sexeNouveauNe: string | null;
+  poidsNaissanceG: number | null;
+  observations: string | null;
+  providerName: string | null;
+}
+
 interface PatientDetail {
   id: string;
   dossierNumber: string;
@@ -51,7 +66,13 @@ interface PatientDetail {
   antecedentsChirurgicaux: string | null;
   antecedentsFamiliaux: string | null;
   consultations: ConsultationDetail[];
+  maternites: MaterniteDetail[];
 }
+
+const MATERNITE_TYPE_LABEL: Record<string, string> = {
+  CPN: 'CPN',
+  ACCOUCHEMENT: 'Accouchement',
+};
 
 function computeAge(dateNaissanceIso: string): number {
   const dob = new Date(dateNaissanceIso);
@@ -248,6 +269,12 @@ export default function PatientDetailPage() {
                 + Nouvelle consultation
               </Link>
               <Link
+                href={`/patients/${patient.id}/maternite/new`}
+                className="rounded-md border border-[#2a78d6] bg-white px-4 py-2.5 text-center text-sm font-medium text-[#2a78d6] hover:bg-[#2a78d6]/5"
+              >
+                + Nouvelle fiche maternité
+              </Link>
+              <Link
                 href={`/patients/${patient.id}/edit`}
                 className="rounded-md border border-[#e1e0d9] bg-white px-4 py-2.5 text-center text-sm font-medium text-[#0b0b0b] hover:bg-[#f9f9f7]"
               >
@@ -401,6 +428,115 @@ export default function PatientDetailPage() {
                             GE <span className="font-semibold text-[#0b0b0b]">{c.ge}</span>
                           </span>
                         )}
+                      </div>
+                    )}
+                  </div>
+                ))}
+              </div>
+            )}
+
+            <h2 className="mb-4 mt-8 font-semibold text-[#0b0b0b]">Historique de maternité</h2>
+            {patient.maternites.length === 0 ? (
+              <p className="text-sm text-[#898781]">Aucune fiche de maternité enregistrée.</p>
+            ) : (
+              <div className="flex flex-col gap-4">
+                {patient.maternites.map((m) => (
+                  <div
+                    key={m.id}
+                    className="overflow-hidden rounded-lg border border-[#e1e0d9] bg-white"
+                  >
+                    <div className="flex items-center justify-between border-b border-[#e1e0d9] bg-[#f9f9f7] px-5 py-3">
+                      <div>
+                        <span className="text-sm font-semibold text-[#0b0b0b]">
+                          {formatDate(m.date)}
+                        </span>{' '}
+                        <span className="ml-2 rounded-full bg-[#2a78d6]/10 px-2 py-0.5 text-xs font-medium text-[#2a78d6]">
+                          {MATERNITE_TYPE_LABEL[m.type] ?? m.type}
+                        </span>
+                      </div>
+                      {m.providerName && (
+                        <span className="text-xs text-[#898781]">{m.providerName}</span>
+                      )}
+                    </div>
+                    <div className="flex flex-wrap gap-6 px-5 py-3 text-sm text-[#52514e]">
+                      {m.type === 'CPN' && (
+                        <>
+                          {m.cpnNumeroVisite != null && (
+                            <span>
+                              Visite{' '}
+                              <span className="font-semibold text-[#0b0b0b]">
+                                N°{m.cpnNumeroVisite}
+                              </span>
+                            </span>
+                          )}
+                          {m.ageGestationnelSemaines != null && (
+                            <span>
+                              Âge gestationnel{' '}
+                              <span className="font-semibold text-[#0b0b0b]">
+                                {m.ageGestationnelSemaines} SA
+                              </span>
+                            </span>
+                          )}
+                          {m.prochainRdv && (
+                            <span>
+                              Prochain RDV{' '}
+                              <span className="font-semibold text-[#0b0b0b]">
+                                {formatDate(m.prochainRdv)}
+                              </span>
+                            </span>
+                          )}
+                        </>
+                      )}
+                      {m.type === 'ACCOUCHEMENT' && (
+                        <>
+                          {m.modeAccouchement && (
+                            <span>
+                              Mode{' '}
+                              <span className="font-semibold text-[#0b0b0b]">
+                                {m.modeAccouchement}
+                              </span>
+                            </span>
+                          )}
+                          {m.issueGrossesse && (
+                            <span>
+                              Issue{' '}
+                              <span className="font-semibold text-[#0b0b0b]">
+                                {m.issueGrossesse}
+                              </span>
+                            </span>
+                          )}
+                          {m.sexeNouveauNe && (
+                            <span>
+                              Sexe{' '}
+                              <span className="font-semibold text-[#0b0b0b]">
+                                {m.sexeNouveauNe === 'M' ? 'Masculin' : 'Féminin'}
+                              </span>
+                            </span>
+                          )}
+                          {m.poidsNaissanceG != null && (
+                            <span>
+                              Poids{' '}
+                              <span className="font-semibold text-[#0b0b0b]">
+                                {m.poidsNaissanceG} g
+                              </span>
+                            </span>
+                          )}
+                        </>
+                      )}
+                      {!m.cpnNumeroVisite &&
+                        !m.ageGestationnelSemaines &&
+                        !m.prochainRdv &&
+                        !m.modeAccouchement &&
+                        !m.issueGrossesse &&
+                        !m.sexeNouveauNe &&
+                        m.poidsNaissanceG == null && <span>—</span>}
+                    </div>
+                    {m.observations && (
+                      <div className="border-t border-[#e1e0d9] px-5 py-3">
+                        <p className="text-xs uppercase tracking-wide text-[#898781]">
+                          Observations
+                        </p>
+                        <p className="mt-0.5 text-sm text-[#0b0b0b]">{m.observations}</p>
                       </div>
                     )}
                   </div>

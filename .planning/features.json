@@ -311,10 +311,10 @@
       "tripwires_to_update": []
     },
 
-    "maternite-v2v3": {
-      "description": "Maternité clinical module (CPN/Accouchement/CPoN) — schema, API, pages, and tests are fully built, but the feature is intentionally disabled: no AppHeader nav link, no entry point on the patient page. Scaffolded ahead of a planned V2/V3, not part of the active V1 product (decision made 2026-07-26).",
-      "prune_complexity": "safe",
-      "$prune_complexity_reason": "Nothing links to it, so it's inert either way. Safe to delete entirely if V2/V3 is dropped; equally safe to re-enable later by re-adding the AppHeader 'Registres' link and the patient-page 'Nouvelle fiche maternité' button (removed 2026-07-26, see git history on frontend/src/components/AppHeader.tsx and frontend/src/app/patients/[id]/page.tsx).",
+    "maternite": {
+      "description": "Maternité clinical module — single Maternite model discriminated by `type` (CPN/ACCOUCHEMENT/CPON). CPN and Accouchement are live in V1 as of 2026-07-27: AppHeader 'Registres' links to a /registres index (Consultation + CPN + Accouchement), the patient page has a 'Nouvelle fiche maternité' button + history section, and GET /api/patients/[id] includes maternites (filtered to CPN/ACCOUCHEMENT). CPoN (post-natal) stays scaffolded but hidden — its form section and register page exist and are tested but nothing links to them, and the patients/[id] include deliberately excludes it — reserved for a later V2/V3 activation.",
+      "prune_complexity": "with-care",
+      "$prune_complexity_reason": "CPN/Accouchement are now wired into AppHeader and the patient page, not inert — pruning the whole module means reverting those two UI touch points too, not just deleting routes/model. CPoN alone can be dropped from the type union/forms without touching nav (it was never linked).",
       "owns": {
         "routes": ["api/maternite", "api/patients/[id]/maternite", "api/registres/maternite"],
         "libs": [],
@@ -326,6 +326,14 @@
         {
           "file": "frontend/prisma/schema.prisma",
           "action": "remove `materniteProvided Maternite[]` from User, `maternites Maternite[]` from Patient, and the Maternite model itself"
+        },
+        {
+          "file": "frontend/src/components/AppHeader.tsx",
+          "action": "revert the 'Registres' tab href from /registres back to /registres/consultation if pruning the whole module"
+        },
+        {
+          "file": "frontend/src/app/patients/[id]/page.tsx",
+          "action": "remove the 'Nouvelle fiche maternité' button and 'Historique de maternité' section if pruning the whole module"
         }
       ],
       "cron_entries": [],

@@ -8,24 +8,47 @@ import { Skeleton } from '@/components/Skeleton';
 import { useClinicName } from '@/lib/useClinicName';
 import { MonthPicker } from '@/components/MonthPicker';
 
-const REGISTER_COLUMN_COUNT = 11;
+const REGISTER_COLUMN_COUNT = 20;
 
 interface MaterniteRow {
   id: string;
   date: string;
   type: string;
+  statutMatrimonial: string | null;
+  dateHeureEntree: string | null;
+  enfantPrecedent: string | null;
+  intervalleGrossessesMois: number | null;
+  lieuAccouchement: string | null;
+  natureAccouchement: string | null;
+  presentation: string | null;
   modeAccouchement: string | null;
+  gatpa: boolean | null;
+  avortementType: string | null;
+  methodeEvacuationAvortement: string | null;
+  albendazoleMebendazole: boolean | null;
   dureeTravailHeures: number | null;
   assistePar: string | null;
+  praticienQualification: string | null;
+  vitamineA: boolean | null;
   issueGrossesse: string | null;
   sexeNouveauNe: string | null;
+  misAuSein: boolean | null;
+  smk: boolean | null;
+  tetracyclinePommade: boolean | null;
+  chlorhexidineDigluconate: boolean | null;
   poidsNaissanceG: number | null;
+  tailleNaissanceCm: number | null;
   apgar1min: number | null;
   apgar5min: number | null;
   reanimationNouveauNe: boolean | null;
+  decesNouveauNeDelai: string | null;
+  causesDeces: string | null;
+  decesMaternelMoment: string | null;
+  causesDecesMaternel: string | null;
   episiotomie: boolean | null;
   placentaComplet: boolean | null;
   complicationsAccouchement: string | null;
+  complicationsNouveauNe: string | null;
   patient: {
     id: string;
     nom: string;
@@ -96,40 +119,84 @@ function csvEscape(value: string): string {
 function downloadCsv(month: string, rows: MaterniteRow[]): void {
   const headers = [
     'N°',
-    'Date',
+    'Date et heure d’entrée',
     'N° dossier',
     'Nom et prénom',
+    'Statut matrimonial',
+    'Enfant précédent',
+    'Intervalle grossesses (mois)',
+    'Lieu',
+    'Nature',
+    'Présentation',
     'Mode',
+    'GATPA',
+    'Type avortement',
+    'Méthode évacuation avortement',
+    'Albendazole/Mébendazole',
     'Durée travail (h)',
     'Assisté par',
+    'Praticien — qualification',
+    'Vitamine A',
     'Issue',
     'Sexe NN',
+    'Mis au sein',
+    'SMK',
+    'Tétracycline',
+    'Chlorhexidine',
     'Poids NN (g)',
+    'Taille NN (cm)',
     'Apgar 1min',
     'Apgar 5min',
     'Réanimation',
+    'Décès NN',
+    'Causes décès NN',
+    'Décès maternel — moment',
+    'Causes décès maternel',
     'Épisiotomie',
     'Placenta complet',
-    'Complications',
+    'Complications (mère)',
+    'Complications (nouveau-né)',
     'Soignant',
   ];
   const lines = rows.map((m, i) => [
     String(i + 1),
-    formatDate(m.date),
+    m.dateHeureEntree ? formatDateTime(m.dateHeureEntree) : formatDate(m.date),
     m.patient.dossierNumber,
     `${m.patient.nom}, ${m.patient.prenom}`,
+    m.statutMatrimonial ?? '',
+    m.enfantPrecedent ?? '',
+    m.intervalleGrossessesMois != null ? String(m.intervalleGrossessesMois) : '',
+    m.lieuAccouchement ?? '',
+    m.natureAccouchement ?? '',
+    m.presentation ?? '',
     m.modeAccouchement ?? '',
+    m.gatpa ? 'Oui' : '',
+    m.avortementType ?? '',
+    m.methodeEvacuationAvortement ?? '',
+    m.albendazoleMebendazole ? 'Oui' : '',
     m.dureeTravailHeures != null ? String(m.dureeTravailHeures) : '',
     m.assistePar ?? '',
+    m.praticienQualification ?? '',
+    m.vitamineA ? 'Oui' : '',
     m.issueGrossesse ?? '',
     m.sexeNouveauNe ?? '',
+    m.misAuSein ? 'Oui' : '',
+    m.smk ? 'Oui' : '',
+    m.tetracyclinePommade ? 'Oui' : '',
+    m.chlorhexidineDigluconate ? 'Oui' : '',
     m.poidsNaissanceG != null ? String(m.poidsNaissanceG) : '',
+    m.tailleNaissanceCm != null ? String(m.tailleNaissanceCm) : '',
     m.apgar1min != null ? String(m.apgar1min) : '',
     m.apgar5min != null ? String(m.apgar5min) : '',
     m.reanimationNouveauNe ? 'Oui' : '',
+    m.decesNouveauNeDelai ?? '',
+    m.causesDeces ?? '',
+    m.decesMaternelMoment ?? '',
+    m.causesDecesMaternel ?? '',
     m.episiotomie ? 'Oui' : '',
     m.placentaComplet ? 'Oui' : '',
     m.complicationsAccouchement ?? '',
+    m.complicationsNouveauNe ?? '',
     m.providerName ?? '',
   ]);
   const csv = [headers, ...lines].map((row) => row.map(csvEscape).join(';')).join('\r\n');
@@ -323,15 +390,24 @@ export default function RegistreMaterniteAccouchementPage() {
             <thead>
               <tr className="border-b border-[#e1e0d9] uppercase tracking-wide text-[#898781]">
                 <th className="px-3 py-2 font-medium">N°</th>
-                <th className="px-3 py-2 font-medium">Date</th>
+                <th className="px-3 py-2 font-medium">Date/heure d’entrée</th>
                 <th className="px-3 py-2 font-medium">N° dossier</th>
                 <th className="px-3 py-2 font-medium">Nom et prénom</th>
+                <th className="px-3 py-2 font-medium">Statut matrimonial</th>
+                <th className="px-3 py-2 font-medium">Lieu</th>
+                <th className="px-3 py-2 font-medium">Nature</th>
+                <th className="px-3 py-2 font-medium">Présentation</th>
                 <th className="px-3 py-2 font-medium">Mode</th>
+                <th className="px-3 py-2 font-medium">GATPA</th>
+                <th className="px-3 py-2 font-medium">Type avort.</th>
                 <th className="px-3 py-2 font-medium">Assisté par</th>
                 <th className="px-3 py-2 font-medium">Issue</th>
                 <th className="px-3 py-2 font-medium">Sexe NN</th>
                 <th className="px-3 py-2 font-medium">Poids NN</th>
+                <th className="px-3 py-2 font-medium">Taille NN</th>
                 <th className="px-3 py-2 font-medium">Apgar</th>
+                <th className="px-3 py-2 font-medium">Décès NN</th>
+                <th className="px-3 py-2 font-medium">Décès maternel</th>
                 <th className="px-3 py-2 font-medium">Soignant</th>
               </tr>
             </thead>
@@ -353,7 +429,9 @@ export default function RegistreMaterniteAccouchementPage() {
                   className="border-b border-[#e1e0d9] transition-colors last:border-0 hover:bg-[#f9f9f7]"
                 >
                   <td className="px-3 py-2 text-[#898781]">{i + 1}</td>
-                  <td className="px-3 py-2 text-[#52514e]">{formatDate(m.date)}</td>
+                  <td className="px-3 py-2 text-[#52514e]">
+                    {m.dateHeureEntree ? formatDateTime(m.dateHeureEntree) : formatDate(m.date)}
+                  </td>
                   <td className="px-3 py-2 text-[#898781]">
                     <Link href={`/patients/${m.patient.id}`} className="hover:underline">
                       {m.patient.dossierNumber}
@@ -362,16 +440,25 @@ export default function RegistreMaterniteAccouchementPage() {
                   <td className="px-3 py-2 font-medium text-[#0b0b0b]">
                     {m.patient.nom}, {m.patient.prenom}
                   </td>
+                  <td className="px-3 py-2 text-[#52514e]">{m.statutMatrimonial ?? '—'}</td>
+                  <td className="px-3 py-2 text-[#52514e]">{m.lieuAccouchement ?? '—'}</td>
+                  <td className="px-3 py-2 text-[#52514e]">{m.natureAccouchement ?? '—'}</td>
+                  <td className="px-3 py-2 text-[#52514e]">{m.presentation ?? '—'}</td>
                   <td className="px-3 py-2 text-[#52514e]">{m.modeAccouchement ?? '—'}</td>
+                  <td className="px-3 py-2 text-[#52514e]">{m.gatpa ? 'Oui' : '—'}</td>
+                  <td className="px-3 py-2 text-[#52514e]">{m.avortementType ?? '—'}</td>
                   <td className="px-3 py-2 text-[#52514e]">{m.assistePar ?? '—'}</td>
                   <td className="px-3 py-2 text-[#52514e]">{m.issueGrossesse ?? '—'}</td>
                   <td className="px-3 py-2 text-[#52514e]">
                     {m.sexeNouveauNe === 'F' ? 'F' : m.sexeNouveauNe === 'M' ? 'M' : '—'}
                   </td>
                   <td className="px-3 py-2 text-[#52514e]">{m.poidsNaissanceG ?? '—'}</td>
+                  <td className="px-3 py-2 text-[#52514e]">{m.tailleNaissanceCm ?? '—'}</td>
                   <td className="px-3 py-2 text-[#52514e]">
                     {m.apgar1min ?? '—'}/{m.apgar5min ?? '—'}
                   </td>
+                  <td className="px-3 py-2 text-[#52514e]">{m.decesNouveauNeDelai ?? '—'}</td>
+                  <td className="px-3 py-2 text-[#52514e]">{m.decesMaternelMoment ?? '—'}</td>
                   <td className="px-3 py-2 text-[#52514e]">{m.providerName ?? '—'}</td>
                 </tr>
               ))}

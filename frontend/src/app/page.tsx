@@ -1,12 +1,16 @@
 // MediAfrica landing page — public marketing page for the health-center
 // staff app. No auth required. Responsive: mobile-first, desktop via
 // sm:/md:/lg: breakpoints (single source, not two separate builds).
-// Palette matches /dashboard (#2a78d6 accent) for visual consistency.
+// Palette matches /dashboard (#2a78d6 accent) for visual consistency — see
+// .planning/banani/homepage.md for why the accent stays blue instead of the
+// source mock's teal (the Logo SVG's badge color is hardcoded blue and
+// reused everywhere, so a second accent would clash across the app).
 
 import type { Metadata } from 'next';
 import Link from 'next/link';
 import { Logo } from '@/components/Logo';
 import { Wordmark } from '@/components/Wordmark';
+import { FaqAccordion } from '@/components/FaqAccordion';
 
 export const metadata: Metadata = {
   title: 'Gestion de centre de santé',
@@ -38,9 +42,9 @@ const features = [
     ),
   },
   {
-    title: 'Suivi des consultations',
+    title: 'Consultations & file d’attente',
     description:
-      'Historique complet des consultations, diagnostics et traitements prescrits pour chaque patient.',
+      'Historique des consultations, diagnostics et traitements, avec une file du jour triée et mise en avant des cas urgents.',
     icon: (
       <svg viewBox="0 0 24 24" fill="none" className="h-5 w-5">
         <circle cx="12" cy="12" r="8.5" stroke="currentColor" strokeWidth="1.6" />
@@ -49,35 +53,48 @@ const features = [
     ),
   },
   {
-    title: 'File d’attente en temps réel',
+    title: 'Registres & Maternité',
     description:
-      'Visualisez et priorisez les patients en attente, avec une mise en avant automatique des cas urgents.',
+      'Registres mensuels imprimables et exportables (consultation, CPN, accouchement), avec clôture de mois verrouillée.',
     icon: (
       <svg viewBox="0 0 24 24" fill="none" className="h-5 w-5">
         <path
-          d="M4 18v-2a4 4 0 0 1 4-4h1M20 18v-2a4 4 0 0 0-4-4h-1M12 12a3 3 0 1 0 0-6 3 3 0 0 0 0 6Z"
+          d="M4 6h16M4 12h16M4 18h10"
           stroke="currentColor"
           strokeWidth="1.6"
           strokeLinecap="round"
-          strokeLinejoin="round"
         />
       </svg>
     ),
   },
   {
-    title: 'Accès sécurisé',
+    title: 'Facturation par abonnement',
     description:
-      'Authentification dédiée à votre équipe soignante — chaque action reste tracée et protégée.',
+      '15 jours d’essai gratuit puis un abonnement mensuel, avec rappels automatiques avant chaque échéance.',
+    icon: (
+      <svg viewBox="0 0 24 24" fill="none" className="h-5 w-5">
+        <rect
+          x="3.5"
+          y="5.5"
+          width="17"
+          height="13"
+          rx="1.5"
+          stroke="currentColor"
+          strokeWidth="1.6"
+        />
+        <path d="M3.5 9.5h17" stroke="currentColor" strokeWidth="1.6" />
+        <path d="M6.5 14h4" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" />
+      </svg>
+    ),
+  },
+  {
+    title: 'Commentaires & support',
+    description:
+      'Votre équipe remonte un avis ou un incident en un clic ; l’équipe support répond directement dans l’application.',
     icon: (
       <svg viewBox="0 0 24 24" fill="none" className="h-5 w-5">
         <path
-          d="M12 3.5 5 6.5v5c0 4.7 3 7.9 7 9 4-1.1 7-4.3 7-9v-5L12 3.5Z"
-          stroke="currentColor"
-          strokeWidth="1.6"
-          strokeLinejoin="round"
-        />
-        <path
-          d="M9 12.2 11.2 14.4 15.2 10"
+          d="M12 4.5c4.7 0 8.5 3 8.5 6.7s-3.8 6.7-8.5 6.7c-.85 0-1.67-.1-2.44-.28L5 19.5l1.2-3.4C4.6 14.9 3.5 13.15 3.5 11.2c0-3.7 3.8-6.7 8.5-6.7z"
           stroke="currentColor"
           strokeWidth="1.6"
           strokeLinecap="round"
@@ -111,6 +128,46 @@ const steps = [
   },
 ];
 
+const testimonials = [
+  {
+    quote:
+      'Le dossier patient centralisé nous fait gagner un temps précieux à chaque consultation.',
+    role: 'Médecin',
+  },
+  {
+    quote: 'La facturation par abonnement est simple à suivre, sans mauvaise surprise.',
+    role: 'Responsable administratif',
+  },
+  {
+    quote:
+      'Les registres mensuels s’impriment et s’exportent en un clic, plus besoin de tout ressaisir à la main.',
+    role: 'Agent de santé',
+  },
+];
+
+const faqItems = [
+  {
+    q: 'Ai-je besoin d’une carte bancaire pour commencer ?',
+    a: 'Non. Chaque centre bénéficie de 15 jours d’essai gratuit dès l’inscription, sans engagement ni informations de paiement à fournir au départ.',
+  },
+  {
+    q: 'Peut-on exporter les registres mensuels ?',
+    a: 'Oui. Chaque registre (consultation, CPN, accouchement) s’exporte en CSV et s’imprime directement depuis l’application.',
+  },
+  {
+    q: 'Que se passe-t-il à la fin de l’essai gratuit ?',
+    a: 'Le centre passe à l’abonnement payant. Des rappels sont envoyés par email avant l’échéance ; en cas d’impayé, l’accès est temporairement bloqué jusqu’à régularisation.',
+  },
+  {
+    q: 'Les données de nos patients sont-elles sécurisées ?',
+    a: 'Oui. L’accès est protégé par authentification et limité par rôle (personnel du centre, administrateur) ; chaque centre ne voit que ses propres données.',
+  },
+  {
+    q: 'Comment signaler un problème ou une suggestion ?',
+    a: 'Depuis l’application, votre équipe peut envoyer un commentaire ou signaler un incident directement à l’équipe support, qui peut y répondre.',
+  },
+];
+
 export const runtime = 'nodejs';
 
 export default function Home() {
@@ -137,14 +194,34 @@ export default function Home() {
             >
               Comment ça marche
             </a>
+            <a
+              href="#tarifs"
+              className="rounded-md px-3 py-1.5 text-sm font-medium text-[#52514e] hover:bg-[#f9f9f7]"
+            >
+              Tarifs
+            </a>
+            <a
+              href="#faq"
+              className="rounded-md px-3 py-1.5 text-sm font-medium text-[#52514e] hover:bg-[#f9f9f7]"
+            >
+              FAQ
+            </a>
           </nav>
 
-          <Link
-            href="/login"
-            className="whitespace-nowrap rounded-md bg-[#2a78d6] px-4 py-2 text-sm font-medium text-white hover:bg-[#256abf]"
-          >
-            Se connecter
-          </Link>
+          <div className="flex items-center gap-4">
+            <Link
+              href="/login"
+              className="hidden text-sm font-medium text-[#52514e] hover:text-[#0b0b0b] md:inline"
+            >
+              Connexion
+            </Link>
+            <Link
+              href="/login"
+              className="whitespace-nowrap rounded-md bg-[#2a78d6] px-4 py-2 text-sm font-medium text-white hover:bg-[#256abf]"
+            >
+              Se connecter
+            </Link>
+          </div>
         </div>
       </header>
 
@@ -152,15 +229,17 @@ export default function Home() {
       <section className="mx-auto max-w-7xl px-6 py-16 sm:py-20">
         <div className="grid grid-cols-1 items-center gap-12 lg:grid-cols-2">
           <div className="animate-fade-in-up">
-            <span className="inline-block rounded-full border border-[#e1e0d9] bg-white px-3 py-1 text-xs font-medium text-[#52514e]">
-              Solution pour centres de santé
+            <span className="inline-flex items-center gap-2 rounded-full border border-[#e1e0d9] bg-white px-3 py-1 text-xs font-medium text-[#52514e]">
+              <span className="h-1.5 w-1.5 rounded-full bg-[#0ca30c]" />
+              Conçu pour les CSRéf &amp; centres de santé
             </span>
             <h1 className="mt-4 text-3xl font-bold tracking-tight text-[#0b0b0b] sm:text-4xl lg:text-5xl">
               La gestion de votre centre de santé, simplifiée.
             </h1>
             <p className="mt-4 max-w-xl text-base text-[#52514e] sm:text-lg">
-              MediAfrica centralise les dossiers patients, les consultations et la file d’attente de
-              votre équipe — tout en un seul endroit, accessible depuis n’importe quel poste.
+              MediAfrica centralise les dossiers patients, les consultations et les registres
+              réglementaires de votre équipe — tout en un seul endroit, accessible depuis n’importe
+              quel poste.
             </p>
             <div className="mt-8 flex flex-col gap-3 sm:flex-row">
               <Link
@@ -175,6 +254,11 @@ export default function Home() {
               >
                 Découvrir les fonctionnalités
               </a>
+            </div>
+            <div className="mt-6 flex flex-wrap items-center gap-x-5 gap-y-2 text-xs text-[#898781]">
+              <span>15 jours d’essai gratuit</span>
+              <span>Sans engagement</span>
+              <span>Support en français</span>
             </div>
           </div>
 
@@ -236,7 +320,7 @@ export default function Home() {
           <h2 className="text-center text-2xl font-bold text-[#0b0b0b] sm:text-3xl">
             Tout ce dont votre équipe a besoin
           </h2>
-          <div className="mt-10 grid grid-cols-1 gap-5 sm:grid-cols-2 lg:grid-cols-4">
+          <div className="mt-10 grid grid-cols-1 gap-5 sm:grid-cols-2 lg:grid-cols-3">
             {features.map((f, i) => (
               <div
                 key={f.title}
@@ -278,6 +362,72 @@ export default function Home() {
         </div>
       </section>
 
+      {/* ─── Testimonials ───────────────────────────────────────────── */}
+      <section className="border-t border-[#e1e0d9] bg-white py-16">
+        <div className="mx-auto max-w-7xl px-6">
+          <h2 className="text-center text-2xl font-bold text-[#0b0b0b] sm:text-3xl">
+            Ce qu’en disent les équipes de terrain
+          </h2>
+          <div className="mt-10 grid grid-cols-1 gap-5 sm:grid-cols-3">
+            {testimonials.map((t, i) => (
+              <div
+                key={t.role}
+                className="animate-fade-in-up flex flex-col gap-4 rounded-lg border border-[#e1e0d9] p-6"
+                style={{ animationDelay: `${i * 80}ms` }}
+              >
+                <p className="text-sm leading-relaxed text-[#0b0b0b]">“{t.quote}”</p>
+                <span className="mt-auto text-xs font-medium text-[#898781]">{t.role}</span>
+              </div>
+            ))}
+          </div>
+        </div>
+      </section>
+
+      {/* ─── Pricing ────────────────────────────────────────────────── */}
+      <section id="tarifs" className="py-16">
+        <div className="mx-auto max-w-2xl px-6 text-center">
+          <h2 className="text-2xl font-bold text-[#0b0b0b] sm:text-3xl">
+            Un tarif adapté à la taille de votre centre
+          </h2>
+          <p className="mt-3 text-sm text-[#52514e] sm:text-base">
+            Tarifs sur devis, selon le nombre de postes et les besoins du centre.
+          </p>
+          <div className="mt-8 rounded-xl border border-[#e1e0d9] bg-white p-8 text-left shadow-sm">
+            <div className="flex flex-col gap-2.5">
+              {[
+                '15 jours d’essai gratuit, sans carte bancaire',
+                'Dossiers patients, consultations, registres & maternité',
+                'Facturation par abonnement avec rappels automatiques',
+                'Commentaires & support intégrés',
+              ].map((line) => (
+                <div key={line} className="flex items-start gap-2.5 text-sm text-[#0b0b0b]">
+                  <span className="mt-0.5 text-[#0ca30c]">✓</span>
+                  {line}
+                </div>
+              ))}
+            </div>
+            <Link
+              href="/login"
+              className="mt-6 block rounded-md bg-[#2a78d6] px-5 py-2.5 text-center text-sm font-medium text-white hover:bg-[#256abf]"
+            >
+              Se connecter
+            </Link>
+          </div>
+        </div>
+      </section>
+
+      {/* ─── FAQ ────────────────────────────────────────────────────── */}
+      <section id="faq" className="border-t border-[#e1e0d9] bg-white py-16">
+        <div className="mx-auto max-w-2xl px-6">
+          <h2 className="text-center text-2xl font-bold text-[#0b0b0b] sm:text-3xl">
+            Questions fréquentes
+          </h2>
+          <div className="mt-10">
+            <FaqAccordion items={faqItems} />
+          </div>
+        </div>
+      </section>
+
       {/* ─── CTA ────────────────────────────────────────────────────── */}
       <section className="bg-[#2a78d6] py-14">
         <div className="mx-auto max-w-3xl px-6 text-center">
@@ -303,12 +453,18 @@ export default function Home() {
             <Logo size={28} />
             <Wordmark size="sm" className="text-white" />
           </div>
-          <nav className="flex items-center gap-5">
+          <nav className="flex flex-wrap items-center justify-center gap-5">
             <a href="#fonctionnalites" className="text-xs text-white/60 hover:text-white">
               Fonctionnalités
             </a>
             <a href="#comment-ca-marche" className="text-xs text-white/60 hover:text-white">
               Comment ça marche
+            </a>
+            <a href="#tarifs" className="text-xs text-white/60 hover:text-white">
+              Tarifs
+            </a>
+            <a href="#faq" className="text-xs text-white/60 hover:text-white">
+              FAQ
             </a>
             <Link href="/conditions" className="text-xs text-white/60 hover:text-white">
               Conditions d’utilisation

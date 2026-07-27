@@ -83,6 +83,22 @@ function fullPatient() {
         provider: { name: 'Amadou Diallo' },
       },
     ],
+    maternites: [
+      {
+        id: 'm-1',
+        date: new Date('2026-02-01T09:00:00Z'),
+        type: 'CPN',
+        cpnNumeroVisite: 2,
+        ageGestationnelSemaines: 24,
+        prochainRdv: new Date('2026-03-01T00:00:00Z'),
+        modeAccouchement: null,
+        issueGrossesse: null,
+        sexeNouveauNe: null,
+        poidsNaissanceG: null,
+        observations: null,
+        provider: { name: 'Fatoumata Sow' },
+      },
+    ],
   };
 }
 
@@ -127,6 +143,10 @@ describe('GET /api/patients/[id]', () => {
     expect(body.consultations[0].mdo).toBe(false);
     expect(body.consultations[0].tdr).toBe('Négatif');
     expect(body.consultations[0].ge).toBe(null);
+    expect(body.maternites).toHaveLength(1);
+    expect(body.maternites[0].type).toBe('CPN');
+    expect(body.maternites[0].cpnNumeroVisite).toBe(2);
+    expect(body.maternites[0].providerName).toBe('Fatoumata Sow');
   });
 
   it('queries with the id-scoped consultations include, ordered desc, take 20', async () => {
@@ -139,6 +159,20 @@ describe('GET /api/patients/[id]', () => {
     )?.consultations;
     expect(consultInclude?.orderBy).toEqual({ date: 'desc' });
     expect(consultInclude?.take).toBe(20);
+  });
+
+  it('queries maternites filtered to CPN/ACCOUCHEMENT, ordered desc, take 20', async () => {
+    prismaMock.patient.findFirst.mockResolvedValue(fullPatient() as never);
+    await GET(makeGet(), ctxWith('pt-1'));
+    const arg = prismaMock.patient.findFirst.mock.calls[0]?.[0];
+    const materniteInclude = (
+      arg?.include as {
+        maternites?: { where?: unknown; orderBy?: unknown; take?: number };
+      }
+    )?.maternites;
+    expect(materniteInclude?.where).toEqual({ type: { in: ['CPN', 'ACCOUCHEMENT'] } });
+    expect(materniteInclude?.orderBy).toEqual({ date: 'desc' });
+    expect(materniteInclude?.take).toBe(20);
   });
 });
 
