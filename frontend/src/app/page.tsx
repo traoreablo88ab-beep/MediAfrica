@@ -310,59 +310,78 @@ export default function Home() {
                 Découvrir les fonctionnalités
               </a>
             </div>
-            <div className="mt-6 flex flex-wrap items-center gap-x-5 gap-y-2 text-xs text-[#898781]">
-              <span>15 jours d’essai gratuit</span>
-              <span>Sans engagement</span>
-              <span>Support en français</span>
+            <div className="mt-6 flex flex-wrap items-center gap-x-5 gap-y-2 text-xs text-[#52514e]">
+              <span className="flex items-center gap-1.5">
+                <span className="text-[#0ca30c]">✓</span>
+                15 jours d’essai gratuit
+              </span>
+              <span className="flex items-center gap-1.5">
+                <span className="text-[#0ca30c]">✓</span>
+                Sans engagement
+              </span>
+              <span className="flex items-center gap-1.5">
+                <span className="text-[#0ca30c]">✓</span>
+                Support en français
+              </span>
             </div>
           </div>
 
-          {/* Stylized dashboard preview — mirrors /dashboard's stat-tile +
-              queue-row look, not a generic app screenshot. Entrance
-              (fade-in-up) and the ambient float loop are split across two
-              nested elements because both set the `animation` shorthand —
-              stacking them on one element would let the later rule clobber
-              the earlier one instead of combining. */}
-          <div className="animate-fade-in-up" style={{ animationDelay: '120ms' }}>
-            <div className="animate-float rounded-xl border border-[#e1e0d9] bg-white p-4 shadow-sm transition-shadow duration-300 hover:shadow-lg">
-              <div className="grid grid-cols-2 gap-3">
-                <div className="rounded-lg bg-[#2a78d6] p-3 text-white">
-                  <p className="text-[10px] font-medium uppercase tracking-wide text-white/80">
-                    Patients aujourd’hui
-                  </p>
-                  <p className="mt-1 text-xl font-semibold">47</p>
+          {/* Stylized dashboard preview — stat tiles + a 7-day bar chart +
+              a floating monthly-total badge, mirrors the source Banani mock
+              (see .planning/banani/homepage.md). Entrance (fade-in-up) and
+              the ambient float loop are split across two nested elements
+              because both set the `animation` shorthand — stacking them on
+              one element would let the later rule clobber the earlier one
+              instead of combining. */}
+          <div
+            className="animate-fade-in-up relative pb-8 pl-4"
+            style={{ animationDelay: '120ms' }}
+          >
+            <div className="animate-float rounded-xl border border-[#e1e0d9] bg-white shadow-sm transition-shadow duration-300 hover:shadow-lg">
+              <div className="flex items-center gap-1.5 border-b border-[#e1e0d9] px-4 py-3">
+                <span className="h-2.5 w-2.5 rounded-full bg-[#f45b5b]" />
+                <span className="h-2.5 w-2.5 rounded-full bg-[#fab219]" />
+                <span className="h-2.5 w-2.5 rounded-full bg-[#0ca30c]" />
+              </div>
+              <div className="p-4">
+                <div className="grid grid-cols-3 gap-2.5">
+                  <div className="rounded-lg border border-[#e1e0d9] p-2.5">
+                    <p className="text-[9px] font-medium text-[#898781]">Consultations (jour)</p>
+                    <p className="mt-1 text-lg font-bold text-[#0b0b0b]">47</p>
+                  </div>
+                  <div className="rounded-lg border border-[#e1e0d9] p-2.5">
+                    <p className="text-[9px] font-medium text-[#898781]">Patients actifs</p>
+                    <p className="mt-1 text-lg font-bold text-[#0b0b0b]">1 240</p>
+                  </div>
+                  <div className="rounded-lg border border-[#e1e0d9] p-2.5">
+                    <p className="text-[9px] font-medium text-[#d03b3b]">Stock critique</p>
+                    <p className="mt-1 text-lg font-bold text-[#d03b3b]">3</p>
+                  </div>
                 </div>
-                <div className="rounded-lg border border-[#e1e0d9] p-3">
-                  <p className="text-[10px] font-medium uppercase tracking-wide text-[#898781]">
-                    En attente
+                <div className="mt-3 rounded-lg border border-[#e1e0d9] p-3">
+                  <p className="text-xs font-semibold text-[#0b0b0b]">
+                    Consultations — 7 derniers jours
                   </p>
-                  <p className="mt-1 text-xl font-semibold text-[#0b0b0b]">12</p>
+                  <div className="mt-3 flex h-24 items-end gap-2">
+                    {[45, 65, 35, 75, 55, 100, 70].map((h, i) => (
+                      <div
+                        key={i}
+                        className={`flex-1 rounded-t-sm ${i === 5 ? 'bg-[#2a78d6]' : 'bg-[#2a78d6]/25'}`}
+                        style={{ height: `${h}%` }}
+                      />
+                    ))}
+                  </div>
                 </div>
               </div>
-              <div className="mt-3 rounded-lg border border-[#e1e0d9]">
-                <div className="border-b border-[#e1e0d9] px-3 py-2 text-xs font-semibold text-[#0b0b0b]">
-                  File du jour
-                </div>
-                <ul className="divide-y divide-[#e1e0d9]">
-                  <li className="flex items-center justify-between px-3 py-2 text-xs">
-                    <span className="font-medium text-[#0b0b0b]">Keïta, Fatoumata</span>
-                    <span className="rounded-full bg-[#0ca30c]/10 px-2 py-0.5 text-[#0ca30c]">
-                      Traité
-                    </span>
-                  </li>
-                  <li className="flex items-center justify-between border-l-4 border-l-[#d03b3b] bg-[#d03b3b]/5 px-3 py-2 text-xs">
-                    <span className="font-medium text-[#0b0b0b]">Sanogo, Mariam</span>
-                    <span className="rounded-full bg-[#d03b3b]/10 px-2 py-0.5 text-[#d03b3b]">
-                      Urgent
-                    </span>
-                  </li>
-                  <li className="flex items-center justify-between px-3 py-2 text-xs">
-                    <span className="font-medium text-[#0b0b0b]">Diallo, Ibrahim</span>
-                    <span className="rounded-full bg-[#fab219]/15 px-2 py-0.5 text-[#8a5a00]">
-                      En attente
-                    </span>
-                  </li>
-                </ul>
+            </div>
+
+            <div className="absolute -bottom-2 -left-4 flex items-center gap-3 rounded-lg border border-[#e1e0d9] bg-white p-3 shadow-md">
+              <span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-md bg-[#0ca30c]/10 text-base font-semibold text-[#0ca30c]">
+                +
+              </span>
+              <div>
+                <p className="text-sm font-bold leading-tight text-[#0b0b0b]">1 240</p>
+                <p className="text-[10px] leading-tight text-[#898781]">consultations ce mois</p>
               </div>
             </div>
           </div>

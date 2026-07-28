@@ -281,6 +281,12 @@ export default function RegistreMaterniteCponPage() {
           <div>
             <h1 className="text-2xl font-bold text-[#0b0b0b]">Registre CPoN</h1>
             <p className="mt-1 text-sm text-[#52514e]">{clinicName}</p>
+            <Link
+              href="/registres/rma"
+              className="mt-1 inline-block text-xs text-[#2a78d6] hover:underline"
+            >
+              Aide à la saisie RMA →
+            </Link>
           </div>
           <div className="flex flex-col gap-3 sm:flex-row sm:items-center">
             <div className="flex items-center gap-1">
