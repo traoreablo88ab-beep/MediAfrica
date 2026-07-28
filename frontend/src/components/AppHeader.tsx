@@ -16,6 +16,7 @@ import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import { useAuth } from '@/contexts/AuthContext';
 import { api } from '@/lib/api';
+import { useOfflineQueue } from '@/lib/offlineQueue';
 import { Logo } from '@/components/Logo';
 import { Wordmark } from '@/components/Wordmark';
 
@@ -289,6 +290,74 @@ function SubscriptionBadge({ info }: { info: SubscriptionInfo | null }) {
   );
 }
 
+function SyncBadge() {
+  const { items, pendingCount, failedCount, syncNow } = useOfflineQueue();
+  const [open, setOpen] = useState(false);
+  const ref = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    if (!open) return;
+    function onPointerDown(e: PointerEvent) {
+      if (ref.current && !ref.current.contains(e.target as Node)) setOpen(false);
+    }
+    document.addEventListener('pointerdown', onPointerDown);
+    return () => document.removeEventListener('pointerdown', onPointerDown);
+  }, [open]);
+
+  if (items.length === 0) return null;
+
+  const urgent = failedCount > 0;
+
+  return (
+    <div ref={ref} className="relative">
+      <button
+        type="button"
+        onClick={() => setOpen((v) => !v)}
+        className={`inline-flex items-center gap-1.5 rounded-full border px-2.5 py-0.5 text-xs font-medium ${
+          urgent
+            ? 'border-[#d03b3b]/30 bg-[#d03b3b]/10 text-[#d03b3b] hover:bg-[#d03b3b]/20'
+            : 'border-[#d08a1c]/30 bg-[#d08a1c]/10 text-[#d08a1c] hover:bg-[#d08a1c]/20'
+        }`}
+      >
+        <span className={`h-1.5 w-1.5 rounded-full ${urgent ? 'bg-[#d03b3b]' : 'bg-[#d08a1c]'}`} />
+        {urgent ? `${failedCount} en échec` : `${pendingCount} en attente`}
+      </button>
+      {open && (
+        <div className="absolute left-0 top-full z-30 mt-2 w-72 rounded-md border border-[#e1e0d9] bg-white p-3 shadow-lg">
+          <div className="mb-2 flex items-center justify-between">
+            <p className="text-xs font-semibold uppercase tracking-wide text-[#898781]">
+              Synchronisation
+            </p>
+            <button
+              type="button"
+              onClick={() => syncNow()}
+              className="text-xs font-medium text-[#2a78d6] hover:underline"
+            >
+              Synchroniser
+            </button>
+          </div>
+          <ul className="flex flex-col gap-1.5">
+            {items.map((item) => (
+              <li key={item.id} className="flex items-center justify-between gap-3 text-xs">
+                <span className="text-[#0b0b0b]">{item.resourceLabel}</span>
+                <span
+                  className={
+                    item.status === 'failed'
+                      ? 'truncate font-medium text-[#d03b3b]'
+                      : 'text-[#898781]'
+                  }
+                >
+                  {item.status === 'failed' ? (item.lastError ?? 'Échec') : 'En attente…'}
+                </span>
+              </li>
+            ))}
+          </ul>
+        </div>
+      )}
+    </div>
+  );
+}
+
 function NavLink({
   href,
   active,
@@ -397,6 +466,7 @@ export function AppHeader({ active }: { active?: AppNavTab }) {
         <div className="flex flex-wrap items-center gap-2 px-5 py-3">
           <StatusPill />
           <SubscriptionBadge info={subscriptionInfo} />
+          <SyncBadge />
         </div>
         <nav className="flex flex-1 flex-col gap-1 overflow-y-auto px-3 py-2">
           {TABS.map((tab) => (
@@ -463,6 +533,7 @@ export function AppHeader({ active }: { active?: AppNavTab }) {
             <span className="hidden items-center gap-2 sm:inline-flex">
               <StatusPill />
               <SubscriptionBadge info={subscriptionInfo} />
+              <SyncBadge />
             </span>
           </div>
 
@@ -499,6 +570,7 @@ export function AppHeader({ active }: { active?: AppNavTab }) {
             <div className="mb-2 flex items-center gap-2 px-1 sm:hidden">
               <StatusPill />
               <SubscriptionBadge info={subscriptionInfo} />
+              <SyncBadge />
             </div>
             {TABS.map((tab, i) => {
               const Icon = TAB_ICONS[tab.key];

@@ -411,6 +411,13 @@ model Consultation {
   tdr String? // Test de Diagnostic Rapide (paludisme) - Positif | Négatif | Non fait
   ge  String? // Goutte Épaisse (paludisme) - Positif | Négatif | Non fait
 
+  // Offline-queue replay safety — same pattern as Order.idempotencyKey.
+  // Nullable so existing rows are unaffected; a retried sync with the same
+  // key returns the original row instead of duplicating it. The hash lets
+  // us detect (and reject) a key reused for a genuinely different body.
+  idempotencyKey      String? @unique
+  idempotencyBodyHash String?
+
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
