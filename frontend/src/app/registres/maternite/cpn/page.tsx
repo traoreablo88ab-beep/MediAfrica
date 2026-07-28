@@ -7,6 +7,7 @@ import { AppHeader } from '@/components/AppHeader';
 import { Skeleton } from '@/components/Skeleton';
 import { useClinicName } from '@/lib/useClinicName';
 import { MonthPicker } from '@/components/MonthPicker';
+import { downloadRegisterPdf } from '@/lib/exportPdf';
 
 const REGISTER_COLUMN_COUNT = 27;
 
@@ -110,7 +111,7 @@ function csvEscape(value: string): string {
   return /[",;\n]/.test(value) ? `"${value.replace(/"/g, '""')}"` : value;
 }
 
-function downloadCsv(month: string, rows: MaterniteRow[]): void {
+function buildRegisterRows(rows: MaterniteRow[]): { headers: string[]; lines: string[][] } {
   const headers = [
     'N°',
     'Date',
@@ -183,6 +184,11 @@ function downloadCsv(month: string, rows: MaterniteRow[]): void {
     m.prochainRdv ? formatDate(m.prochainRdv) : '',
     m.providerName ?? '',
   ]);
+  return { headers, lines };
+}
+
+function downloadCsv(month: string, rows: MaterniteRow[]): void {
+  const { headers, lines } = buildRegisterRows(rows);
   const csv = [headers, ...lines].map((row) => row.map(csvEscape).join(';')).join('\r\n');
   const BOM = String.fromCharCode(0xfeff);
   const blob = new Blob([BOM + csv], { type: 'text/csv;charset=utf-8;' });
@@ -192,6 +198,18 @@ function downloadCsv(month: string, rows: MaterniteRow[]): void {
   a.download = `registre-maternite-cpn-${month}.csv`;
   a.click();
   URL.revokeObjectURL(url);
+}
+
+function downloadPdf(clinicName: string, month: string, rows: MaterniteRow[]): void {
+  const { headers, lines } = buildRegisterRows(rows);
+  downloadRegisterPdf({
+    title: 'Registre CPN',
+    clinicName,
+    month,
+    headers,
+    rows: lines,
+    fileName: `registre-maternite-cpn-${month}.pdf`,
+  });
 }
 
 export default function RegistreMaterniteCpnPage() {
@@ -302,6 +320,14 @@ export default function RegistreMaterniteCpnPage() {
                 className="flex-1 rounded-md border border-[#e1e0d9] bg-white px-4 py-2 text-sm font-medium text-[#0b0b0b] transition-colors hover:bg-[#f9f9f7] disabled:opacity-50 sm:flex-none"
               >
                 Exporter CSV
+              </button>
+              <button
+                type="button"
+                onClick={() => downloadPdf(clinicName, month, items)}
+                disabled={items.length === 0}
+                className="flex-1 rounded-md border border-[#e1e0d9] bg-white px-4 py-2 text-sm font-medium text-[#0b0b0b] transition-colors hover:bg-[#f9f9f7] disabled:opacity-50 sm:flex-none"
+              >
+                Télécharger PDF
               </button>
               <button
                 type="button"

@@ -8,6 +8,7 @@ import { AppHeader } from '@/components/AppHeader';
 import { Skeleton } from '@/components/Skeleton';
 import { useClinicName } from '@/lib/useClinicName';
 import { MonthPicker } from '@/components/MonthPicker';
+import { downloadRegisterPdf } from '@/lib/exportPdf';
 
 const REGISTER_COLUMN_COUNT = 19;
 
@@ -95,10 +96,7 @@ function csvEscape(value: string): string {
   return /[",;\n]/.test(value) ? `"${value.replace(/"/g, '""')}"` : value;
 }
 
-// Semicolon delimiter + UTF-8 BOM — the format Excel with a French locale
-// expects (comma is the decimal separator there, so it can't be the
-// column separator; the BOM keeps accented names/text readable).
-function downloadCsv(month: string, rows: ConsultationRow[]): void {
+function buildRegisterRows(rows: ConsultationRow[]): { headers: string[]; lines: string[][] } {
   const headers = [
     'N°',
     'Date',
@@ -143,6 +141,14 @@ function downloadCsv(month: string, rows: ConsultationRow[]): void {
     c.traitementPrescrit ?? '',
     c.providerName ?? '',
   ]);
+  return { headers, lines };
+}
+
+// Semicolon delimiter + UTF-8 BOM — the format Excel with a French locale
+// expects (comma is the decimal separator there, so it can't be the
+// column separator; the BOM keeps accented names/text readable).
+function downloadCsv(month: string, rows: ConsultationRow[]): void {
+  const { headers, lines } = buildRegisterRows(rows);
   const csv = [headers, ...lines].map((row) => row.map(csvEscape).join(';')).join('\r\n');
   const BOM = String.fromCharCode(0xfeff);
   const blob = new Blob([BOM + csv], { type: 'text/csv;charset=utf-8;' });
@@ -152,6 +158,18 @@ function downloadCsv(month: string, rows: ConsultationRow[]): void {
   a.download = `registre-consultation-${month}.csv`;
   a.click();
   URL.revokeObjectURL(url);
+}
+
+function downloadPdf(clinicName: string, month: string, rows: ConsultationRow[]): void {
+  const { headers, lines } = buildRegisterRows(rows);
+  downloadRegisterPdf({
+    title: 'Registre de consultation',
+    clinicName,
+    month,
+    headers,
+    rows: lines,
+    fileName: `registre-consultation-${month}.pdf`,
+  });
 }
 
 function formatDateTime(iso: string): string {
@@ -283,6 +301,14 @@ export default function RegistreConsultationPage() {
                 className="flex-1 rounded-md border border-[#e1e0d9] bg-white px-4 py-2 text-sm font-medium text-[#0b0b0b] transition-colors hover:bg-[#f9f9f7] disabled:opacity-50 sm:flex-none"
               >
                 Exporter CSV
+              </button>
+              <button
+                type="button"
+                onClick={() => downloadPdf(clinicName, month, items)}
+                disabled={items.length === 0}
+                className="flex-1 rounded-md border border-[#e1e0d9] bg-white px-4 py-2 text-sm font-medium text-[#0b0b0b] transition-colors hover:bg-[#f9f9f7] disabled:opacity-50 sm:flex-none"
+              >
+                Télécharger PDF
               </button>
               <button
                 type="button"

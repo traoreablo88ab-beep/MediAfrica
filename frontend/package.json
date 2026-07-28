@@ -33,6 +33,8 @@
     "clsx": "^2.1.1",
     "heic-convert": "^2.1.0",
     "jose": "^6.2.3",
+    "jspdf": "^4.2.1",
+    "jspdf-autotable": "^5.0.8",
     "next": "^16.2.6",
     "react": "^19.2.3",
     "react-dom": "^19.2.3",

@@ -9,8 +9,6 @@ interface RegisterCard {
   description: string;
 }
 
-// CPoN reste scaffoldée mais hors V1 — voir décision du 2026-07-27. N'ajouter
-// une carte CPoN ici que lorsque le module post-natal sera activé.
 const REGISTERS: RegisterCard[] = [
   {
     href: '/registres/consultation',
@@ -26,6 +24,11 @@ const REGISTERS: RegisterCard[] = [
     href: '/registres/maternite/accouchement',
     title: 'Registre Accouchement',
     description: 'Accouchements du mois, clôture et export CSV.',
+  },
+  {
+    href: '/registres/maternite/cpon',
+    title: 'Registre CPoN',
+    description: 'Consultations post-natales du mois, clôture et export CSV.',
   },
 ];
 

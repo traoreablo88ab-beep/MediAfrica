@@ -89,6 +89,20 @@ textarea:focus {
   animation: float-y 5s ease-in-out 1.2s infinite;
 }
 
+/* Register pages (consultation, CPN, accouchement) run 19-27 columns wide
+   — without this, browser print / "Save as PDF" clips columns past the
+   portrait page edge and the overflow-x-auto wrapper hides the rest. */
+@media print {
+  @page {
+    size: landscape;
+    margin: 10mm;
+  }
+
+  .overflow-x-auto {
+    overflow: visible !important;
+  }
+}
+
 @media (prefers-reduced-motion: reduce) {
   *,
   *::before,

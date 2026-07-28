@@ -440,6 +440,7 @@ model Maternite {
   dpa               DateTime?
   ddr               DateTime?
   statutMatrimonial String? // colonne "Statut matrimonial" des registres papier CPN/Accouchement
+  profession        String? // colonne "Profession" du registre papier CPoN
   observations      String?
 
   // CPN — champs alignés sur le registre papier "Consultation prénatale"
@@ -465,7 +466,7 @@ model Maternite {
   vatDose                   Int? // colonnes "Td 1ère dose/2ème dose/Rappel" (Rappel = 3)
   ferAcideFolique           Boolean?
   ferAcideFoliqueDoseNumero Int? // numéro de dose (1 à 4) remise à cette visite
-  albendazoleMebendazole    Boolean? // colonne partagée CPN + Accouchement
+  albendazoleMebendazole    Boolean? // colonne partagée CPN + Accouchement + CPoN
   albuminurie               String? // Positif | Négatif | Non fait
   glycosurie                String? // Positif | Négatif | Non fait
   vih                       String? // Positif | Négatif | Non fait | Connu positif
@@ -510,13 +511,20 @@ model Maternite {
   episiotomie                 Boolean?
   placentaComplet             Boolean?
 
-  // CPoN
+  // CPoN — champs alignés sur le registre papier "Consultation post-natale"
   cponNumeroVisite       Int?
+  cponTypeCas            String? // NC | AC (nouveau cas / ancien cas de consultation post-natale)
+  dateAccouchementCpon   DateTime? // date réelle de l'accouchement (distincte de `dpa`, la date prévue)
   joursPostPartum        Int?
-  etatPerinee            String? // Normal | Déhiscence | Infecté
+  etatSeins              String? // Normal | Anormal
+  etatConjonctives       String?
+  involutionUterine      String?
+  etatLochies            String? // Normal | Anormal
+  etatPerinee            String? // Normal | Anormal
+  etatCol                String? // Normal | Anormal
   allaitement            String? // Exclusif | Mixte | Aucun
   planificationFamiliale String?
-  etatNouveauNeCpon      String?
+  etatNouveauNeCpon      String? // Bien portant | Malade | Décédé
   vaccinationBcgFait     Boolean?
 
   createdAt DateTime @default(now())

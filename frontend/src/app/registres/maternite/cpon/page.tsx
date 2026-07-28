@@ -7,16 +7,34 @@ import { AppHeader } from '@/components/AppHeader';
 import { Skeleton } from '@/components/Skeleton';
 import { useClinicName } from '@/lib/useClinicName';
 import { MonthPicker } from '@/components/MonthPicker';
+import { downloadRegisterPdf } from '@/lib/exportPdf';
 
-const REGISTER_COLUMN_COUNT = 9;
+const REGISTER_COLUMN_COUNT = 27;
 
 interface MaterniteRow {
   id: string;
   date: string;
   type: string;
+  gestite: number | null;
+  parite: number | null;
+  statutMatrimonial: string | null;
+  profession: string | null;
+  observations: string | null;
   cponNumeroVisite: number | null;
+  cponTypeCas: string | null;
+  dateAccouchementCpon: string | null;
   joursPostPartum: number | null;
+  poidsKg: number | null;
+  tensionArterielle: string | null;
+  temperatureC: number | null;
+  etatSeins: string | null;
+  etatConjonctives: string | null;
+  involutionUterine: string | null;
+  etatLochies: string | null;
   etatPerinee: string | null;
+  etatCol: string | null;
+  albendazoleMebendazole: boolean | null;
+  maladieDetectee: string | null;
   allaitement: string | null;
   planificationFamiliale: string | null;
   etatNouveauNeCpon: string | null;
@@ -66,6 +84,15 @@ function monthBounds(month: string): { dateFrom: string; dateTo: string } {
   };
 }
 
+function computeAge(dateNaissanceIso: string): number {
+  const dob = new Date(dateNaissanceIso);
+  const now = new Date();
+  let age = now.getFullYear() - dob.getFullYear();
+  const monthDiff = now.getMonth() - dob.getMonth();
+  if (monthDiff < 0 || (monthDiff === 0 && now.getDate() < dob.getDate())) age -= 1;
+  return age;
+}
+
 function formatDate(iso: string): string {
   return new Date(iso).toLocaleDateString('fr-FR', {
     day: 'numeric',
@@ -88,19 +115,34 @@ function csvEscape(value: string): string {
   return /[",;\n]/.test(value) ? `"${value.replace(/"/g, '""')}"` : value;
 }
 
-function downloadCsv(month: string, rows: MaterniteRow[]): void {
+function buildRegisterRows(rows: MaterniteRow[]): { headers: string[]; lines: string[][] } {
   const headers = [
     'N°',
     'Date',
     'N° dossier',
     'Nom et prénom',
-    'Visite',
-    'Jours post-partum',
-    'État périnée',
-    'Allaitement',
-    'Planification familiale',
-    'État nouveau-né',
-    'BCG',
+    'Âge',
+    'Lieu de résidence',
+    'Profession',
+    'NC',
+    'AC',
+    'Gestité',
+    'Parité',
+    'Statut matrimonial',
+    "Date d'accouchement",
+    'Poids (kg)',
+    'TA',
+    'Température',
+    'État des seins',
+    'État des conjonctives',
+    'Inv. utérine',
+    'État des lochies',
+    'État du périnée',
+    'État du col',
+    'Albendazole/Mébendazole',
+    'Maladie détectée',
+    "État de l'enfant",
+    'Observations',
     'Soignant',
   ];
   const lines = rows.map((m, i) => [
@@ -108,15 +150,35 @@ function downloadCsv(month: string, rows: MaterniteRow[]): void {
     formatDate(m.date),
     m.patient.dossierNumber,
     `${m.patient.nom}, ${m.patient.prenom}`,
-    m.cponNumeroVisite != null ? String(m.cponNumeroVisite) : '',
-    m.joursPostPartum != null ? String(m.joursPostPartum) : '',
+    String(computeAge(m.patient.dateNaissance)),
+    m.patient.communeResidence,
+    m.profession ?? '',
+    m.cponTypeCas === 'NC' ? 'X' : '',
+    m.cponTypeCas === 'AC' ? 'X' : '',
+    m.gestite != null ? String(m.gestite) : '',
+    m.parite != null ? String(m.parite) : '',
+    m.statutMatrimonial ?? '',
+    m.dateAccouchementCpon ? formatDate(m.dateAccouchementCpon) : '',
+    m.poidsKg != null ? String(m.poidsKg) : '',
+    m.tensionArterielle ?? '',
+    m.temperatureC != null ? String(m.temperatureC) : '',
+    m.etatSeins ?? '',
+    m.etatConjonctives ?? '',
+    m.involutionUterine ?? '',
+    m.etatLochies ?? '',
     m.etatPerinee ?? '',
-    m.allaitement ?? '',
-    m.planificationFamiliale ?? '',
+    m.etatCol ?? '',
+    m.albendazoleMebendazole ? 'Oui' : '',
+    m.maladieDetectee ?? '',
     m.etatNouveauNeCpon ?? '',
-    m.vaccinationBcgFait ? 'Oui' : '',
+    m.observations ?? '',
     m.providerName ?? '',
   ]);
+  return { headers, lines };
+}
+
+function downloadCsv(month: string, rows: MaterniteRow[]): void {
+  const { headers, lines } = buildRegisterRows(rows);
   const csv = [headers, ...lines].map((row) => row.map(csvEscape).join(';')).join('\r\n');
   const BOM = String.fromCharCode(0xfeff);
   const blob = new Blob([BOM + csv], { type: 'text/csv;charset=utf-8;' });
@@ -126,6 +188,18 @@ function downloadCsv(month: string, rows: MaterniteRow[]): void {
   a.download = `registre-maternite-cpon-${month}.csv`;
   a.click();
   URL.revokeObjectURL(url);
+}
+
+function downloadPdf(clinicName: string, month: string, rows: MaterniteRow[]): void {
+  const { headers, lines } = buildRegisterRows(rows);
+  downloadRegisterPdf({
+    title: 'Registre de consultation post-natale (CPoN)',
+    clinicName,
+    month,
+    headers,
+    rows: lines,
+    fileName: `registre-maternite-cpon-${month}.pdf`,
+  });
 }
 
 export default function RegistreMaterniteCponPage() {
@@ -239,6 +313,14 @@ export default function RegistreMaterniteCponPage() {
               </button>
               <button
                 type="button"
+                onClick={() => downloadPdf(clinicName, month, items)}
+                disabled={items.length === 0}
+                className="flex-1 rounded-md border border-[#e1e0d9] bg-white px-4 py-2 text-sm font-medium text-[#0b0b0b] transition-colors hover:bg-[#f9f9f7] disabled:opacity-50 sm:flex-none"
+              >
+                Télécharger PDF
+              </button>
+              <button
+                type="button"
                 onClick={() => window.print()}
                 className="flex-1 rounded-md border border-[#e1e0d9] bg-white px-4 py-2 text-sm font-medium text-[#0b0b0b] transition-colors hover:bg-[#f9f9f7] sm:flex-none"
               >
@@ -293,10 +375,28 @@ export default function RegistreMaterniteCponPage() {
                 <th className="px-3 py-2 font-medium">Date</th>
                 <th className="px-3 py-2 font-medium">N° dossier</th>
                 <th className="px-3 py-2 font-medium">Nom et prénom</th>
-                <th className="px-3 py-2 font-medium">Visite</th>
-                <th className="px-3 py-2 font-medium">Jours PP</th>
-                <th className="px-3 py-2 font-medium">Périnée</th>
-                <th className="px-3 py-2 font-medium">Allaitement</th>
+                <th className="px-3 py-2 font-medium">Âge</th>
+                <th className="px-3 py-2 font-medium">Lieu de résidence</th>
+                <th className="px-3 py-2 font-medium">Profession</th>
+                <th className="px-3 py-2 font-medium">NC</th>
+                <th className="px-3 py-2 font-medium">AC</th>
+                <th className="px-3 py-2 font-medium">Gestité</th>
+                <th className="px-3 py-2 font-medium">Parité</th>
+                <th className="px-3 py-2 font-medium">Statut matrimonial</th>
+                <th className="px-3 py-2 font-medium">Date d&rsquo;accouchement</th>
+                <th className="px-3 py-2 font-medium">Poids</th>
+                <th className="px-3 py-2 font-medium">TA</th>
+                <th className="px-3 py-2 font-medium">Température</th>
+                <th className="px-3 py-2 font-medium">État des seins</th>
+                <th className="px-3 py-2 font-medium">État des conjonctives</th>
+                <th className="px-3 py-2 font-medium">Inv. utérine</th>
+                <th className="px-3 py-2 font-medium">État des lochies</th>
+                <th className="px-3 py-2 font-medium">État du périnée</th>
+                <th className="px-3 py-2 font-medium">État du col</th>
+                <th className="px-3 py-2 font-medium">Albendazole/Mébendazole</th>
+                <th className="px-3 py-2 font-medium">Maladie détectée</th>
+                <th className="px-3 py-2 font-medium">État de l&rsquo;enfant</th>
+                <th className="px-3 py-2 font-medium">Observations</th>
                 <th className="px-3 py-2 font-medium">Soignant</th>
               </tr>
             </thead>
@@ -327,10 +427,32 @@ export default function RegistreMaterniteCponPage() {
                   <td className="px-3 py-2 font-medium text-[#0b0b0b]">
                     {m.patient.nom}, {m.patient.prenom}
                   </td>
-                  <td className="px-3 py-2 text-[#52514e]">{m.cponNumeroVisite ?? '—'}</td>
-                  <td className="px-3 py-2 text-[#52514e]">{m.joursPostPartum ?? '—'}</td>
+                  <td className="px-3 py-2 text-[#52514e]">
+                    {computeAge(m.patient.dateNaissance)}
+                  </td>
+                  <td className="px-3 py-2 text-[#52514e]">{m.patient.communeResidence}</td>
+                  <td className="px-3 py-2 text-[#52514e]">{m.profession ?? '—'}</td>
+                  <td className="px-3 py-2 text-center">{m.cponTypeCas === 'NC' ? '✓' : ''}</td>
+                  <td className="px-3 py-2 text-center">{m.cponTypeCas === 'AC' ? '✓' : ''}</td>
+                  <td className="px-3 py-2 text-[#52514e]">{m.gestite ?? '—'}</td>
+                  <td className="px-3 py-2 text-[#52514e]">{m.parite ?? '—'}</td>
+                  <td className="px-3 py-2 text-[#52514e]">{m.statutMatrimonial ?? '—'}</td>
+                  <td className="px-3 py-2 text-[#52514e]">
+                    {m.dateAccouchementCpon ? formatDate(m.dateAccouchementCpon) : '—'}
+                  </td>
+                  <td className="px-3 py-2 text-[#52514e]">{m.poidsKg ?? '—'}</td>
+                  <td className="px-3 py-2 text-[#52514e]">{m.tensionArterielle ?? '—'}</td>
+                  <td className="px-3 py-2 text-[#52514e]">{m.temperatureC ?? '—'}</td>
+                  <td className="px-3 py-2 text-[#52514e]">{m.etatSeins ?? '—'}</td>
+                  <td className="px-3 py-2 text-[#52514e]">{m.etatConjonctives ?? '—'}</td>
+                  <td className="px-3 py-2 text-[#52514e]">{m.involutionUterine ?? '—'}</td>
+                  <td className="px-3 py-2 text-[#52514e]">{m.etatLochies ?? '—'}</td>
                   <td className="px-3 py-2 text-[#52514e]">{m.etatPerinee ?? '—'}</td>
-                  <td className="px-3 py-2 text-[#52514e]">{m.allaitement ?? '—'}</td>
+                  <td className="px-3 py-2 text-[#52514e]">{m.etatCol ?? '—'}</td>
+                  <td className="px-3 py-2 text-center">{m.albendazoleMebendazole ? '✓' : ''}</td>
+                  <td className="px-3 py-2 text-[#52514e]">{m.maladieDetectee ?? '—'}</td>
+                  <td className="px-3 py-2 text-[#52514e]">{m.etatNouveauNeCpon ?? '—'}</td>
+                  <td className="px-3 py-2 text-[#52514e]">{m.observations ?? '—'}</td>
                   <td className="px-3 py-2 text-[#52514e]">{m.providerName ?? '—'}</td>
                 </tr>
               ))}

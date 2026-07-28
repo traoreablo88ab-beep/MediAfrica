@@ -39,9 +39,7 @@ const TYPE_LABEL: Record<MaterniteType, string> = {
   CPON: 'CPoN — Consultation postnatale',
 };
 
-// CPoN reste scaffoldée mais hors V1 — seuls CPN et Accouchement sont
-// sélectionnables ici (voir décision V1 du 2026-07-27).
-const SELECTABLE_TYPES: MaterniteType[] = ['CPN', 'ACCOUCHEMENT'];
+const SELECTABLE_TYPES: MaterniteType[] = ['CPN', 'ACCOUCHEMENT', 'CPON'];
 
 export default function NewMaternitePage() {
   const params = useParams<{ id: string }>();
@@ -57,6 +55,7 @@ export default function NewMaternitePage() {
   const [dpa, setDpa] = useState('');
   const [ddr, setDdr] = useState('');
   const [statutMatrimonial, setStatutMatrimonial] = useState('');
+  const [profession, setProfession] = useState('');
   const [observations, setObservations] = useState('');
 
   // CPN
@@ -129,8 +128,15 @@ export default function NewMaternitePage() {
 
   // CPoN
   const [cponNumeroVisite, setCponNumeroVisite] = useState('');
+  const [cponTypeCas, setCponTypeCas] = useState('');
+  const [dateAccouchementCpon, setDateAccouchementCpon] = useState('');
   const [joursPostPartum, setJoursPostPartum] = useState('');
+  const [etatSeins, setEtatSeins] = useState('');
+  const [etatConjonctives, setEtatConjonctives] = useState('');
+  const [involutionUterine, setInvolutionUterine] = useState('');
+  const [etatLochies, setEtatLochies] = useState('');
   const [etatPerinee, setEtatPerinee] = useState('');
+  const [etatCol, setEtatCol] = useState('');
   const [allaitement, setAllaitement] = useState('');
   const [planificationFamiliale, setPlanificationFamiliale] = useState('');
   const [etatNouveauNeCpon, setEtatNouveauNeCpon] = useState('');
@@ -167,6 +173,7 @@ export default function NewMaternitePage() {
           ...(dpa ? { dpa } : {}),
           ...(ddr ? { ddr } : {}),
           ...(statutMatrimonial ? { statutMatrimonial } : {}),
+          ...(profession ? { profession } : {}),
           ...(observations ? { observations } : {}),
 
           ...(type === 'CPN'
@@ -257,8 +264,20 @@ export default function NewMaternitePage() {
           ...(type === 'CPON'
             ? {
                 ...(cponNumeroVisite ? { cponNumeroVisite: Number(cponNumeroVisite) } : {}),
+                ...(cponTypeCas ? { cponTypeCas } : {}),
+                ...(dateAccouchementCpon ? { dateAccouchementCpon } : {}),
                 ...(joursPostPartum ? { joursPostPartum: Number(joursPostPartum) } : {}),
+                ...(poidsKg ? { poidsKg: Number(poidsKg) } : {}),
+                ...(tensionArterielle ? { tensionArterielle } : {}),
+                ...(temperatureC ? { temperatureC: Number(temperatureC) } : {}),
+                ...(etatSeins ? { etatSeins } : {}),
+                ...(etatConjonctives ? { etatConjonctives } : {}),
+                ...(involutionUterine ? { involutionUterine } : {}),
+                ...(etatLochies ? { etatLochies } : {}),
                 ...(etatPerinee ? { etatPerinee } : {}),
+                ...(etatCol ? { etatCol } : {}),
+                albendazoleMebendazole,
+                ...(maladieDetectee ? { maladieDetectee } : {}),
                 ...(allaitement ? { allaitement } : {}),
                 ...(planificationFamiliale ? { planificationFamiliale } : {}),
                 ...(etatNouveauNeCpon ? { etatNouveauNeCpon } : {}),
@@ -394,6 +413,13 @@ export default function NewMaternitePage() {
                   <option value="Divorcé(e)">Divorcé(e)</option>
                   <option value="Veuf/Veuve">Veuf/Veuve</option>
                 </select>
+              </Field>
+              <Field label="Profession">
+                <input
+                  className={inputClass}
+                  value={profession}
+                  onChange={(e) => setProfession(e.target.value)}
+                />
               </Field>
               <div className="sm:col-span-3">
                 <Field label="Observations">
@@ -1057,6 +1083,25 @@ export default function NewMaternitePage() {
                     onChange={(e) => setCponNumeroVisite(e.target.value)}
                   />
                 </Field>
+                <Field label="Type de cas">
+                  <select
+                    className={inputClass}
+                    value={cponTypeCas}
+                    onChange={(e) => setCponTypeCas(e.target.value)}
+                  >
+                    <option value="">Non renseigné</option>
+                    <option value="NC">Nouveau cas (NC)</option>
+                    <option value="AC">Ancien cas (AC)</option>
+                  </select>
+                </Field>
+                <Field label="Date d'accouchement">
+                  <input
+                    type="date"
+                    className={inputClass}
+                    value={dateAccouchementCpon}
+                    onChange={(e) => setDateAccouchementCpon(e.target.value)}
+                  />
+                </Field>
                 <Field label="Jours post-partum">
                   <input
                     type="number"
@@ -1065,6 +1110,68 @@ export default function NewMaternitePage() {
                     value={joursPostPartum}
                     onChange={(e) => setJoursPostPartum(e.target.value)}
                   />
+                </Field>
+                <Field label="Poids (kg)">
+                  <input
+                    type="number"
+                    step="0.1"
+                    className={inputClass}
+                    value={poidsKg}
+                    onChange={(e) => setPoidsKg(e.target.value)}
+                  />
+                </Field>
+                <Field label="Tension artérielle">
+                  <input
+                    className={inputClass}
+                    placeholder="110/70"
+                    value={tensionArterielle}
+                    onChange={(e) => setTensionArterielle(e.target.value)}
+                  />
+                </Field>
+                <Field label="Température (°C)">
+                  <input
+                    type="number"
+                    step="0.1"
+                    className={inputClass}
+                    value={temperatureC}
+                    onChange={(e) => setTemperatureC(e.target.value)}
+                  />
+                </Field>
+                <Field label="État des seins">
+                  <select
+                    className={inputClass}
+                    value={etatSeins}
+                    onChange={(e) => setEtatSeins(e.target.value)}
+                  >
+                    <option value="">Non renseigné</option>
+                    <option value="Normal">Normal</option>
+                    <option value="Anormal">Anormal</option>
+                  </select>
+                </Field>
+                <Field label="État des conjonctives">
+                  <input
+                    className={inputClass}
+                    value={etatConjonctives}
+                    onChange={(e) => setEtatConjonctives(e.target.value)}
+                  />
+                </Field>
+                <Field label="Involution utérine">
+                  <input
+                    className={inputClass}
+                    value={involutionUterine}
+                    onChange={(e) => setInvolutionUterine(e.target.value)}
+                  />
+                </Field>
+                <Field label="État des lochies">
+                  <select
+                    className={inputClass}
+                    value={etatLochies}
+                    onChange={(e) => setEtatLochies(e.target.value)}
+                  >
+                    <option value="">Non renseigné</option>
+                    <option value="Normal">Normal</option>
+                    <option value="Anormal">Anormal</option>
+                  </select>
                 </Field>
                 <Field label="État du périnée">
                   <select
@@ -1076,6 +1183,17 @@ export default function NewMaternitePage() {
                     <option value="Normal">Normal</option>
                     <option value="Déhiscence">Déhiscence</option>
                     <option value="Infecté">Infecté</option>
+                  </select>
+                </Field>
+                <Field label="État du col">
+                  <select
+                    className={inputClass}
+                    value={etatCol}
+                    onChange={(e) => setEtatCol(e.target.value)}
+                  >
+                    <option value="">Non renseigné</option>
+                    <option value="Normal">Normal</option>
+                    <option value="Anormal">Anormal</option>
                   </select>
                 </Field>
                 <Field label="Allaitement">
@@ -1097,15 +1215,36 @@ export default function NewMaternitePage() {
                     onChange={(e) => setPlanificationFamiliale(e.target.value)}
                   />
                 </Field>
-                <Field label="État du nouveau-né">
+                <Field label="Maladie détectée">
                   <input
+                    className={inputClass}
+                    value={maladieDetectee}
+                    onChange={(e) => setMaladieDetectee(e.target.value)}
+                  />
+                </Field>
+                <Field label="État de l'enfant">
+                  <select
                     className={inputClass}
                     value={etatNouveauNeCpon}
                     onChange={(e) => setEtatNouveauNeCpon(e.target.value)}
-                  />
+                  >
+                    <option value="">Non renseigné</option>
+                    <option value="Bien portant">Bien portant (B)</option>
+                    <option value="Malade">Malade (M)</option>
+                    <option value="Décédé">Décédé (D)</option>
+                  </select>
                 </Field>
               </div>
-              <div className="mt-4">
+              <div className="mt-4 flex flex-wrap gap-6">
+                <label className="flex items-center gap-2 text-sm text-[#0b0b0b]">
+                  <input
+                    type="checkbox"
+                    checked={albendazoleMebendazole}
+                    onChange={(e) => setAlbendazoleMebendazole(e.target.checked)}
+                    className="h-4 w-4 rounded border-[#e1e0d9]"
+                  />
+                  Albendazole / Mébendazole donné
+                </label>
                 <label className="flex items-center gap-2 text-sm text-[#0b0b0b]">
                   <input
                     type="checkbox"

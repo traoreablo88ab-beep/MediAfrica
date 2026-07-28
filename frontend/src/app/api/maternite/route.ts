@@ -39,6 +39,7 @@ function serializeMaternite(m: MaterniteRow) {
     dpa: m.dpa?.toISOString() ?? null,
     ddr: m.ddr?.toISOString() ?? null,
     statutMatrimonial: m.statutMatrimonial,
+    profession: m.profession,
     observations: m.observations,
 
     cpnNumeroVisite: m.cpnNumeroVisite,
@@ -108,8 +109,15 @@ function serializeMaternite(m: MaterniteRow) {
     placentaComplet: m.placentaComplet,
 
     cponNumeroVisite: m.cponNumeroVisite,
+    cponTypeCas: m.cponTypeCas,
+    dateAccouchementCpon: m.dateAccouchementCpon?.toISOString() ?? null,
     joursPostPartum: m.joursPostPartum,
+    etatSeins: m.etatSeins,
+    etatConjonctives: m.etatConjonctives,
+    involutionUterine: m.involutionUterine,
+    etatLochies: m.etatLochies,
     etatPerinee: m.etatPerinee,
+    etatCol: m.etatCol,
     allaitement: m.allaitement,
     planificationFamiliale: m.planificationFamiliale,
     etatNouveauNeCpon: m.etatNouveauNeCpon,

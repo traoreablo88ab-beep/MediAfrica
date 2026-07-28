@@ -19,25 +19,32 @@ export const metadata: Metadata = {
   robots: { index: true, follow: true },
 };
 
+// Each feature gets its own accent so the cards read as distinct at a
+// glance — reuses colors already meaningful elsewhere in the app (blue =
+// primary brand, green = "Traité", amber = "En attente"/billing) plus two
+// new ones (rose for maternité, violet for support) since no equivalent
+// existed yet.
 const features = [
   {
     title: 'Dossiers patients centralisés',
     description:
       'Un dossier complet et à jour pour chaque patient, accessible en quelques secondes depuis n’importe quel poste.',
+    badgeBg: 'bg-[#2a78d6]/10',
+    badgeText: 'text-[#2a78d6]',
+    cardBg: 'bg-[#2a78d6]/[0.04]',
+    cardBorder: 'border-[#2a78d6]/15 hover:border-[#2a78d6]/40',
+    // ID card — profile + info lines, reads as "patient record" at a glance.
     icon: (
       <svg viewBox="0 0 24 24" fill="none" className="h-5 w-5">
+        <rect x="2.5" y="5" width="19" height="14" rx="2" stroke="currentColor" strokeWidth="1.6" />
+        <circle cx="8.5" cy="11" r="2.2" stroke="currentColor" strokeWidth="1.6" />
         <path
-          d="M6 3.5h9l3 3V20a1 1 0 0 1-1 1H6a1 1 0 0 1-1-1V4.5a1 1 0 0 1 1-1Z"
-          stroke="currentColor"
-          strokeWidth="1.6"
-          strokeLinejoin="round"
-        />
-        <path
-          d="M9 11h6M9 15h6M9 7h3"
+          d="M5.5 16c0-1.8 1.4-3 3-3s3 1.2 3 3"
           stroke="currentColor"
           strokeWidth="1.6"
           strokeLinecap="round"
         />
+        <path d="M14 10h4M14 13h4" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" />
       </svg>
     ),
   },
@@ -45,10 +52,32 @@ const features = [
     title: 'Consultations & file d’attente',
     description:
       'Historique des consultations, diagnostics et traitements, avec une file du jour triée et mise en avant des cas urgents.',
+    badgeBg: 'bg-[#0ca30c]/10',
+    badgeText: 'text-[#0ca30c]',
+    cardBg: 'bg-[#0ca30c]/[0.04]',
+    cardBorder: 'border-[#0ca30c]/15 hover:border-[#0ca30c]/40',
+    // Stethoscope — unambiguously "consultation médicale".
     icon: (
       <svg viewBox="0 0 24 24" fill="none" className="h-5 w-5">
-        <circle cx="12" cy="12" r="8.5" stroke="currentColor" strokeWidth="1.6" />
-        <path d="M12 7.5V12l3 2" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" />
+        <path
+          d="M6 3.5v6a3.5 3.5 0 0 0 7 0v-6"
+          stroke="currentColor"
+          strokeWidth="1.6"
+          strokeLinecap="round"
+        />
+        <path
+          d="M6 3.5h-1.5M13 3.5h1.5"
+          stroke="currentColor"
+          strokeWidth="1.6"
+          strokeLinecap="round"
+        />
+        <path
+          d="M9.5 12.5v2.5a4.5 4.5 0 0 0 9 0v-1.3"
+          stroke="currentColor"
+          strokeWidth="1.6"
+          strokeLinecap="round"
+        />
+        <circle cx="19.5" cy="12.2" r="1.7" stroke="currentColor" strokeWidth="1.6" />
       </svg>
     ),
   },
@@ -56,13 +85,25 @@ const features = [
     title: 'Registres & Maternité',
     description:
       'Registres mensuels imprimables et exportables (consultation, CPN, accouchement), avec clôture de mois verrouillée.',
+    badgeBg: 'bg-[#d6487a]/10',
+    badgeText: 'text-[#d6487a]',
+    cardBg: 'bg-[#d6487a]/[0.04]',
+    cardBorder: 'border-[#d6487a]/15 hover:border-[#d6487a]/40',
+    // Heart + pulse line — vital record / maternal care, not just a generic list.
     icon: (
       <svg viewBox="0 0 24 24" fill="none" className="h-5 w-5">
         <path
-          d="M4 6h16M4 12h16M4 18h10"
+          d="M12 20s-7-4.35-9.5-9A5.5 5.5 0 0 1 12 6a5.5 5.5 0 0 1 9.5 5c-2.5 4.65-9.5 9-9.5 9Z"
           stroke="currentColor"
           strokeWidth="1.6"
+          strokeLinejoin="round"
+        />
+        <path
+          d="M4 12h3l1.5-2.5L11 15l1.5-4.5L14 12h6"
+          stroke="currentColor"
+          strokeWidth="1.4"
           strokeLinecap="round"
+          strokeLinejoin="round"
         />
       </svg>
     ),
@@ -71,19 +112,25 @@ const features = [
     title: 'Facturation par abonnement',
     description:
       '15 jours d’essai gratuit puis un abonnement mensuel, avec rappels automatiques avant chaque échéance.',
+    badgeBg: 'bg-[#d08a1c]/10',
+    badgeText: 'text-[#d08a1c]',
+    cardBg: 'bg-[#d08a1c]/[0.04]',
+    cardBorder: 'border-[#d08a1c]/15 hover:border-[#d08a1c]/40',
+    // Receipt (zigzag edge) — reads as "facture/reçu", not a generic rectangle.
     icon: (
       <svg viewBox="0 0 24 24" fill="none" className="h-5 w-5">
-        <rect
-          x="3.5"
-          y="5.5"
-          width="17"
-          height="13"
-          rx="1.5"
+        <path
+          d="M6 3.5h12v16.5l-2-1.3-2 1.3-2-1.3-2 1.3-2-1.3-2 1.3V3.5Z"
           stroke="currentColor"
-          strokeWidth="1.6"
+          strokeWidth="1.5"
+          strokeLinejoin="round"
         />
-        <path d="M3.5 9.5h17" stroke="currentColor" strokeWidth="1.6" />
-        <path d="M6.5 14h4" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" />
+        <path
+          d="M8.5 8h7M8.5 11.5h7M8.5 15h4"
+          stroke="currentColor"
+          strokeWidth="1.5"
+          strokeLinecap="round"
+        />
       </svg>
     ),
   },
@@ -91,6 +138,11 @@ const features = [
     title: 'Commentaires & support',
     description:
       'Votre équipe remonte un avis ou un incident en un clic ; l’équipe support répond directement dans l’application.',
+    badgeBg: 'bg-[#7c5cd6]/10',
+    badgeText: 'text-[#7c5cd6]',
+    cardBg: 'bg-[#7c5cd6]/[0.04]',
+    cardBorder: 'border-[#7c5cd6]/15 hover:border-[#7c5cd6]/40',
+    // Same speech-bubble-with-dots used for "Commentaires" in AppHeader.
     icon: (
       <svg viewBox="0 0 24 24" fill="none" className="h-5 w-5">
         <path
@@ -100,6 +152,9 @@ const features = [
           strokeLinecap="round"
           strokeLinejoin="round"
         />
+        <circle cx="8.6" cy="11.2" r="0.9" fill="currentColor" />
+        <circle cx="12" cy="11.2" r="0.9" fill="currentColor" />
+        <circle cx="15.4" cy="11.2" r="0.9" fill="currentColor" />
       </svg>
     ),
   },
@@ -234,7 +289,7 @@ export default function Home() {
               Conçu pour les CSRéf &amp; centres de santé
             </span>
             <h1 className="mt-4 text-3xl font-bold tracking-tight text-[#0b0b0b] sm:text-4xl lg:text-5xl">
-              La gestion de votre centre de santé, simplifiée.
+              Le pilotage numérique de votre centre de santé, simplifié.
             </h1>
             <p className="mt-4 max-w-xl text-base text-[#52514e] sm:text-lg">
               MediAfrica centralise les dossiers patients, les consultations et les registres
@@ -324,10 +379,12 @@ export default function Home() {
             {features.map((f, i) => (
               <div
                 key={f.title}
-                className="animate-fade-in-up rounded-lg border border-[#e1e0d9] p-5 transition-shadow duration-300 hover:-translate-y-1 hover:border-[#2a78d6]/30 hover:shadow-md"
+                className={`animate-fade-in-up rounded-lg border ${f.cardBorder} ${f.cardBg} p-5 transition-shadow duration-300 hover:-translate-y-1 hover:shadow-md`}
                 style={{ animationDelay: `${i * 80}ms` }}
               >
-                <div className="flex h-9 w-9 items-center justify-center rounded-md bg-[#2a78d6]/10 text-[#2a78d6]">
+                <div
+                  className={`flex h-9 w-9 items-center justify-center rounded-md ${f.badgeBg} ${f.badgeText}`}
+                >
                   {f.icon}
                 </div>
                 <h3 className="mt-4 text-sm font-semibold text-[#0b0b0b]">{f.title}</h3>

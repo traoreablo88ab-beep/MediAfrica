@@ -32,6 +32,7 @@ const CreateMaterniteBody = z.object({
   dpa: z.coerce.date().optional(),
   ddr: z.coerce.date().optional(),
   statutMatrimonial: z.enum(['Célibataire', 'Marié(e)', 'Divorcé(e)', 'Veuf/Veuve']).optional(),
+  profession: z.string().trim().optional(),
   observations: z.string().trim().optional(),
 
   // CPN
@@ -104,11 +105,18 @@ const CreateMaterniteBody = z.object({
 
   // CPoN
   cponNumeroVisite: z.number().int().positive().optional(),
+  cponTypeCas: z.enum(['NC', 'AC']).optional(),
+  dateAccouchementCpon: z.coerce.date().optional(),
   joursPostPartum: z.number().int().min(0).optional(),
+  etatSeins: z.enum(['Normal', 'Anormal']).optional(),
+  etatConjonctives: z.string().trim().optional(),
+  involutionUterine: z.string().trim().optional(),
+  etatLochies: z.enum(['Normal', 'Anormal']).optional(),
   etatPerinee: z.enum(['Normal', 'Déhiscence', 'Infecté']).optional(),
+  etatCol: z.enum(['Normal', 'Anormal']).optional(),
   allaitement: z.enum(['Exclusif', 'Mixte', 'Aucun']).optional(),
   planificationFamiliale: z.string().trim().optional(),
-  etatNouveauNeCpon: z.string().trim().optional(),
+  etatNouveauNeCpon: z.enum(['Bien portant', 'Malade', 'Décédé']).optional(),
   vaccinationBcgFait: z.boolean().optional(),
 });
 
@@ -179,6 +187,7 @@ export async function POST(
         ...(d.dpa !== undefined ? { dpa: d.dpa } : {}),
         ...(d.ddr !== undefined ? { ddr: d.ddr } : {}),
         ...(d.statutMatrimonial ? { statutMatrimonial: d.statutMatrimonial } : {}),
+        ...(d.profession ? { profession: d.profession } : {}),
         ...(d.observations ? { observations: d.observations } : {}),
 
         ...(d.cpnNumeroVisite !== undefined ? { cpnNumeroVisite: d.cpnNumeroVisite } : {}),
@@ -272,8 +281,17 @@ export async function POST(
         ...(d.placentaComplet !== undefined ? { placentaComplet: d.placentaComplet } : {}),
 
         ...(d.cponNumeroVisite !== undefined ? { cponNumeroVisite: d.cponNumeroVisite } : {}),
+        ...(d.cponTypeCas ? { cponTypeCas: d.cponTypeCas } : {}),
+        ...(d.dateAccouchementCpon !== undefined
+          ? { dateAccouchementCpon: d.dateAccouchementCpon }
+          : {}),
         ...(d.joursPostPartum !== undefined ? { joursPostPartum: d.joursPostPartum } : {}),
+        ...(d.etatSeins ? { etatSeins: d.etatSeins } : {}),
+        ...(d.etatConjonctives ? { etatConjonctives: d.etatConjonctives } : {}),
+        ...(d.involutionUterine ? { involutionUterine: d.involutionUterine } : {}),
+        ...(d.etatLochies ? { etatLochies: d.etatLochies } : {}),
         ...(d.etatPerinee ? { etatPerinee: d.etatPerinee } : {}),
+        ...(d.etatCol ? { etatCol: d.etatCol } : {}),
         ...(d.allaitement ? { allaitement: d.allaitement } : {}),
         ...(d.planificationFamiliale ? { planificationFamiliale: d.planificationFamiliale } : {}),
         ...(d.etatNouveauNeCpon ? { etatNouveauNeCpon: d.etatNouveauNeCpon } : {}),
