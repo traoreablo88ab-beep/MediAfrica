@@ -3,14 +3,16 @@
 import { useEffect, useState, type FormEvent } from 'react';
 import { useRouter } from 'next/navigation';
 import { api, ApiError } from '@/lib/api';
+import { friendlyError } from '@/lib/errorMessages';
 import { useAuth } from '@/contexts/AuthContext';
 import { Logo } from '@/components/Logo';
 import { Wordmark } from '@/components/Wordmark';
 
 function errorMessage(err: unknown): string {
-  if (!(err instanceof ApiError)) return 'Erreur inconnue. Réessayez.';
-  if (err.code === 'ALREADY_HAS_ORGANIZATION') return 'Un centre est déjà lié à ce compte.';
-  return err.message || 'Erreur inconnue. Réessayez.';
+  if (err instanceof ApiError && err.code === 'ALREADY_HAS_ORGANIZATION') {
+    return 'Un centre est déjà lié à ce compte.';
+  }
+  return friendlyError(err, 'Erreur inconnue. Réessayez.');
 }
 
 export default function OnboardingCentrePage() {
