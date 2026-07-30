@@ -4,6 +4,7 @@ import { VerifyEmailView } from './VerifyEmailView';
 export const metadata: Metadata = {
   title: 'Vérifier votre email',
   description: 'Confirmez votre adresse email pour activer votre compte MediAfrica.',
+  robots: { index: false, follow: false },
 };
 
 export default function VerifyEmailPage() {

@@ -4,6 +4,7 @@ import { ResetPasswordView } from './ResetPasswordView';
 export const metadata: Metadata = {
   title: 'Réinitialiser le mot de passe',
   description: 'Choisissez un nouveau mot de passe pour votre compte MediAfrica.',
+  robots: { index: false, follow: false },
 };
 
 export default function ResetPasswordPage() {
