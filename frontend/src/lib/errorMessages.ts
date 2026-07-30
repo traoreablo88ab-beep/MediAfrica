@@ -18,6 +18,17 @@ const FIELD_LABELS: Record<string, string> = {
   code: 'Code de vérification',
 };
 
+// A handful of stable error codes come back with an English message
+// hardcoded server-side (middleware/index.ts is off-limits — see
+// CLAUDE.md's protected-files list — so the fix lives here instead).
+// Codes not listed here fall through to the server's own message.
+const CODE_MESSAGES: Record<string, string> = {
+  NO_ORGANIZATION: 'Votre compte n’est pas encore rattaché à un centre de santé.',
+  ORGANIZATION_NOT_FOUND: 'Centre de santé introuvable.',
+  ADMIN_REQUIRED: 'Accès réservé aux administrateurs.',
+  ORG_ROLE_INSUFFICIENT: 'Votre rôle ne permet pas cette action.',
+};
+
 interface ZodIssueLike {
   path?: unknown;
   message?: unknown;
@@ -53,6 +64,9 @@ export function friendlyError(
     const fromIssues = formatIssues(err.body.issues);
     if (fromIssues) return fromIssues;
   }
+
+  const codeMessage = err.code ? CODE_MESSAGES[err.code] : undefined;
+  if (codeMessage) return codeMessage;
 
   const serverMessage = err.body.message;
   if (typeof serverMessage === 'string' && serverMessage.trim()) return serverMessage;
