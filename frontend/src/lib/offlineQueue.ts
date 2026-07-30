@@ -14,6 +14,7 @@
 import { useCallback, useEffect, useState } from 'react';
 import { openDB, type IDBPDatabase } from 'idb';
 import { api, ApiError } from './api';
+import { friendlyError } from './errorMessages';
 
 const DB_NAME = 'mediafrica-offline-queue';
 const DB_VERSION = 1;
@@ -119,7 +120,7 @@ export async function drainQueue(): Promise<void> {
         await removeFromQueue(item.id);
       } catch (err) {
         if (err instanceof ApiError && err.status !== 0) {
-          await markFailed(item, err.message);
+          await markFailed(item, friendlyError(err, 'Échec de la synchronisation.'));
         }
         // status === 0 → still offline / request never reached the server;
         // leave pending, the next drain (reconnect or manual sync) retries it.

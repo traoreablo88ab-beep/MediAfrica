@@ -2,14 +2,15 @@
 
 import { useEffect, useState, useCallback } from 'react';
 import Link from 'next/link';
-import { api, ApiError } from '@/lib/api';
+import { api } from '@/lib/api';
+import { friendlyError } from '@/lib/errorMessages';
 import { AppHeader } from '@/components/AppHeader';
 import { Skeleton } from '@/components/Skeleton';
 import { useClinicName } from '@/lib/useClinicName';
 import { MonthPicker } from '@/components/MonthPicker';
 import { downloadRegisterPdf } from '@/lib/exportPdf';
 
-const REGISTER_COLUMN_COUNT = 27;
+const REGISTER_COLUMN_COUNT = 28;
 
 interface MaterniteRow {
   id: string;
@@ -142,6 +143,7 @@ function buildRegisterRows(rows: MaterniteRow[]): { headers: string[]; lines: st
     'Albendazole/Mébendazole',
     'Maladie détectée',
     "État de l'enfant",
+    'BCG',
     'Observations',
     'Soignant',
   ];
@@ -171,6 +173,7 @@ function buildRegisterRows(rows: MaterniteRow[]): { headers: string[]; lines: st
     m.albendazoleMebendazole ? 'Oui' : '',
     m.maladieDetectee ?? '',
     m.etatNouveauNeCpon ?? '',
+    m.vaccinationBcgFait ? 'Oui' : '',
     m.observations ?? '',
     m.providerName ?? '',
   ]);
@@ -234,13 +237,7 @@ export default function RegistreMaterniteCponPage() {
       all.sort((a, b) => a.date.localeCompare(b.date));
       setItems(all);
     } catch (err) {
-      setError(
-        err instanceof ApiError
-          ? err.status === 401
-            ? 'Vous devez être connecté pour voir cette page.'
-            : err.message
-          : 'Erreur inconnue',
-      );
+      setError(friendlyError(err, 'Erreur inconnue.'));
     } finally {
       setLoading(false);
     }
@@ -264,7 +261,7 @@ export default function RegistreMaterniteCponPage() {
       await api('/api/registres/maternite/cpon/close', { method: 'POST', body: { month } });
       await load(month);
     } catch (err) {
-      setError(err instanceof ApiError ? err.message : 'Erreur inconnue');
+      setError(friendlyError(err, 'Erreur inconnue.'));
     } finally {
       setClosing(false);
     }
@@ -402,6 +399,7 @@ export default function RegistreMaterniteCponPage() {
                 <th className="px-3 py-2 font-medium">Albendazole/Mébendazole</th>
                 <th className="px-3 py-2 font-medium">Maladie détectée</th>
                 <th className="px-3 py-2 font-medium">État de l&rsquo;enfant</th>
+                <th className="px-3 py-2 font-medium">BCG</th>
                 <th className="px-3 py-2 font-medium">Observations</th>
                 <th className="px-3 py-2 font-medium">Soignant</th>
               </tr>
@@ -458,6 +456,7 @@ export default function RegistreMaterniteCponPage() {
                   <td className="px-3 py-2 text-center">{m.albendazoleMebendazole ? '✓' : ''}</td>
                   <td className="px-3 py-2 text-[#52514e]">{m.maladieDetectee ?? '—'}</td>
                   <td className="px-3 py-2 text-[#52514e]">{m.etatNouveauNeCpon ?? '—'}</td>
+                  <td className="px-3 py-2 text-center">{m.vaccinationBcgFait ? '✓' : ''}</td>
                   <td className="px-3 py-2 text-[#52514e]">{m.observations ?? '—'}</td>
                   <td className="px-3 py-2 text-[#52514e]">{m.providerName ?? '—'}</td>
                 </tr>
