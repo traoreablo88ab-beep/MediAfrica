@@ -48,7 +48,7 @@
   "devDependencies": {
     "@tailwindcss/postcss": "^4.3.0",
     "@types/bcryptjs": "^3.0.0",
-    "@types/heic-convert": "^2.1.0",
+    "@types/heic-convert": "2.1.1",
     "@types/node": "^20.17.10",
     "@types/react": "^19.2.0",
     "@types/react-dom": "^19.2.0",

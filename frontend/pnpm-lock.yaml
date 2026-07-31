@@ -76,7 +76,7 @@ importers:
         specifier: ^3.0.0
         version: 3.0.0
       '@types/heic-convert':
-        specifier: ^2.1.0
+        specifier: 2.1.1
         version: 2.1.1
       '@types/node':
         specifier: ^20.17.10

@@ -124,7 +124,7 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
     if (HEIC_MIMES.has(storedMime)) {
       try {
         const converted = await heicConvert({
-          buffer: buf as unknown as ArrayBufferLike,
+          buffer: buf,
           format: 'JPEG',
           quality: 0.9,
         });
