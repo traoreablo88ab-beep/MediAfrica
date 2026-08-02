@@ -343,7 +343,7 @@
     },
 
     "subscriptions-billing": {
-      "description": "SaaS subscription billing for clinics — Plan/Subscription models, 15-day trial, daily billing cron, 4-stage reminder ladder (J-7/J-5/J-3/overdue+1), requireActiveSubscription() access-guard applied to every patients/consultations/registres/maternite route, /facturation UI, admin subscriptions+plans back-office.",
+      "description": "SaaS subscription billing for clinics — Plan/Subscription models, 30-day trial, daily billing cron, 4-stage reminder ladder (J-7/J-5/J-3/overdue+1), requireActiveSubscription() access-guard applied to every patients/consultations/registres/maternite route, /facturation UI, admin subscriptions+plans back-office.",
       "prune_complexity": "with-care",
       "$prune_complexity_reason": "requireActiveSubscription() is called from inside patients-consultations-registres route handlers (not just from subscriptions/ itself) — pruning means editing every one of those call sites, not just deleting the subscriptions/ lib. Only prune for a single-tenant / non-SaaS install with no billing concept.",
       "owns": {

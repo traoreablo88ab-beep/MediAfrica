@@ -111,7 +111,7 @@ const features = [
   {
     title: 'Facturation par abonnement',
     description:
-      '15 jours d’essai gratuit puis un abonnement mensuel, avec rappels automatiques avant chaque échéance.',
+      '30 jours d’essai gratuit puis un abonnement mensuel, avec rappels automatiques avant chaque échéance.',
     badgeBg: 'bg-[#d08a1c]/10',
     badgeText: 'text-[#d08a1c]',
     cardBg: 'bg-[#d08a1c]/[0.04]',
@@ -203,7 +203,7 @@ const testimonials = [
 const faqItems = [
   {
     q: 'Ai-je besoin d’une carte bancaire pour commencer ?',
-    a: 'Non. Chaque centre bénéficie de 15 jours d’essai gratuit dès l’inscription, sans engagement ni informations de paiement à fournir au départ.',
+    a: 'Non. Chaque centre bénéficie de 30 jours d’essai gratuit dès l’inscription, sans engagement ni informations de paiement à fournir au départ.',
   },
   {
     q: 'Peut-on exporter les registres mensuels ?',
@@ -313,7 +313,7 @@ export default function Home() {
             <div className="mt-6 flex flex-wrap items-center gap-x-5 gap-y-2 text-xs text-[#52514e]">
               <span className="flex items-center gap-1.5">
                 <span className="text-[#0ca30c]">✓</span>
-                15 jours d’essai gratuit
+                30 jours d’essai gratuit
               </span>
               <span className="flex items-center gap-1.5">
                 <span className="text-[#0ca30c]">✓</span>
@@ -471,7 +471,7 @@ export default function Home() {
           <div className="mt-8 rounded-xl border border-[#e1e0d9] bg-white p-8 text-left shadow-sm">
             <div className="flex flex-col gap-2.5">
               {[
-                '15 jours d’essai gratuit, sans carte bancaire',
+                '30 jours d’essai gratuit, sans carte bancaire',
                 'Dossiers patients, consultations, registres & maternité',
                 'Facturation par abonnement avec rappels automatiques',
                 'Commentaires & support intégrés',
