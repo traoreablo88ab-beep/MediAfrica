@@ -15,7 +15,8 @@ export type OutboxEvent =
   | EmailVerificationCodeEvent
   | EmailPasswordResetEvent
   | EmailSubscriptionRenewalDueEvent
-  | EmailSubscriptionReminderEvent;
+  | EmailSubscriptionReminderEvent
+  | EmailAdminPromotedEvent;
 
 export interface NotificationPaymentReceivedEvent {
   kind: 'notification.payment_received';
@@ -90,6 +91,19 @@ export interface EmailSubscriptionReminderEvent {
     clinicName: string;
     billingUrl: string;
     stage: 'j7' | 'j5' | 'j3' | 'overdue1';
+  };
+}
+
+/**
+ * Emitted by PATCH /api/admin/users/[id]/role when a USER is promoted to
+ * ADMIN or SUPERADMIN. Consumed by the email-queue cron (calls
+ * adminPromotedEmail() to render).
+ */
+export interface EmailAdminPromotedEvent {
+  kind: 'email.admin_promoted';
+  payload: {
+    to: string;
+    role: 'ADMIN' | 'SUPERADMIN';
   };
 }
 

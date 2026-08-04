@@ -184,6 +184,15 @@ async function dispatchEvent(deps: OutboxDispatcherDeps, event: OutboxEvent): Pr
       await deps.emailQueue.enqueue({ to, subject: tpl.subject, html: tpl.html });
       return;
     }
+    case 'email.admin_promoted': {
+      // Emitted by PATCH /api/admin/users/[id]/role on USER -> ADMIN/SUPERADMIN.
+      if (!deps.emailQueue) throw new Error('email queue not configured');
+      const { adminPromotedEmail } = await import('../auth/email-templates');
+      const { to, role } = event.payload;
+      const tpl = adminPromotedEmail({ role });
+      await deps.emailQueue.enqueue({ to, subject: tpl.subject, html: tpl.html });
+      return;
+    }
     default: {
       // Exhaustive check — TS will yell if we add a new variant and forget it.
       const _exhaustive: never = event;

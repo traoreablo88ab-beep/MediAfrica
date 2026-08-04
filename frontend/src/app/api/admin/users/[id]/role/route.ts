@@ -24,6 +24,7 @@ import { prisma } from '@/lib/server/prisma';
 import { logAdminAction } from '@/lib/server/admin/audit';
 import { enforceAdminRateLimit } from '@/lib/server/middleware/rate-limit-by-userid';
 import { makeRequestContext, withRequestContext } from '@/lib/server/observability/request-context';
+import { enqueueOutbox } from '@/lib/server/outbox';
 
 const Body = z.object({
   role: z.enum(['USER', 'ADMIN', 'SUPERADMIN']),
@@ -61,7 +62,7 @@ export async function PATCH(
     const result: Discriminator = await prisma.$transaction(async (tx) => {
       const target = await tx.user.findUnique({
         where: { id },
-        select: { id: true, role: true },
+        select: { id: true, role: true, email: true },
       });
       if (!target) return { kind: 'NOT_FOUND' as const };
 
@@ -87,6 +88,18 @@ export async function PATCH(
         targetId: id,
         metadata: { from: target.role, to: parsed.data.role },
       });
+
+      // Welcome email only on a genuine promotion into admin territory —
+      // not on ADMIN<->SUPERADMIN lateral moves or demotions back to USER.
+      if (
+        target.role === 'USER' &&
+        (parsed.data.role === 'ADMIN' || parsed.data.role === 'SUPERADMIN')
+      ) {
+        await enqueueOutbox(tx, {
+          kind: 'email.admin_promoted',
+          payload: { to: target.email, role: parsed.data.role },
+        });
+      }
 
       return { kind: 'OK' as const, user: updated };
     });

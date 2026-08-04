@@ -40,6 +40,10 @@ export interface ResetPasswordEmailArgs {
   expiresAt?: string;
 }
 
+export interface AdminPromotedEmailArgs {
+  role: 'ADMIN' | 'SUPERADMIN';
+}
+
 /**
  * Minimal HTML escape for template interpolation. Covers the OWASP-recommended
  * five-character set (`& < > " '`). Apply to EVERY user-controlled (or
@@ -96,5 +100,14 @@ export function resetPasswordEmail(args: ResetPasswordEmailArgs): EmailTemplate 
     subject: 'Reset your password',
     html: `<p>Hi,</p><p>Your password reset code is <strong>${code}</strong>.</p><p>It expires ${ttl}. If you did not request this, ignore this email.</p>`,
     text: `Your password reset code is ${args.code}. It expires ${ttl}. If you did not request this, ignore this email.`,
+  };
+}
+
+export function adminPromotedEmail(args: AdminPromotedEmailArgs): EmailTemplate {
+  const roleLabel = args.role === 'SUPERADMIN' ? 'Superadmin' : 'Admin';
+  return {
+    subject: `You've been made ${roleLabel}`,
+    html: `<p>Hi,</p><p>You have been granted <strong>${roleLabel}</strong> access on MediAfrica. You can now access the back-office at <strong>/admin</strong>.</p><p>If you weren't expecting this, contact your platform administrator.</p>`,
+    text: `You have been granted ${roleLabel} access on MediAfrica. You can now access the back-office at /admin. If you weren't expecting this, contact your platform administrator.`,
   };
 }
