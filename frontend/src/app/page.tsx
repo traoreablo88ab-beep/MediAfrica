@@ -295,10 +295,10 @@ export default function Home() {
               Connexion
             </Link>
             <Link
-              href="/login"
+              href="/signup"
               className="whitespace-nowrap rounded-md bg-[#2a78d6] px-4 py-2 text-sm font-medium text-white hover:bg-[#256abf]"
             >
-              Se connecter
+              Essai gratuit
             </Link>
           </div>
         </div>
@@ -322,10 +322,10 @@ export default function Home() {
             </p>
             <div className="mt-8 flex flex-col gap-3 sm:flex-row">
               <Link
-                href="/login"
+                href="/signup"
                 className="rounded-md bg-[#2a78d6] px-5 py-2.5 text-center text-sm font-medium text-white hover:-translate-y-0.5 hover:bg-[#256abf] hover:shadow-md"
               >
-                Se connecter
+                Essai gratuit
               </Link>
               <a
                 href="#fonctionnalites"
@@ -541,10 +541,10 @@ export default function Home() {
               ))}
             </div>
             <Link
-              href="/login"
+              href="/signup"
               className="mt-6 block rounded-md bg-[#2a78d6] px-5 py-2.5 text-center text-sm font-medium text-white hover:bg-[#256abf]"
             >
-              Se connecter
+              Commencer l’essai gratuit
             </Link>
           </div>
         </div>
@@ -569,13 +569,13 @@ export default function Home() {
             Prêt à moderniser votre centre de santé ?
           </h2>
           <p className="mt-3 text-sm text-white/80 sm:text-base">
-            Connectez-vous avec votre compte d’équipe pour accéder au tableau de bord.
+            30 jours d’essai gratuit, sans carte bancaire et sans engagement.
           </p>
           <Link
-            href="/login"
+            href="/signup"
             className="mt-6 inline-block rounded-md bg-white px-6 py-2.5 text-sm font-medium text-[#2a78d6] hover:-translate-y-0.5 hover:bg-white/90 hover:shadow-lg"
           >
-            Se connecter
+            Essai gratuit
           </Link>
         </div>
       </section>
