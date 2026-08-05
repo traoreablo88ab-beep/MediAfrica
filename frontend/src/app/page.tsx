@@ -7,6 +7,7 @@
 // reused everywhere, so a second accent would clash across the app).
 
 import type { Metadata } from 'next';
+import Image from 'next/image';
 import Link from 'next/link';
 import { Logo } from '@/components/Logo';
 import { Wordmark } from '@/components/Wordmark';
@@ -197,6 +198,29 @@ const testimonials = [
     quote:
       'Les registres mensuels s’impriment et s’exportent en un clic, plus besoin de tout ressaisir à la main.',
     role: 'Agent de santé',
+  },
+];
+
+const team = [
+  {
+    name: 'Abel GUINDO',
+    role: 'Master en Nutrition, Spécialiste en Nutrition',
+    photo: '/images/team/abel-guindo.png',
+  },
+  {
+    name: 'Dr HAIDARA',
+    role: 'Médecin Généraliste à compétence Chirurgicale',
+    photo: '/images/team/dr-haidara.png',
+  },
+  {
+    name: 'Arabiétou IDRISSA',
+    role: 'Sage-Femme',
+    photo: '/images/team/arabietou-idrissa.png',
+  },
+  {
+    name: 'Esaie KODIO',
+    role: 'Technicien Supérieur en Laboratoire',
+    photo: '/images/team/esaie-kodio.png',
   },
 ];
 
@@ -432,6 +456,40 @@ export default function Home() {
                 </div>
                 <h3 className="mt-3 text-sm font-semibold text-[#0b0b0b]">{s.title}</h3>
                 <p className="mt-1.5 text-sm text-[#52514e]">{s.detail}</p>
+              </div>
+            ))}
+          </div>
+        </div>
+      </section>
+
+      {/* ─── Team ───────────────────────────────────────────────────── */}
+      <section className="border-t border-[#e1e0d9] bg-white py-16">
+        <div className="mx-auto max-w-7xl px-6">
+          <h2 className="text-center text-2xl font-bold text-[#0b0b0b] sm:text-3xl">
+            Une équipe de terrain, pas juste des développeurs
+          </h2>
+          <p className="mx-auto mt-3 max-w-xl text-center text-sm text-[#52514e] sm:text-base">
+            MediAfrica est conçu avec des professionnels de santé qui connaissent le quotidien d’un
+            centre de santé.
+          </p>
+          <div className="mt-10 grid grid-cols-2 gap-5 sm:grid-cols-4">
+            {team.map((member, i) => (
+              <div
+                key={member.name}
+                className="animate-fade-in-up flex flex-col items-center text-center"
+                style={{ animationDelay: `${i * 80}ms` }}
+              >
+                <div className="relative h-32 w-32 overflow-hidden rounded-full border border-[#e1e0d9] bg-[#f9f9f7] sm:h-36 sm:w-36">
+                  <Image
+                    src={member.photo}
+                    alt={member.name}
+                    fill
+                    sizes="(min-width: 640px) 144px, 128px"
+                    className="object-cover object-top"
+                  />
+                </div>
+                <h3 className="mt-4 text-sm font-semibold text-[#0b0b0b]">{member.name}</h3>
+                <p className="mt-1 text-xs text-[#52514e]">{member.role}</p>
               </div>
             ))}
           </div>
