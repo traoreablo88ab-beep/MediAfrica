@@ -203,6 +203,11 @@ const testimonials = [
 
 const team = [
   {
+    name: 'Dr Abdoulbaki I DIALLO',
+    role: 'Médecin-Chef',
+    photo: '/images/team/abdoulbaki-diallo.jpg',
+  },
+  {
     name: 'Abel GUINDO',
     role: 'Master en Nutrition, Spécialiste en Nutrition',
     photo: '/images/team/abel-guindo.png',
@@ -472,7 +477,7 @@ export default function Home() {
             MediAfrica est conçu avec des professionnels de santé qui connaissent le quotidien d’un
             centre de santé.
           </p>
-          <div className="mt-10 grid grid-cols-2 gap-5 sm:grid-cols-4">
+          <div className="mt-10 grid grid-cols-2 gap-5 sm:grid-cols-5">
             {team.map((member, i) => (
               <div
                 key={member.name}
