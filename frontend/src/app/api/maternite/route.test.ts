@@ -34,6 +34,9 @@ function materniteRow(overrides: Partial<Record<string, unknown>> = {}) {
     dpa: null,
     ddr: null,
     observations: null,
+    indigent: null,
+    telephoneContact: null,
+    localisationPrecise: null,
     cpnNumeroVisite: null,
     ageGestationnelSemaines: null,
     poidsKg: null,
@@ -142,6 +145,21 @@ describe('GET /api/maternite', () => {
     });
     expect(body.items[0].providerName).toBe('Amadou Diallo');
     expect(body.items[0].type).toBe('CPN');
+  });
+
+  it('serializes indigent/telephoneContact/localisationPrecise', async () => {
+    prismaMock.maternite.findMany.mockResolvedValue([
+      materniteRow({
+        indigent: true,
+        telephoneContact: '76 00 00 00',
+        localisationPrecise: 'Quartier Sabalibougou, rue 214',
+      }),
+    ] as never);
+    const res = await GET(makeGet('http://test/api/maternite?type=CPN'));
+    const body = await res.json();
+    expect(body.items[0].indigent).toBe(true);
+    expect(body.items[0].telephoneContact).toBe('76 00 00 00');
+    expect(body.items[0].localisationPrecise).toBe('Quartier Sabalibougou, rue 214');
   });
 
   it('providerName is null when the record has no provider', async () => {

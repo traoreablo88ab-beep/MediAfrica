@@ -57,6 +57,9 @@ export default function NewMaternitePage() {
   const [statutMatrimonial, setStatutMatrimonial] = useState('');
   const [profession, setProfession] = useState('');
   const [observations, setObservations] = useState('');
+  const [indigent, setIndigent] = useState(false);
+  const [telephoneContact, setTelephoneContact] = useState('');
+  const [localisationPrecise, setLocalisationPrecise] = useState('');
 
   // CPN
   const [cpnNumeroVisite, setCpnNumeroVisite] = useState('');
@@ -175,6 +178,13 @@ export default function NewMaternitePage() {
           ...(statutMatrimonial ? { statutMatrimonial } : {}),
           ...(profession ? { profession } : {}),
           ...(observations ? { observations } : {}),
+          ...(type !== 'CPON'
+            ? {
+                indigent,
+                ...(telephoneContact ? { telephoneContact } : {}),
+                ...(localisationPrecise ? { localisationPrecise } : {}),
+              }
+            : {}),
 
           ...(type === 'CPN'
             ? {
@@ -431,6 +441,38 @@ export default function NewMaternitePage() {
                   />
                 </Field>
               </div>
+              {type !== 'CPON' && (
+                <>
+                  <Field label="N° de téléphone">
+                    <input
+                      type="tel"
+                      className={inputClass}
+                      placeholder="Numéro de la patiente ou d'un accompagnant"
+                      value={telephoneContact}
+                      onChange={(e) => setTelephoneContact(e.target.value)}
+                    />
+                  </Field>
+                  <Field label="Localisation précise">
+                    <input
+                      className={inputClass}
+                      placeholder="Quartier, rue, repère"
+                      value={localisationPrecise}
+                      onChange={(e) => setLocalisationPrecise(e.target.value)}
+                    />
+                  </Field>
+                  <div className="sm:col-span-3">
+                    <label className="flex items-center gap-2 text-sm text-[#0b0b0b]">
+                      <input
+                        type="checkbox"
+                        checked={indigent}
+                        onChange={(e) => setIndigent(e.target.checked)}
+                        className="h-4 w-4 rounded border-[#e1e0d9] text-[#2a78d6] focus:ring-[#2a78d6]"
+                      />
+                      Patiente indigente
+                    </label>
+                  </div>
+                </>
+              )}
             </div>
           </div>
 

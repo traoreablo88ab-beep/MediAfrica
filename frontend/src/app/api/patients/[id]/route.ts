@@ -1,6 +1,8 @@
-// GET /api/patients/[id] — full patient record + consultation history and
+// GET /api/patients/[id] — full patient record + consultation history,
 // maternité history (CPN/Accouchement only — CPoN stays scaffolded/hidden
-// for V2/V3), most recent 20 each, provider name included via relation.
+// for V2/V3), nutrition history, vaccination history, hospitalisation
+// history and planification familiale history, most recent 20 each,
+// provider name included via relation.
 // PATCH /api/patients/[id] — partial update of the patient's own fields
 // (identity, contact, medical background). Never touches dossierNumber or
 // consultations.
@@ -18,6 +20,10 @@ import { makeRequestContext, withRequestContext } from '@/lib/server/observabili
 
 const CONSULTATION_HISTORY_LIMIT = 20;
 const MATERNITE_HISTORY_LIMIT = 20;
+const NUTRITION_HISTORY_LIMIT = 20;
+const VACCINATION_HISTORY_LIMIT = 20;
+const HOSPITALISATION_HISTORY_LIMIT = 20;
+const PF_HISTORY_LIMIT = 20;
 
 export async function GET(
   req: NextRequest,
@@ -49,6 +55,26 @@ export async function GET(
           take: MATERNITE_HISTORY_LIMIT,
           include: { provider: { select: { name: true } } },
         },
+        nutritions: {
+          orderBy: { date: 'desc' },
+          take: NUTRITION_HISTORY_LIMIT,
+          include: { provider: { select: { name: true } } },
+        },
+        vaccinations: {
+          orderBy: { date: 'desc' },
+          take: VACCINATION_HISTORY_LIMIT,
+          include: { provider: { select: { name: true } } },
+        },
+        hospitalisations: {
+          orderBy: { dateHeureEntree: 'desc' },
+          take: HOSPITALISATION_HISTORY_LIMIT,
+          include: { provider: { select: { name: true } } },
+        },
+        planificationsFamiliales: {
+          orderBy: { date: 'desc' },
+          take: PF_HISTORY_LIMIT,
+          include: { provider: { select: { name: true } } },
+        },
       },
     });
     if (!patient) {
@@ -58,7 +84,15 @@ export async function GET(
       );
     }
 
-    const { consultations, maternites, ...fields } = patient;
+    const {
+      consultations,
+      maternites,
+      nutritions,
+      vaccinations,
+      hospitalisations,
+      planificationsFamiliales,
+      ...fields
+    } = patient;
     return NextResponse.json(
       {
         ...fields,
@@ -83,6 +117,9 @@ export async function GET(
           mdoMaladie: c.mdoMaladie,
           tdr: c.tdr,
           ge: c.ge,
+          indigent: c.indigent,
+          telephoneContact: c.telephoneContact,
+          localisationPrecise: c.localisationPrecise,
           providerName: c.provider?.name ?? null,
         })),
         maternites: maternites.map((m) => ({
@@ -97,7 +134,77 @@ export async function GET(
           sexeNouveauNe: m.sexeNouveauNe,
           poidsNaissanceG: m.poidsNaissanceG,
           observations: m.observations,
+          indigent: m.indigent,
+          telephoneContact: m.telephoneContact,
+          localisationPrecise: m.localisationPrecise,
           providerName: m.provider?.name ?? null,
+        })),
+        nutritions: nutritions.map((n) => ({
+          id: n.id,
+          date: n.date.toISOString(),
+          typeCas: n.typeCas,
+          poidsKg: n.poidsKg,
+          tailleCm: n.tailleCm,
+          perimetreBrachialCm: n.perimetreBrachialCm,
+          oedemes: n.oedemes,
+          classification: n.classification,
+          priseEnCharge: n.priseEnCharge,
+          evolution: n.evolution,
+          prochainRdv: n.prochainRdv?.toISOString() ?? null,
+          observations: n.observations,
+          providerName: n.provider?.name ?? null,
+        })),
+        vaccinations: vaccinations.map((v) => ({
+          id: v.id,
+          date: v.date.toISOString(),
+          antigene: v.antigene,
+          numeroDose: v.numeroDose,
+          siteInjection: v.siteInjection,
+          dejaSousContraception: v.dejaSousContraception,
+          methodeContraceptivePrecedente: v.methodeContraceptivePrecedente,
+          pfppCounselingPropose: v.pfppCounselingPropose,
+          methodePfAdoptee: v.methodePfAdoptee,
+          conseilsAme: v.conseilsAme,
+          pratiqueAme: v.pratiqueAme,
+          prochainRdv: v.prochainRdv?.toISOString() ?? null,
+          observations: v.observations,
+          providerName: v.provider?.name ?? null,
+        })),
+        hospitalisations: hospitalisations.map((h) => ({
+          id: h.id,
+          dateHeureEntree: h.dateHeureEntree.toISOString(),
+          motifAdmission: h.motifAdmission,
+          service: h.service,
+          numeroHospitalisation: h.numeroHospitalisation,
+          referenceOrigine: h.referenceOrigine,
+          profession: h.profession,
+          indigent: h.indigent,
+          telephoneContact: h.telephoneContact,
+          localisationPrecise: h.localisationPrecise,
+          diagnosticPrincipal: h.diagnosticPrincipal,
+          traitementRecu: h.traitementRecu,
+          dateHeureSortie: h.dateHeureSortie?.toISOString() ?? null,
+          issue: h.issue,
+          observations: h.observations,
+          providerName: h.provider?.name ?? null,
+        })),
+        planificationsFamiliales: planificationsFamiliales.map((pf) => ({
+          id: pf.id,
+          date: pf.date.toISOString(),
+          typeVisite: pf.typeVisite,
+          methodeChoisie: pf.methodeChoisie,
+          actionMethode: pf.actionMethode,
+          nbreCyclesDistribues: pf.nbreCyclesDistribues,
+          typeUtilisateur: pf.typeUtilisateur,
+          ageDernierEnfantMois: pf.ageDernierEnfantMois,
+          pratiqueAme: pf.pratiqueAme,
+          enfantAJourVaccins: pf.enfantAJourVaccins,
+          conseilsAlimentationComplement: pf.conseilsAlimentationComplement,
+          serviceProvenance: pf.serviceProvenance,
+          ppi: pf.ppi,
+          prochainRdv: pf.prochainRdv?.toISOString() ?? null,
+          observations: pf.observations,
+          providerName: pf.provider?.name ?? null,
         })),
       },
       { headers: { 'x-request-id': reqCtx.requestId } },

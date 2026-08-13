@@ -80,6 +80,9 @@ function fullPatient() {
         mdoMaladie: null,
         tdr: 'Négatif',
         ge: null,
+        indigent: true,
+        telephoneContact: '76 00 00 00',
+        localisationPrecise: 'Quartier Sabalibougou, rue 214',
         provider: { name: 'Amadou Diallo' },
       },
     ],
@@ -96,7 +99,85 @@ function fullPatient() {
         sexeNouveauNe: null,
         poidsNaissanceG: null,
         observations: null,
+        indigent: false,
+        telephoneContact: '65 11 22 33',
+        localisationPrecise: 'Quartier Hippodrome',
         provider: { name: 'Fatoumata Sow' },
+      },
+    ],
+    nutritions: [
+      {
+        id: 'n-1',
+        date: new Date('2026-01-20T09:00:00Z'),
+        typeCas: 'NC',
+        poidsKg: 9.5,
+        tailleCm: 72,
+        perimetreBrachialCm: 11.2,
+        oedemes: 'Non',
+        classification: 'MAM',
+        priseEnCharge: 'URENAM',
+        evolution: 'En cours',
+        prochainRdv: null,
+        observations: null,
+        provider: { name: 'Amadou Diallo' },
+      },
+    ],
+    vaccinations: [
+      {
+        id: 'v-1',
+        date: new Date('2026-01-22T09:00:00Z'),
+        antigene: 'BCG',
+        numeroDose: null,
+        siteInjection: 'Bras droit',
+        dejaSousContraception: null,
+        methodeContraceptivePrecedente: null,
+        pfppCounselingPropose: null,
+        methodePfAdoptee: null,
+        conseilsAme: null,
+        pratiqueAme: null,
+        prochainRdv: null,
+        observations: null,
+        provider: { name: 'Amadou Diallo' },
+      },
+    ],
+    hospitalisations: [
+      {
+        id: 'h-1',
+        dateHeureEntree: new Date('2026-01-15T09:00:00Z'),
+        motifAdmission: 'Paludisme grave',
+        service: 'Pédiatrie',
+        numeroHospitalisation: '2026-014',
+        referenceOrigine: 'Cscom',
+        profession: 'Ménagère',
+        indigent: true,
+        telephoneContact: '76 00 00 00',
+        localisationPrecise: 'Quartier Sabalibougou, rue 214',
+        diagnosticPrincipal: 'Paludisme sévère',
+        traitementRecu: 'Artésunate IV',
+        dateHeureSortie: null,
+        issue: null,
+        observations: null,
+        provider: { name: 'Amadou Diallo' },
+      },
+    ],
+    planificationsFamiliales: [
+      {
+        id: 'pf-1',
+        date: new Date('2026-01-25T09:00:00Z'),
+        typeVisite: 'Nouvelle acceptante',
+        methodeChoisie: 'Implanon',
+        actionMethode: 'Insertion',
+        nbreCyclesDistribues: null,
+        typeUtilisateur: 'Nouveau',
+        ageDernierEnfantMois: null,
+        pratiqueAme: null,
+        enfantAJourVaccins: null,
+        conseilsAlimentationComplement: null,
+        serviceProvenance: null,
+        ppi: null,
+        prochainRdv: null,
+        observations: null,
+        provider: { name: 'Amadou Diallo' },
       },
     ],
   };
@@ -143,10 +224,38 @@ describe('GET /api/patients/[id]', () => {
     expect(body.consultations[0].mdo).toBe(false);
     expect(body.consultations[0].tdr).toBe('Négatif');
     expect(body.consultations[0].ge).toBe(null);
+    expect(body.consultations[0].indigent).toBe(true);
+    expect(body.consultations[0].telephoneContact).toBe('76 00 00 00');
+    expect(body.consultations[0].localisationPrecise).toBe('Quartier Sabalibougou, rue 214');
     expect(body.maternites).toHaveLength(1);
     expect(body.maternites[0].type).toBe('CPN');
     expect(body.maternites[0].cpnNumeroVisite).toBe(2);
     expect(body.maternites[0].providerName).toBe('Fatoumata Sow');
+    expect(body.maternites[0].indigent).toBe(false);
+    expect(body.maternites[0].telephoneContact).toBe('65 11 22 33');
+    expect(body.maternites[0].localisationPrecise).toBe('Quartier Hippodrome');
+    expect(body.nutritions).toHaveLength(1);
+    expect(body.nutritions[0].classification).toBe('MAM');
+    expect(body.nutritions[0].providerName).toBe('Amadou Diallo');
+    expect(body.vaccinations).toHaveLength(1);
+    expect(body.vaccinations[0].antigene).toBe('BCG');
+    expect(body.vaccinations[0].providerName).toBe('Amadou Diallo');
+    expect(body.vaccinations[0].conseilsAme).toBeNull();
+    expect(body.vaccinations[0].pratiqueAme).toBeNull();
+    expect(body.hospitalisations).toHaveLength(1);
+    expect(body.hospitalisations[0].motifAdmission).toBe('Paludisme grave');
+    expect(body.hospitalisations[0].dateHeureSortie).toBeNull();
+    expect(body.hospitalisations[0].numeroHospitalisation).toBe('2026-014');
+    expect(body.hospitalisations[0].referenceOrigine).toBe('Cscom');
+    expect(body.hospitalisations[0].profession).toBe('Ménagère');
+    expect(body.hospitalisations[0].indigent).toBe(true);
+    expect(body.hospitalisations[0].telephoneContact).toBe('76 00 00 00');
+    expect(body.hospitalisations[0].localisationPrecise).toBe('Quartier Sabalibougou, rue 214');
+    expect(body.planificationsFamiliales).toHaveLength(1);
+    expect(body.planificationsFamiliales[0].methodeChoisie).toBe('Implanon');
+    expect(body.planificationsFamiliales[0].actionMethode).toBe('Insertion');
+    expect(body.planificationsFamiliales[0].typeUtilisateur).toBe('Nouveau');
+    expect(body.planificationsFamiliales[0].providerName).toBe('Amadou Diallo');
   });
 
   it('queries with the id-scoped consultations include, ordered desc, take 20', async () => {
@@ -173,6 +282,49 @@ describe('GET /api/patients/[id]', () => {
     expect(materniteInclude?.where).toEqual({ type: { in: ['CPN', 'ACCOUCHEMENT'] } });
     expect(materniteInclude?.orderBy).toEqual({ date: 'desc' });
     expect(materniteInclude?.take).toBe(20);
+  });
+
+  it('queries nutritions ordered desc, take 20', async () => {
+    prismaMock.patient.findFirst.mockResolvedValue(fullPatient() as never);
+    await GET(makeGet(), ctxWith('pt-1'));
+    const arg = prismaMock.patient.findFirst.mock.calls[0]?.[0];
+    const nutritionInclude = (arg?.include as { nutritions?: { orderBy?: unknown; take?: number } })
+      ?.nutritions;
+    expect(nutritionInclude?.orderBy).toEqual({ date: 'desc' });
+    expect(nutritionInclude?.take).toBe(20);
+  });
+
+  it('queries vaccinations ordered desc, take 20', async () => {
+    prismaMock.patient.findFirst.mockResolvedValue(fullPatient() as never);
+    await GET(makeGet(), ctxWith('pt-1'));
+    const arg = prismaMock.patient.findFirst.mock.calls[0]?.[0];
+    const vaccinationInclude = (
+      arg?.include as { vaccinations?: { orderBy?: unknown; take?: number } }
+    )?.vaccinations;
+    expect(vaccinationInclude?.orderBy).toEqual({ date: 'desc' });
+    expect(vaccinationInclude?.take).toBe(20);
+  });
+
+  it('queries hospitalisations ordered by dateHeureEntree desc, take 20', async () => {
+    prismaMock.patient.findFirst.mockResolvedValue(fullPatient() as never);
+    await GET(makeGet(), ctxWith('pt-1'));
+    const arg = prismaMock.patient.findFirst.mock.calls[0]?.[0];
+    const hospitalisationInclude = (
+      arg?.include as { hospitalisations?: { orderBy?: unknown; take?: number } }
+    )?.hospitalisations;
+    expect(hospitalisationInclude?.orderBy).toEqual({ dateHeureEntree: 'desc' });
+    expect(hospitalisationInclude?.take).toBe(20);
+  });
+
+  it('queries planificationsFamiliales ordered desc, take 20', async () => {
+    prismaMock.patient.findFirst.mockResolvedValue(fullPatient() as never);
+    await GET(makeGet(), ctxWith('pt-1'));
+    const arg = prismaMock.patient.findFirst.mock.calls[0]?.[0];
+    const pfInclude = (
+      arg?.include as { planificationsFamiliales?: { orderBy?: unknown; take?: number } }
+    )?.planificationsFamiliales;
+    expect(pfInclude?.orderBy).toEqual({ date: 'desc' });
+    expect(pfInclude?.take).toBe(20);
   });
 });
 

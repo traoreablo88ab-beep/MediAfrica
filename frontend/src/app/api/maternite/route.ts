@@ -41,6 +41,9 @@ function serializeMaternite(m: MaterniteRow) {
     statutMatrimonial: m.statutMatrimonial,
     profession: m.profession,
     observations: m.observations,
+    indigent: m.indigent,
+    telephoneContact: m.telephoneContact,
+    localisationPrecise: m.localisationPrecise,
 
     cpnNumeroVisite: m.cpnNumeroVisite,
     ageGestationnelSemaines: m.ageGestationnelSemaines,

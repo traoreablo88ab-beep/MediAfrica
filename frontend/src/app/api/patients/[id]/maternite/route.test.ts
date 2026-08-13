@@ -137,6 +137,9 @@ describe('POST /api/patients/[id]/maternite', () => {
         bruitsCoeurFoetal: 'Perçus',
         tpiDose: 1,
         vih: 'Négatif',
+        indigent: true,
+        telephoneContact: '76 00 00 00',
+        localisationPrecise: 'Quartier Sabalibougou, rue 214',
       }),
       ctxWith('pt-1'),
     );
@@ -156,6 +159,9 @@ describe('POST /api/patients/[id]/maternite', () => {
     expect(createArg.bruitsCoeurFoetal).toBe('Perçus');
     expect(createArg.tpiDose).toBe(1);
     expect(createArg.vih).toBe('Négatif');
+    expect(createArg.indigent).toBe(true);
+    expect(createArg.telephoneContact).toBe('76 00 00 00');
+    expect(createArg.localisationPrecise).toBe('Quartier Sabalibougou, rue 214');
   });
 
   it('happy path (ACCOUCHEMENT): passes through delivery fields', async () => {

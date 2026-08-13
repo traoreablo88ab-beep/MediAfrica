@@ -27,6 +27,9 @@ interface ConsultationDetail {
   mdoMaladie: string | null;
   tdr: string | null;
   ge: string | null;
+  indigent: boolean | null;
+  telephoneContact: string | null;
+  localisationPrecise: string | null;
   providerName: string | null;
 }
 
@@ -41,6 +44,80 @@ interface MaterniteDetail {
   issueGrossesse: string | null;
   sexeNouveauNe: string | null;
   poidsNaissanceG: number | null;
+  observations: string | null;
+  indigent: boolean | null;
+  telephoneContact: string | null;
+  localisationPrecise: string | null;
+  providerName: string | null;
+}
+
+interface NutritionDetail {
+  id: string;
+  date: string;
+  typeCas: string | null;
+  poidsKg: number | null;
+  tailleCm: number | null;
+  perimetreBrachialCm: number | null;
+  oedemes: string | null;
+  classification: string | null;
+  priseEnCharge: string | null;
+  evolution: string | null;
+  prochainRdv: string | null;
+  observations: string | null;
+  providerName: string | null;
+}
+
+interface VaccinationDetail {
+  id: string;
+  date: string;
+  antigene: string;
+  numeroDose: number | null;
+  siteInjection: string | null;
+  dejaSousContraception: boolean | null;
+  methodeContraceptivePrecedente: string | null;
+  pfppCounselingPropose: boolean | null;
+  methodePfAdoptee: string | null;
+  conseilsAme: string | null;
+  pratiqueAme: string | null;
+  prochainRdv: string | null;
+  observations: string | null;
+  providerName: string | null;
+}
+
+interface HospitalisationDetail {
+  id: string;
+  dateHeureEntree: string;
+  motifAdmission: string;
+  service: string | null;
+  numeroHospitalisation: string | null;
+  referenceOrigine: string | null;
+  profession: string | null;
+  indigent: boolean | null;
+  telephoneContact: string | null;
+  localisationPrecise: string | null;
+  diagnosticPrincipal: string | null;
+  traitementRecu: string | null;
+  dateHeureSortie: string | null;
+  issue: string | null;
+  observations: string | null;
+  providerName: string | null;
+}
+
+interface PlanificationFamilialeDetail {
+  id: string;
+  date: string;
+  typeVisite: string;
+  methodeChoisie: string;
+  actionMethode: string | null;
+  nbreCyclesDistribues: number | null;
+  typeUtilisateur: string | null;
+  ageDernierEnfantMois: number | null;
+  pratiqueAme: string | null;
+  enfantAJourVaccins: string | null;
+  conseilsAlimentationComplement: string | null;
+  serviceProvenance: string | null;
+  ppi: boolean | null;
+  prochainRdv: string | null;
   observations: string | null;
   providerName: string | null;
 }
@@ -67,6 +144,10 @@ interface PatientDetail {
   antecedentsFamiliaux: string | null;
   consultations: ConsultationDetail[];
   maternites: MaterniteDetail[];
+  nutritions: NutritionDetail[];
+  vaccinations: VaccinationDetail[];
+  hospitalisations: HospitalisationDetail[];
+  planificationsFamiliales: PlanificationFamilialeDetail[];
 }
 
 const MATERNITE_TYPE_LABEL: Record<string, string> = {
@@ -275,6 +356,30 @@ export default function PatientDetailPage() {
                 + Nouvelle fiche maternité
               </Link>
               <Link
+                href={`/patients/${patient.id}/nutrition/new`}
+                className="rounded-md border border-[#2a78d6] bg-white px-4 py-2.5 text-center text-sm font-medium text-[#2a78d6] hover:bg-[#2a78d6]/5"
+              >
+                + Nouvelle fiche nutrition
+              </Link>
+              <Link
+                href={`/patients/${patient.id}/vaccination/new`}
+                className="rounded-md border border-[#2a78d6] bg-white px-4 py-2.5 text-center text-sm font-medium text-[#2a78d6] hover:bg-[#2a78d6]/5"
+              >
+                + Nouvelle vaccination
+              </Link>
+              <Link
+                href={`/patients/${patient.id}/hospitalisation/new`}
+                className="rounded-md border border-[#2a78d6] bg-white px-4 py-2.5 text-center text-sm font-medium text-[#2a78d6] hover:bg-[#2a78d6]/5"
+              >
+                + Nouvelle admission
+              </Link>
+              <Link
+                href={`/patients/${patient.id}/planification-familiale/new`}
+                className="rounded-md border border-[#2a78d6] bg-white px-4 py-2.5 text-center text-sm font-medium text-[#2a78d6] hover:bg-[#2a78d6]/5"
+              >
+                + Nouvelle visite PF
+              </Link>
+              <Link
                 href={`/patients/${patient.id}/edit`}
                 className="rounded-md border border-[#e1e0d9] bg-white px-4 py-2.5 text-center text-sm font-medium text-[#0b0b0b] hover:bg-[#f9f9f7]"
               >
@@ -341,6 +446,11 @@ export default function PatientDetailPage() {
                             MDO{c.mdoMaladie ? ` — ${c.mdoMaladie}` : ''}
                           </span>
                         )}
+                        {c.indigent && (
+                          <span className="ml-2 rounded-full bg-[#d03b3b]/10 px-2 py-0.5 text-xs font-medium text-[#d03b3b]">
+                            Indigent
+                          </span>
+                        )}
                       </div>
                       <div className="flex items-center gap-3">
                         {c.providerName && (
@@ -377,7 +487,9 @@ export default function PatientDetailPage() {
                       c.statutPT ||
                       c.temperatureC ||
                       c.tdr ||
-                      c.ge) && (
+                      c.ge ||
+                      c.telephoneContact ||
+                      c.localisationPrecise) && (
                       <div className="flex flex-wrap gap-6 border-t border-[#e1e0d9] px-5 py-3 text-sm text-[#52514e]">
                         {c.tensionArterielle && (
                           <span>
@@ -428,6 +540,22 @@ export default function PatientDetailPage() {
                             GE <span className="font-semibold text-[#0b0b0b]">{c.ge}</span>
                           </span>
                         )}
+                        {c.telephoneContact && (
+                          <span>
+                            Téléphone{' '}
+                            <span className="font-semibold text-[#0b0b0b]">
+                              {c.telephoneContact}
+                            </span>
+                          </span>
+                        )}
+                        {c.localisationPrecise && (
+                          <span>
+                            Localisation{' '}
+                            <span className="font-semibold text-[#0b0b0b]">
+                              {c.localisationPrecise}
+                            </span>
+                          </span>
+                        )}
                       </div>
                     )}
                   </div>
@@ -453,6 +581,11 @@ export default function PatientDetailPage() {
                         <span className="ml-2 rounded-full bg-[#2a78d6]/10 px-2 py-0.5 text-xs font-medium text-[#2a78d6]">
                           {MATERNITE_TYPE_LABEL[m.type] ?? m.type}
                         </span>
+                        {m.indigent && (
+                          <span className="ml-2 rounded-full bg-[#d03b3b]/10 px-2 py-0.5 text-xs font-medium text-[#d03b3b]">
+                            Indigente
+                          </span>
+                        )}
                       </div>
                       {m.providerName && (
                         <span className="text-xs text-[#898781]">{m.providerName}</span>
@@ -523,13 +656,29 @@ export default function PatientDetailPage() {
                           )}
                         </>
                       )}
+                      {m.telephoneContact && (
+                        <span>
+                          Téléphone{' '}
+                          <span className="font-semibold text-[#0b0b0b]">{m.telephoneContact}</span>
+                        </span>
+                      )}
+                      {m.localisationPrecise && (
+                        <span>
+                          Localisation{' '}
+                          <span className="font-semibold text-[#0b0b0b]">
+                            {m.localisationPrecise}
+                          </span>
+                        </span>
+                      )}
                       {!m.cpnNumeroVisite &&
                         !m.ageGestationnelSemaines &&
                         !m.prochainRdv &&
                         !m.modeAccouchement &&
                         !m.issueGrossesse &&
                         !m.sexeNouveauNe &&
-                        m.poidsNaissanceG == null && <span>—</span>}
+                        m.poidsNaissanceG == null &&
+                        !m.telephoneContact &&
+                        !m.localisationPrecise && <span>—</span>}
                     </div>
                     {m.observations && (
                       <div className="border-t border-[#e1e0d9] px-5 py-3">
@@ -537,6 +686,412 @@ export default function PatientDetailPage() {
                           Observations
                         </p>
                         <p className="mt-0.5 text-sm text-[#0b0b0b]">{m.observations}</p>
+                      </div>
+                    )}
+                  </div>
+                ))}
+              </div>
+            )}
+
+            <h2 className="mb-4 mt-8 font-semibold text-[#0b0b0b]">Historique nutrition</h2>
+            {patient.nutritions.length === 0 ? (
+              <p className="text-sm text-[#898781]">Aucune fiche nutrition enregistrée.</p>
+            ) : (
+              <div className="flex flex-col gap-4">
+                {patient.nutritions.map((n) => (
+                  <div
+                    key={n.id}
+                    className="overflow-hidden rounded-lg border border-[#e1e0d9] bg-white"
+                  >
+                    <div className="flex items-center justify-between border-b border-[#e1e0d9] bg-[#f9f9f7] px-5 py-3">
+                      <div>
+                        <span className="text-sm font-semibold text-[#0b0b0b]">
+                          {formatDate(n.date)}
+                        </span>{' '}
+                        {n.classification && (
+                          <span
+                            className={`ml-2 rounded-full px-2 py-0.5 text-xs font-medium ${
+                              n.classification.startsWith('MAS')
+                                ? 'bg-[#d03b3b]/10 text-[#d03b3b]'
+                                : 'bg-[#2a78d6]/10 text-[#2a78d6]'
+                            }`}
+                          >
+                            {n.classification}
+                          </span>
+                        )}
+                      </div>
+                      {n.providerName && (
+                        <span className="text-xs text-[#898781]">{n.providerName}</span>
+                      )}
+                    </div>
+                    <div className="flex flex-wrap gap-6 px-5 py-3 text-sm text-[#52514e]">
+                      {n.perimetreBrachialCm != null && (
+                        <span>
+                          PB{' '}
+                          <span className="font-semibold text-[#0b0b0b]">
+                            {n.perimetreBrachialCm} cm
+                          </span>
+                        </span>
+                      )}
+                      {n.poidsKg != null && (
+                        <span>
+                          Poids <span className="font-semibold text-[#0b0b0b]">{n.poidsKg} kg</span>
+                        </span>
+                      )}
+                      {n.oedemes && (
+                        <span>
+                          Œdèmes <span className="font-semibold text-[#0b0b0b]">{n.oedemes}</span>
+                        </span>
+                      )}
+                      {n.priseEnCharge && (
+                        <span>
+                          Prise en charge{' '}
+                          <span className="font-semibold text-[#0b0b0b]">{n.priseEnCharge}</span>
+                        </span>
+                      )}
+                      {n.evolution && (
+                        <span>
+                          Évolution{' '}
+                          <span className="font-semibold text-[#0b0b0b]">{n.evolution}</span>
+                        </span>
+                      )}
+                      {n.prochainRdv && (
+                        <span>
+                          Prochain RDV{' '}
+                          <span className="font-semibold text-[#0b0b0b]">
+                            {formatDate(n.prochainRdv)}
+                          </span>
+                        </span>
+                      )}
+                    </div>
+                    {n.observations && (
+                      <div className="border-t border-[#e1e0d9] px-5 py-3">
+                        <p className="text-xs uppercase tracking-wide text-[#898781]">
+                          Observations
+                        </p>
+                        <p className="mt-0.5 text-sm text-[#0b0b0b]">{n.observations}</p>
+                      </div>
+                    )}
+                  </div>
+                ))}
+              </div>
+            )}
+
+            <h2 className="mb-4 mt-8 font-semibold text-[#0b0b0b]">Historique vaccination</h2>
+            {patient.vaccinations.length === 0 ? (
+              <p className="text-sm text-[#898781]">Aucune vaccination enregistrée.</p>
+            ) : (
+              <div className="flex flex-col gap-4">
+                {patient.vaccinations.map((v) => (
+                  <div
+                    key={v.id}
+                    className="overflow-hidden rounded-lg border border-[#e1e0d9] bg-white"
+                  >
+                    <div className="flex items-center justify-between border-b border-[#e1e0d9] bg-[#f9f9f7] px-5 py-3">
+                      <div>
+                        <span className="text-sm font-semibold text-[#0b0b0b]">
+                          {formatDate(v.date)}
+                        </span>{' '}
+                        <span className="ml-2 rounded-full bg-[#2a78d6]/10 px-2 py-0.5 text-xs font-medium text-[#2a78d6]">
+                          {v.antigene}
+                          {v.numeroDose != null ? ` — dose ${v.numeroDose}` : ''}
+                        </span>
+                      </div>
+                      {v.providerName && (
+                        <span className="text-xs text-[#898781]">{v.providerName}</span>
+                      )}
+                    </div>
+                    {(v.siteInjection || v.prochainRdv) && (
+                      <div className="flex flex-wrap gap-6 px-5 py-3 text-sm text-[#52514e]">
+                        {v.siteInjection && (
+                          <span>
+                            Site{' '}
+                            <span className="font-semibold text-[#0b0b0b]">{v.siteInjection}</span>
+                          </span>
+                        )}
+                        {v.prochainRdv && (
+                          <span>
+                            Prochain RDV{' '}
+                            <span className="font-semibold text-[#0b0b0b]">
+                              {formatDate(v.prochainRdv)}
+                            </span>
+                          </span>
+                        )}
+                      </div>
+                    )}
+                    {(v.pfppCounselingPropose ||
+                      v.methodePfAdoptee ||
+                      v.conseilsAme ||
+                      v.pratiqueAme) && (
+                      <div className="flex flex-wrap gap-6 border-t border-[#e1e0d9] px-5 py-3 text-sm text-[#52514e]">
+                        {v.pfppCounselingPropose && (
+                          <span className="rounded-full bg-[#e1e0d9] px-2 py-0.5 text-xs font-medium text-[#52514e]">
+                            Counseling PFPP proposé
+                          </span>
+                        )}
+                        {v.methodePfAdoptee && (
+                          <span>
+                            Méthode PF adoptée{' '}
+                            <span className="font-semibold text-[#0b0b0b]">
+                              {v.methodePfAdoptee}
+                            </span>
+                          </span>
+                        )}
+                        {v.conseilsAme && (
+                          <span>
+                            Conseils AME{' '}
+                            <span className="font-semibold text-[#0b0b0b]">{v.conseilsAme}</span>
+                          </span>
+                        )}
+                        {v.pratiqueAme && (
+                          <span>
+                            Pratique AME{' '}
+                            <span className="font-semibold text-[#0b0b0b]">{v.pratiqueAme}</span>
+                          </span>
+                        )}
+                      </div>
+                    )}
+                    {v.observations && (
+                      <div className="border-t border-[#e1e0d9] px-5 py-3">
+                        <p className="text-xs uppercase tracking-wide text-[#898781]">
+                          Observations
+                        </p>
+                        <p className="mt-0.5 text-sm text-[#0b0b0b]">{v.observations}</p>
+                      </div>
+                    )}
+                  </div>
+                ))}
+              </div>
+            )}
+
+            <h2 className="mb-4 mt-8 font-semibold text-[#0b0b0b]">Historique hospitalisation</h2>
+            {patient.hospitalisations.length === 0 ? (
+              <p className="text-sm text-[#898781]">Aucune hospitalisation enregistrée.</p>
+            ) : (
+              <div className="flex flex-col gap-4">
+                {patient.hospitalisations.map((h) => (
+                  <div
+                    key={h.id}
+                    className="overflow-hidden rounded-lg border border-[#e1e0d9] bg-white"
+                  >
+                    <div className="flex items-center justify-between border-b border-[#e1e0d9] bg-[#f9f9f7] px-5 py-3">
+                      <div>
+                        <span className="text-sm font-semibold text-[#0b0b0b]">
+                          {formatDate(h.dateHeureEntree)}
+                        </span>{' '}
+                        <span className="text-sm text-[#52514e]">{h.motifAdmission}</span>
+                        {h.dateHeureSortie ? (
+                          <span className="ml-2 rounded-full bg-[#2a78d6]/10 px-2 py-0.5 text-xs font-medium text-[#2a78d6]">
+                            Sorti le {formatDate(h.dateHeureSortie)}
+                          </span>
+                        ) : (
+                          <span className="ml-2 rounded-full bg-[#d08a1c]/10 px-2 py-0.5 text-xs font-medium text-[#d08a1c]">
+                            En cours
+                          </span>
+                        )}
+                        {h.indigent && (
+                          <span className="ml-2 rounded-full bg-[#d03b3b]/10 px-2 py-0.5 text-xs font-medium text-[#d03b3b]">
+                            Indigent
+                          </span>
+                        )}
+                      </div>
+                      <div className="flex items-center gap-3">
+                        {h.providerName && (
+                          <span className="text-xs text-[#898781]">{h.providerName}</span>
+                        )}
+                        {!h.dateHeureSortie && (
+                          <Link
+                            href={`/patients/${patient.id}/hospitalisation/${h.id}/sortie`}
+                            className="print:hidden text-xs font-medium text-[#2a78d6] hover:underline"
+                          >
+                            Enregistrer la sortie →
+                          </Link>
+                        )}
+                      </div>
+                    </div>
+                    <div className="flex flex-wrap gap-6 px-5 py-3 text-sm text-[#52514e]">
+                      {h.service && (
+                        <span>
+                          Service <span className="font-semibold text-[#0b0b0b]">{h.service}</span>
+                        </span>
+                      )}
+                      {h.numeroHospitalisation && (
+                        <span>
+                          N° Hosp{' '}
+                          <span className="font-semibold text-[#0b0b0b]">
+                            {h.numeroHospitalisation}
+                          </span>
+                        </span>
+                      )}
+                      {h.referenceOrigine && (
+                        <span>
+                          Référence{' '}
+                          <span className="font-semibold text-[#0b0b0b]">{h.referenceOrigine}</span>
+                        </span>
+                      )}
+                      {h.profession && (
+                        <span>
+                          Profession{' '}
+                          <span className="font-semibold text-[#0b0b0b]">{h.profession}</span>
+                        </span>
+                      )}
+                      {h.telephoneContact && (
+                        <span>
+                          Téléphone{' '}
+                          <span className="font-semibold text-[#0b0b0b]">{h.telephoneContact}</span>
+                        </span>
+                      )}
+                      {h.localisationPrecise && (
+                        <span>
+                          Localisation{' '}
+                          <span className="font-semibold text-[#0b0b0b]">
+                            {h.localisationPrecise}
+                          </span>
+                        </span>
+                      )}
+                      {h.diagnosticPrincipal && (
+                        <span>
+                          Diagnostic{' '}
+                          <span className="font-semibold text-[#0b0b0b]">
+                            {h.diagnosticPrincipal}
+                          </span>
+                        </span>
+                      )}
+                      {h.issue && (
+                        <span>
+                          Issue <span className="font-semibold text-[#0b0b0b]">{h.issue}</span>
+                        </span>
+                      )}
+                    </div>
+                    {h.observations && (
+                      <div className="border-t border-[#e1e0d9] px-5 py-3">
+                        <p className="text-xs uppercase tracking-wide text-[#898781]">
+                          Observations
+                        </p>
+                        <p className="mt-0.5 text-sm text-[#0b0b0b]">{h.observations}</p>
+                      </div>
+                    )}
+                  </div>
+                ))}
+              </div>
+            )}
+
+            <h2 className="mb-4 mt-8 font-semibold text-[#0b0b0b]">
+              Historique planification familiale
+            </h2>
+            {patient.planificationsFamiliales.length === 0 ? (
+              <p className="text-sm text-[#898781]">Aucune visite PF enregistrée.</p>
+            ) : (
+              <div className="flex flex-col gap-4">
+                {patient.planificationsFamiliales.map((pf) => (
+                  <div
+                    key={pf.id}
+                    className="overflow-hidden rounded-lg border border-[#e1e0d9] bg-white"
+                  >
+                    <div className="flex items-center justify-between border-b border-[#e1e0d9] bg-[#f9f9f7] px-5 py-3">
+                      <div>
+                        <span className="text-sm font-semibold text-[#0b0b0b]">
+                          {formatDate(pf.date)}
+                        </span>{' '}
+                        <span className="ml-2 rounded-full bg-[#2a78d6]/10 px-2 py-0.5 text-xs font-medium text-[#2a78d6]">
+                          {pf.methodeChoisie}
+                          {pf.actionMethode ? ` — ${pf.actionMethode}` : ''}
+                        </span>
+                        <span className="ml-2 rounded-full bg-[#e1e0d9] px-2 py-0.5 text-xs font-medium text-[#52514e]">
+                          {pf.typeVisite}
+                        </span>
+                        {pf.ppi && (
+                          <span className="ml-2 rounded-full bg-[#d08a1c]/10 px-2 py-0.5 text-xs font-medium text-[#d08a1c]">
+                            PPI
+                          </span>
+                        )}
+                      </div>
+                      {pf.providerName && (
+                        <span className="text-xs text-[#898781]">{pf.providerName}</span>
+                      )}
+                    </div>
+                    {(pf.typeUtilisateur ||
+                      pf.ageDernierEnfantMois != null ||
+                      pf.nbreCyclesDistribues != null ||
+                      pf.serviceProvenance ||
+                      pf.prochainRdv) && (
+                      <div className="flex flex-wrap gap-6 px-5 py-3 text-sm text-[#52514e]">
+                        {pf.typeUtilisateur && (
+                          <span>
+                            Utilisatrice{' '}
+                            <span className="font-semibold text-[#0b0b0b]">
+                              {pf.typeUtilisateur === 'Nouveau' ? 'Nouvelle' : 'Ancienne'}
+                            </span>
+                          </span>
+                        )}
+                        {pf.ageDernierEnfantMois != null && (
+                          <span>
+                            Âge dernier enfant{' '}
+                            <span className="font-semibold text-[#0b0b0b]">
+                              {pf.ageDernierEnfantMois} mois
+                            </span>
+                          </span>
+                        )}
+                        {pf.nbreCyclesDistribues != null && (
+                          <span>
+                            Cycles distribués{' '}
+                            <span className="font-semibold text-[#0b0b0b]">
+                              {pf.nbreCyclesDistribues}
+                            </span>
+                          </span>
+                        )}
+                        {pf.serviceProvenance && (
+                          <span>
+                            Provenance{' '}
+                            <span className="font-semibold text-[#0b0b0b]">
+                              {pf.serviceProvenance}
+                            </span>
+                          </span>
+                        )}
+                        {pf.prochainRdv && (
+                          <span>
+                            Prochain RDV{' '}
+                            <span className="font-semibold text-[#0b0b0b]">
+                              {formatDate(pf.prochainRdv)}
+                            </span>
+                          </span>
+                        )}
+                      </div>
+                    )}
+                    {(pf.pratiqueAme ||
+                      pf.enfantAJourVaccins ||
+                      pf.conseilsAlimentationComplement) && (
+                      <div className="flex flex-wrap gap-6 border-t border-[#e1e0d9] px-5 py-3 text-sm text-[#52514e]">
+                        {pf.pratiqueAme && (
+                          <span>
+                            AME{' '}
+                            <span className="font-semibold text-[#0b0b0b]">{pf.pratiqueAme}</span>
+                          </span>
+                        )}
+                        {pf.enfantAJourVaccins && (
+                          <span>
+                            Vaccins enfant à jour{' '}
+                            <span className="font-semibold text-[#0b0b0b]">
+                              {pf.enfantAJourVaccins}
+                            </span>
+                          </span>
+                        )}
+                        {pf.conseilsAlimentationComplement && (
+                          <span>
+                            Conseils alim. complément{' '}
+                            <span className="font-semibold text-[#0b0b0b]">
+                              {pf.conseilsAlimentationComplement}
+                            </span>
+                          </span>
+                        )}
+                      </div>
+                    )}
+                    {pf.observations && (
+                      <div className="border-t border-[#e1e0d9] px-5 py-3">
+                        <p className="text-xs uppercase tracking-wide text-[#898781]">
+                          Observations
+                        </p>
+                        <p className="mt-0.5 text-sm text-[#0b0b0b]">{pf.observations}</p>
                       </div>
                     )}
                   </div>

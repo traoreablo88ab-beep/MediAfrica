@@ -132,6 +132,9 @@ describe('POST /api/patients/[id]/consultations', () => {
         mdoMaladie: 'Rougeole',
         tdr: 'Positif',
         ge: 'Négatif',
+        indigent: true,
+        telephoneContact: '76 00 00 00',
+        localisationPrecise: 'Quartier Sabalibougou, rue 214',
       }),
       ctxWith('pt-1'),
     );
@@ -149,6 +152,9 @@ describe('POST /api/patients/[id]/consultations', () => {
     expect(createArg.mdoMaladie).toBe('Rougeole');
     expect(createArg.tdr).toBe('Positif');
     expect(createArg.ge).toBe('Négatif');
+    expect(createArg.indigent).toBe(true);
+    expect(createArg.telephoneContact).toBe('76 00 00 00');
+    expect(createArg.localisationPrecise).toBe('Quartier Sabalibougou, rue 214');
   });
 
   describe('Idempotency-Key (offline-queue replay)', () => {

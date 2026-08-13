@@ -53,6 +53,9 @@ export default function NewConsultationPage() {
   const [ge, setGe] = useState('');
   const [mdo, setMdo] = useState(false);
   const [mdoMaladie, setMdoMaladie] = useState('');
+  const [indigent, setIndigent] = useState(false);
+  const [telephoneContact, setTelephoneContact] = useState('');
+  const [localisationPrecise, setLocalisationPrecise] = useState('');
 
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -92,6 +95,9 @@ export default function NewConsultationPage() {
       ...(ge ? { ge } : {}),
       mdo,
       ...(mdo && mdoMaladie ? { mdoMaladie } : {}),
+      indigent,
+      ...(telephoneContact ? { telephoneContact } : {}),
+      ...(localisationPrecise ? { localisationPrecise } : {}),
     };
 
     // Already known to be offline — queue immediately rather than letting a
@@ -211,6 +217,40 @@ export default function NewConsultationPage() {
                   <option value="urgent">Urgent</option>
                 </select>
               </Field>
+            </div>
+          </div>
+
+          <div className="rounded-lg border border-[#e1e0d9] bg-white p-5">
+            <h2 className="mb-4 font-semibold text-[#0b0b0b]">Contact et prise en charge</h2>
+            <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
+              <Field label="N° de téléphone">
+                <input
+                  type="tel"
+                  className={inputClass}
+                  placeholder="Numéro du patient ou d'un accompagnant"
+                  value={telephoneContact}
+                  onChange={(e) => setTelephoneContact(e.target.value)}
+                />
+              </Field>
+              <Field label="Localisation précise">
+                <input
+                  className={inputClass}
+                  placeholder="Quartier, rue, repère"
+                  value={localisationPrecise}
+                  onChange={(e) => setLocalisationPrecise(e.target.value)}
+                />
+              </Field>
+              <div className="sm:col-span-2">
+                <label className="flex items-center gap-2 text-sm text-[#0b0b0b]">
+                  <input
+                    type="checkbox"
+                    checked={indigent}
+                    onChange={(e) => setIndigent(e.target.checked)}
+                    className="h-4 w-4 rounded border-[#e1e0d9] text-[#2a78d6] focus:ring-[#2a78d6]"
+                  />
+                  Patient indigent
+                </label>
+              </div>
             </div>
           </div>
 

@@ -33,17 +33,21 @@ model User {
   createdAt       DateTime  @default(now())
   updatedAt       DateTime  @updatedAt
 
-  verificationCodes     VerificationCode[]
-  uploads               FileUpload[]
-  notifications         Notification[]
-  notifPrefs            NotificationPreferences?
-  orders                Order[]
-  oauthAccounts         OAuthAccount[]
-  adminActions          AdminAction[]
-  consultationsProvided Consultation[]
-  materniteProvided     Maternite[]
-  registerClosures      RegisterClosure[]
-  reportsFiled          Report[]
+  verificationCodes                VerificationCode[]
+  uploads                          FileUpload[]
+  notifications                    Notification[]
+  notifPrefs                       NotificationPreferences?
+  orders                           Order[]
+  oauthAccounts                    OAuthAccount[]
+  adminActions                     AdminAction[]
+  consultationsProvided            Consultation[]
+  materniteProvided                Maternite[]
+  nutritionsProvided               Nutrition[]
+  vaccinationsProvided             Vaccination[]
+  hospitalisationsProvided         Hospitalisation[]
+  planificationsFamilialesProvided PlanificationFamiliale[]
+  registerClosures                 RegisterClosure[]
+  reportsFiled                     Report[]
 
   // Multi-tenancy: MediAfrica is a multi-tenant SaaS — each User belongs to
   // exactly one Organization (health center) via `memberships`
@@ -375,8 +379,12 @@ model Patient {
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
-  consultations Consultation[]
-  maternites    Maternite[]
+  consultations            Consultation[]
+  maternites               Maternite[]
+  nutritions               Nutrition[]
+  vaccinations             Vaccination[]
+  hospitalisations         Hospitalisation[]
+  planificationsFamiliales PlanificationFamiliale[]
 
   @@index([nom, prenom])
   @@index([communeResidence])
@@ -410,6 +418,12 @@ model Consultation {
 
   tdr String? // Test de Diagnostic Rapide (paludisme) - Positif | Négatif | Non fait
   ge  String? // Goutte Épaisse (paludisme) - Positif | Négatif | Non fait
+
+  // Contact joignable (peut différer du téléphone habituel du patient) +
+  // adresse précise, et statut indigent (prise en charge/exonération).
+  indigent            Boolean?
+  telephoneContact    String?
+  localisationPrecise String?
 
   // Offline-queue replay safety — same pattern as Order.idempotencyKey.
   // Nullable so existing rows are unaffected; a retried sync with the same
@@ -449,6 +463,13 @@ model Maternite {
   statutMatrimonial String? // colonne "Statut matrimonial" des registres papier CPN/Accouchement
   profession        String? // colonne "Profession" du registre papier CPoN
   observations      String?
+
+  // Saisis uniquement pour CPN et Accouchement (pas CPoN — déjà capturés en
+  // amont) : contact joignable (peut différer du téléphone habituel du
+  // patient) + adresse précise, et statut indigent (prise en charge).
+  indigent            Boolean?
+  telephoneContact    String?
+  localisationPrecise String?
 
   // CPN — champs alignés sur le registre papier "Consultation prénatale"
   cpnNumeroVisite           Int? // colonnes "CPN 1ère/2ème/3ème/4ème" du registre
@@ -541,10 +562,193 @@ model Maternite {
   @@index([type, date])
 }
 
+// Une fiche de dépistage/suivi nutritionnel — protocole national PCIMA
+// (Prise en Charge Intégrée de la Malnutrition Aiguë), URENAM/URENI. Comme
+// Consultation : un événement par ligne, immuable (pas de PATCH/DELETE au-
+// delà de la clôture mensuelle standard).
+model Nutrition {
+  id         String  @id @default(cuid())
+  patientId  String
+  patient    Patient @relation(fields: [patientId], references: [id], onDelete: Restrict)
+  providerId String?
+  provider   User?   @relation(fields: [providerId], references: [id], onDelete: SetNull)
+
+  date    DateTime @default(now())
+  typeCas String? // NC | AC (Nouveau Cas | Ancien Cas), comme Consultation
+
+  poidsKg             Float?
+  tailleCm            Float?
+  perimetreBrachialCm Float? // PB - périmètre brachial (cm), dépistage/suivi PCIMA
+  oedemes             String? // Non | + | ++ | +++
+  statutPT            String? // indice Poids/Taille, lu sur abaque OMS (texte libre, comme Consultation.statutPT)
+  classification      String? // Normal | MAM | MAS sans complication | MAS avec complication
+  testAppetit         String? // Bon | Faible/Échec
+
+  complicationsMedicales String?
+  priseEnCharge          String? // Aucune | URENAM | URENI | URENAS
+  atpe                   Boolean? // Aliment Thérapeutique Prêt à l'Emploi (Plumpy'nut)
+  laitF75                Boolean?
+  laitF100               Boolean?
+  amoxicilline           Boolean?
+  vitamineA              Boolean?
+  deparasitant           Boolean?
+  traitementAutre        String?
+
+  numeroVisiteSuivi Int?
+  evolution         String? // En cours | Guéri | Abandon | Décès | Référé | Non-répondant
+  prochainRdv       DateTime?
+  observations      String?
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([patientId, date])
+}
+
+// Une dose de vaccin administrée — PEV (Programme Élargi de Vaccination,
+// calendrier vaccinal Mali). Un événement par ligne, immuable, même
+// principe que Nutrition/Consultation.
+model Vaccination {
+  id         String  @id @default(cuid())
+  patientId  String
+  patient    Patient @relation(fields: [patientId], references: [id], onDelete: Restrict)
+  providerId String?
+  provider   User?   @relation(fields: [providerId], references: [id], onDelete: SetNull)
+
+  date     DateTime @default(now())
+  antigene String // BCG | VPO0-3 | Penta1-3 | Pneumo1-3 | Rota1-2 | VAR1-2 | VAA | VitamineA | MenA…
+
+  numeroDose         Int?
+  voieAdministration String? // Orale | Intramusculaire | Sous-cutanée | Intradermique
+  siteInjection      String? // Bras droit | Bras gauche | Cuisse droite | Cuisse gauche | Bouche
+  numeroLot          String?
+  effetsSecondaires  String? // sert aussi de MAPI/EIM (manifestation post-vaccinale indésirable)
+
+  // Bloc PFPP/AME du registre PEV officiel (colonnes 46-51) — counseling
+  // planification familiale du post-partum + allaitement maternel exclusif,
+  // rempli à la même visite que la vaccination.
+  dejaSousContraception          Boolean?
+  methodeContraceptivePrecedente String?
+  pfppCounselingPropose          Boolean?
+  methodePfAdoptee               String?
+  conseilsAme                    String? // O | N | NA
+  pratiqueAme                    String? // O | N | NA
+
+  prochainRdv  DateTime?
+  observations String?
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([patientId, date])
+}
+
+// Une hospitalisation — seul registre en deux temps : la fiche est créée à
+// l'admission (POST) puis complétée à la sortie (PATCH, tant que le mois de
+// `dateHeureEntree` n'est pas clôturé) — contrairement à
+// Consultation/Maternite/Nutrition/Vaccination qui sont immuables après
+// création. `dateHeureSortie == null` signifie que le patient est toujours
+// hospitalisé.
+model Hospitalisation {
+  id         String  @id @default(cuid())
+  patientId  String
+  patient    Patient @relation(fields: [patientId], references: [id], onDelete: Restrict)
+  providerId String?
+  provider   User?   @relation(fields: [providerId], references: [id], onDelete: SetNull)
+
+  dateHeureEntree DateTime @default(now())
+  motifAdmission  String
+  // Médecine | Chirurgie | Pédiatrie | Maternité | Réanimation | Urgences |
+  // Néonatologie | Autre — free-text service, covered by the single
+  // hospitalisation register (frontend/src/app/registres/hospitalisation).
+  service         String?
+
+  // Registre des hospitalisés officiel : numéro d'ordre du cahier papier
+  // (distinct du dossierNumber du patient) + provenance codée + profession.
+  numeroHospitalisation String?
+  referenceOrigine      String? // Non référé | Cscom | Csref | HR | HN | Cabinet Med Privé | Cabinet soins Privé | Clinique privée
+  profession            String?
+
+  // Contact joignable pendant l'hospitalisation (peut différer du
+  // téléphone habituel du patient, ex. un accompagnant) + adresse précise
+  // pour le retrouver, et statut indigent (prise en charge/exonération).
+  indigent            Boolean?
+  telephoneContact    String?
+  localisationPrecise String?
+
+  diagnosticPrincipal    String?
+  diagnosticsSecondaires String?
+  traitementRecu         String?
+
+  dateHeureSortie      DateTime?
+  issue                String? // Sortie médicale | Référé vers autre structure | Décédé | Transféré vers autre service | Abandon
+  causeDeces           String?
+  structureReference   String?
+  praticienResponsable String?
+  observations         String?
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([patientId, dateHeureEntree])
+}
+
+// Une visite de planification familiale. Un événement par ligne, immuable,
+// même principe que Nutrition/Vaccination/Consultation.
+model PlanificationFamiliale {
+  id         String  @id @default(cuid())
+  patientId  String
+  patient    Patient @relation(fields: [patientId], references: [id], onDelete: Restrict)
+  providerId String?
+  provider   User?   @relation(fields: [providerId], references: [id], onDelete: SetNull)
+
+  date           DateTime @default(now())
+  typeVisite     String // Nouvelle acceptante | Cliente continuante | Changement de méthode | Retrait/Abandon
+  methodeChoisie String // DIU | Pilule COC | Pilule COP | Jadelle | Implanon | DMPA-IM | DMPA-SC | MAMA | Collier | CCV | Condom masculin | Condom féminin | Autre
+
+  // Tableau méthode × action du registre de consultation PF officiel :
+  // l'action possible dépend de methodeChoisie (ex. DIU → Per Césarienne |
+  // Post placentaire | PPI 48H | Insertion | Réinsertion | Retrait |
+  // Suivi/Contrôle ; Pilule COC/COP → 1ère dotation | Renouvellement |
+  // PPI 48H | Suivi/Contrôle ; Jadelle/Implanon → Insertion | PPI 48H |
+  // Retrait | Suivi/Contrôle ; DMPA-IM/DMPA-SC → 1ère injection |
+  // Auto-injection | Renouvellement | Suivi/Contrôle ; MAMA → Pratique ;
+  // CCV → Pratique (per césarienne) | Pratique (en dehors césarienne) ;
+  // Collier → Dotation).
+  actionMethode        String?
+  nbreCyclesDistribues Int? // Pilule COC/COP uniquement
+
+  methodePrecedente          String?
+  parite                     Int?
+  gestite                    Int?
+  tensionArterielle          String?
+  poidsKg                    Float?
+  counselingDonne            Boolean?
+  effetsSecondairesRapportes String?
+  quantiteRemise             String?
+
+  typeUtilisateur                String? // Nouveau | Ancien
+  ageDernierEnfantMois           Int?
+  pratiqueAme                    String? // O | N | NA
+  enfantAJourVaccins             String? // O | N | NA
+  conseilsAlimentationComplement String? // O | N | NA
+  serviceProvenance              String? // Accouchement | CPoN | SPE | Vaccination | Post avortement
+  ppi                            Boolean? // Visite en post-partum immédiat (≤ 48h)
+
+  prochainRdv  DateTime?
+  observations String?
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([patientId, date])
+}
+
 // Clôture mensuelle d'un registre (registre de consultation et, depuis
 // maternité, un registre distinct par type d'acte — consultation |
-// maternite-cpn | maternite-accouchement | maternite-cpon). Une fois un mois
-// clôturé, les routes de mutation refusent (REGISTER_CLOSED) — voir
+// maternite-cpn | maternite-accouchement | maternite-cpon | nutrition |
+// vaccination | hospitalisation | planification-familiale). Une fois un
+// mois clôturé, les routes de mutation refusent (REGISTER_CLOSED) — voir
 // lib/server/registers/closure.ts.
 model RegisterClosure {
   id             String       @id @default(cuid())

@@ -30,6 +30,26 @@ const REGISTERS: RegisterCard[] = [
     title: 'Registre CPoN',
     description: 'Consultations post-natales du mois, clôture et export CSV.',
   },
+  {
+    href: '/registres/nutrition',
+    title: 'Registre Nutrition',
+    description: 'Dépistage et suivi PCIMA (URENAM/URENI) du mois, clôture et export CSV.',
+  },
+  {
+    href: '/registres/vaccination',
+    title: 'Registre Vaccination',
+    description: 'Doses PEV administrées du mois, clôture et export CSV.',
+  },
+  {
+    href: '/registres/hospitalisation',
+    title: 'Registre Hospitalisation',
+    description: 'Admissions du mois, sorties, clôture et export CSV.',
+  },
+  {
+    href: '/registres/planification-familiale',
+    title: 'Registre Planification Familiale',
+    description: 'Visites PF du mois, méthodes choisies, clôture et export CSV.',
+  },
 ];
 
 export default function RegistresIndexPage() {

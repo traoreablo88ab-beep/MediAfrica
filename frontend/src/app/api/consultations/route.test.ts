@@ -43,6 +43,9 @@ function consultationRow(overrides: Partial<Record<string, unknown>> = {}) {
     mdoMaladie: null,
     tdr: null,
     ge: null,
+    indigent: null,
+    telephoneContact: null,
+    localisationPrecise: null,
     createdAt: new Date('2026-01-12T07:45:00Z'),
     updatedAt: new Date('2026-01-12T07:45:00Z'),
     patient: {
@@ -112,6 +115,21 @@ describe('GET /api/consultations', () => {
     const body = await res.json();
     expect(body.items[0].tdr).toBe('Positif');
     expect(body.items[0].ge).toBe('Négatif');
+  });
+
+  it('serializes indigent/telephoneContact/localisationPrecise', async () => {
+    prismaMock.consultation.findMany.mockResolvedValue([
+      consultationRow({
+        indigent: true,
+        telephoneContact: '76 00 00 00',
+        localisationPrecise: 'Quartier Sabalibougou, rue 214',
+      }),
+    ] as never);
+    const res = await GET(makeGet('http://test/api/consultations'));
+    const body = await res.json();
+    expect(body.items[0].indigent).toBe(true);
+    expect(body.items[0].telephoneContact).toBe('76 00 00 00');
+    expect(body.items[0].localisationPrecise).toBe('Quartier Sabalibougou, rue 214');
   });
 
   it('providerName is null when the consultation has no provider', async () => {

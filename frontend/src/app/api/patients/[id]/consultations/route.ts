@@ -45,6 +45,9 @@ const CreateConsultationBody = z.object({
   mdoMaladie: z.string().trim().optional(),
   tdr: z.enum(['Positif', 'Négatif', 'Non fait']).optional(),
   ge: z.enum(['Positif', 'Négatif', 'Non fait']).optional(),
+  indigent: z.boolean().optional(),
+  telephoneContact: z.string().trim().optional(),
+  localisationPrecise: z.string().trim().optional(),
 });
 
 export async function POST(
@@ -162,6 +165,9 @@ export async function POST(
         ...(d.mdoMaladie ? { mdoMaladie: d.mdoMaladie } : {}),
         ...(d.tdr ? { tdr: d.tdr } : {}),
         ...(d.ge ? { ge: d.ge } : {}),
+        ...(d.indigent !== undefined ? { indigent: d.indigent } : {}),
+        ...(d.telephoneContact ? { telephoneContact: d.telephoneContact } : {}),
+        ...(d.localisationPrecise ? { localisationPrecise: d.localisationPrecise } : {}),
         ...(idemKey
           ? {
               idempotencyKey: idemKey,

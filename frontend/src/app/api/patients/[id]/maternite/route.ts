@@ -34,6 +34,9 @@ const CreateMaterniteBody = z.object({
   statutMatrimonial: z.enum(['Célibataire', 'Marié(e)', 'Divorcé(e)', 'Veuf/Veuve']).optional(),
   profession: z.string().trim().optional(),
   observations: z.string().trim().optional(),
+  indigent: z.boolean().optional(),
+  telephoneContact: z.string().trim().optional(),
+  localisationPrecise: z.string().trim().optional(),
 
   // CPN
   cpnNumeroVisite: z.number().int().positive().optional(),
@@ -189,6 +192,9 @@ export async function POST(
         ...(d.statutMatrimonial ? { statutMatrimonial: d.statutMatrimonial } : {}),
         ...(d.profession ? { profession: d.profession } : {}),
         ...(d.observations ? { observations: d.observations } : {}),
+        ...(d.indigent !== undefined ? { indigent: d.indigent } : {}),
+        ...(d.telephoneContact ? { telephoneContact: d.telephoneContact } : {}),
+        ...(d.localisationPrecise ? { localisationPrecise: d.localisationPrecise } : {}),
 
         ...(d.cpnNumeroVisite !== undefined ? { cpnNumeroVisite: d.cpnNumeroVisite } : {}),
         ...(d.ageGestationnelSemaines !== undefined

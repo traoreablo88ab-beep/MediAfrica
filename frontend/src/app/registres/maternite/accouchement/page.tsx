@@ -51,6 +51,9 @@ interface MaterniteRow {
   placentaComplet: boolean | null;
   complicationsAccouchement: string | null;
   complicationsNouveauNe: string | null;
+  indigent: boolean | null;
+  telephoneContact: string | null;
+  localisationPrecise: string | null;
   patient: {
     id: string;
     nom: string;
@@ -300,6 +303,7 @@ export default function RegistreMaterniteAccouchementPage() {
   }
 
   const vivants = items.filter((m) => m.issueGrossesse === 'Vivant').length;
+  const indigentCount = items.filter((m) => m.indigent).length;
 
   return (
     <main className="min-h-screen bg-[#f9f9f7] md:pl-64">
@@ -397,7 +401,7 @@ export default function RegistreMaterniteAccouchementPage() {
           )}
         </div>
 
-        <div className="mb-6 grid grid-cols-1 gap-4 sm:grid-cols-2">
+        <div className="mb-6 grid grid-cols-1 gap-4 sm:grid-cols-3">
           <div className="rounded-xl border border-[#e1e0d9] bg-white p-4 shadow-[0_1px_2px_rgba(11,11,11,0.04)]">
             <p className="text-xs font-medium uppercase tracking-wide text-[#898781]">
               Total accouchements
@@ -409,6 +413,12 @@ export default function RegistreMaterniteAccouchementPage() {
               Naissances vivantes
             </p>
             <p className="mt-1 text-2xl font-semibold text-[#0b0b0b]">{vivants}</p>
+          </div>
+          <div className="rounded-xl border border-[#e1e0d9] bg-white p-4 shadow-[0_1px_2px_rgba(11,11,11,0.04)]">
+            <p className="text-xs font-medium uppercase tracking-wide text-[#898781]">
+              Patientes indigentes
+            </p>
+            <p className="mt-1 text-2xl font-semibold text-[#d03b3b]">{indigentCount}</p>
           </div>
         </div>
 
