@@ -25,7 +25,7 @@ function makePost(body: unknown, opts: { csrf?: 'match' | 'missing' } = {}): Nex
     headers['x-csrf-token'] = 'csrf-tok';
     headers['cookie'] = 'app-csrf=csrf-tok';
   }
-  return new NextRequest('http://test/api/registres/nutrition/close', {
+  return new NextRequest('http://test/api/registres/nutrition/urenam/close', {
     method: 'POST',
     headers,
     body: JSON.stringify(body),
@@ -45,7 +45,7 @@ afterEach(() => {
   vi.useRealTimers();
 });
 
-describe('POST /api/registres/nutrition/close', () => {
+describe('POST /api/registres/nutrition/urenam/close', () => {
   it('missing x-csrf-token header → 403; no Prisma calls', async () => {
     const res = await POST(makePost({}, { csrf: 'missing' }));
     expect(res.status).toBe(403);
@@ -77,7 +77,7 @@ describe('POST /api/registres/nutrition/close', () => {
     const createArg = prismaMock.registerClosure.create.mock.calls[0]?.[0];
     expect(createArg?.data?.month).toBe('2026-01');
     expect(createArg?.data?.closedById).toBe('user-1');
-    expect(createArg?.data?.registerType).toBe('nutrition');
+    expect(createArg?.data?.registerType).toBe('nutrition-urenam');
     expect(createArg?.data?.organizationId).toBe('org-1');
   });
 

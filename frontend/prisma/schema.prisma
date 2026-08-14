@@ -562,10 +562,17 @@ model Maternite {
   @@index([type, date])
 }
 
-// Une fiche de dépistage/suivi nutritionnel — protocole national PCIMA
-// (Prise en Charge Intégrée de la Malnutrition Aiguë), URENAM/URENI. Comme
-// Consultation : un événement par ligne, immuable (pas de PATCH/DELETE au-
-// delà de la clôture mensuelle standard).
+// Une fiche PCIMA (Prise en Charge Intégrée de la Malnutrition Aiguë) —
+// URENI (hospitalisation), URENAS (ambulatoire sévère) ou URENAM
+// (ambulatoire modéré), discriminées par `type`, même principe que
+// Maternite. Les 3 types suivent le même schéma deux-temps que
+// Hospitalisation : admission à la création, sortie/issue remplie plus
+// tard via PATCH (les champs de sortie restent nullables). Les 3 types
+// gagnent aussi des visites de suivi ajoutées une à une (voir
+// NutritionVisiteSuivi — quotidien pour URENI, hebdomadaire pour URENAS,
+// existant pour URENAM), modélisées comme un tableau enfant plutôt qu'une
+// ligne plate par visite. URENAS a en plus des évènements ponctuels (VAD,
+// référence/transfert durant le traitement — voir NutritionEvenement).
 model Nutrition {
   id         String  @id @default(cuid())
   patientId  String
@@ -573,36 +580,126 @@ model Nutrition {
   providerId String?
   provider   User?   @relation(fields: [providerId], references: [id], onDelete: SetNull)
 
-  date    DateTime @default(now())
-  typeCas String? // NC | AC (Nouveau Cas | Ancien Cas), comme Consultation
+  date DateTime @default(now()) // date d'admission / de création de l'épisode
+  type String // URENI | URENAS | URENAM
 
-  poidsKg             Float?
-  tailleCm            Float?
-  perimetreBrachialCm Float? // PB - périmètre brachial (cm), dépistage/suivi PCIMA
-  oedemes             String? // Non | + | ++ | +++
-  statutPT            String? // indice Poids/Taille, lu sur abaque OMS (texte libre, comme Consultation.statutPT)
-  classification      String? // Normal | MAM | MAS sans complication | MAS avec complication
-  testAppetit         String? // Bon | Faible/Échec
+  // Communs — admission / épisode
+  numeroMas            String? // N° MAS (numéro d'enregistrement programme)
+  telephoneContact     String?
+  localisationPrecise  String?
+  ageMois              Int?
+  modeAdmission        String? // URENI: NC|Rechute|Réadmission|TN/REF — URENAS: mêmes + TN/TM
+  typeCas              String? // URENAM uniquement : NC | AC | Réadmission
+  poidsKg              Float?
+  tailleCm             Float?
+  perimetreBrachialCm  Float?
+  ptIndice             String? // "P/T ou IMC" (URENI) ou "P/T Z" (URENAS/URENAM)
+  oedemes              String? // Non | + | ++ | +++
+  pathologiesAssociees String?
 
-  complicationsMedicales String?
-  priseEnCharge          String? // Aucune | URENAM | URENI | URENAS
-  atpe                   Boolean? // Aliment Thérapeutique Prêt à l'Emploi (Plumpy'nut)
-  laitF75                Boolean?
-  laitF100               Boolean?
-  amoxicilline           Boolean?
-  vitamineA              Boolean?
-  deparasitant           Boolean?
-  traitementAutre        String?
+  // Contexte admission — sourceAdmission + provenanceProgramme s'appliquent aux
+  // 3 types ; le reste de ce bloc (nomPere...vaccinationAJour) reste
+  // URENI/URENAS uniquement. Saisi à la création uniquement, pas de PATCH.
+  nomPere             String?
+  nomMere             String?
+  allaite             Boolean?
+  jumeaux             Boolean?
+  parentsVivants      Boolean?
+  sourceAdmission     String? // Référé | Spontané | Dépistage actif — distinct de modeAdmission (classification PCIMA officielle)
+  provenanceProgramme String? // URENI | URENAS | URENAM — programme PCIMA d'origine si sourceAdmission = 'Référé' (URENAM jamais concerné : c'est le point d'entrée, pas de provenance PCIMA)
+  carteVaccination    Boolean?
+  vaccinationAJour    Boolean?
 
-  numeroVisiteSuivi Int?
-  evolution         String? // En cours | Guéri | Abandon | Décès | Référé | Non-répondant
-  prochainRdv       DateTime?
-  observations      String?
+  // Sortie / issue finale (nullable, rempli plus tard via PATCH sur
+  // /api/nutritions/[id] — jamais via prisma.nutrition.update ailleurs)
+  dateSortie                        DateTime?
+  poidsSortieKg                     Float?
+  tailleSortieCm                    Float?
+  perimetreBrachialSortieCm         Float?
+  ptIndiceSortie                    String?
+  oedemeSortie                      String?
+  typeSortie                        String? // Guéri|Décès|Abandon|Non répondant|Transféré/référé|Perdu de vue
+  destinationProgramme              String? // URENI | URENAS | URENAM | Autre structure — si typeSortie = 'Transféré/référé'. Distinct de NutritionEvenement.centre (journal texte libre en cours de traitement, URENAS only) : ce champ est la valeur structurée unique de l'issue finale, pour les 3 types.
+  datePoidsMinimum                  DateTime? // URENI/URENAS
+  poidsMinimumKg                    Float? // URENI/URENAS
+  seancesStimulationPsychocognitive Int? // URENI/URENAS
+  seancesCcsc                       Int? // URENI/URENAS
+  beneficiairePoudreNutritive       Boolean? // URENAM
+  beneficiairePlaquette             Boolean? // URENAM
+  dureeSejourJours                  Int? // URENAM
+  observations                      String?
+
+  visites    NutritionVisiteSuivi[] // URENI: quotidien, URENAS: hebdomadaire, URENAM: existant
+  evenements NutritionEvenement[] // URENAS uniquement : VAD + référence/transfert
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
   @@index([patientId, date])
+  @@index([type, date])
+}
+
+// Visite de suivi périodique, ajoutée au fil du traitement via POST
+// /api/nutritions/[id]/visites — quotidien pour URENI, hebdomadaire pour
+// URENAS, existant pour URENAM. Pas de organizationId propre — le scoping
+// tenant passe par nutrition -> patient -> organization, comme tout le
+// reste du schéma.
+model NutritionVisiteSuivi {
+  id          String    @id @default(cuid())
+  nutritionId String
+  nutrition   Nutrition @relation(fields: [nutritionId], references: [id], onDelete: Cascade)
+
+  numeroVisite        Int
+  date                DateTime @default(now())
+  poidsKg             Float?
+  tailleCm            Float?
+  perimetreBrachialCm Float?
+  ptIndice            String?
+  oedemes             String?
+  type                String? // statut/issue de cette visite (texte libre)
+
+  // Suivi clinique pragmatique — URENI: quotidien, URENAS: hebdomadaire, URENAM: existant
+  testAppetit                    String? // Bon | Moyen | Faible
+  diarrheeJours                  Int?
+  vomissementJours               Int?
+  fievreJours                    Int?
+  touxJours                      Int?
+  temperatureC                   Float?
+  resultatTestPalu               String? // '0' | '-' | '+' — repris du papier tel quel (distinct de Consultation.tdr : Positif/Négatif/Non fait)
+  atpeSachets                    Int?
+  dermatoses                     String?
+  alerteLethargique              String? // Alerte | Léthargique — surveillance quotidienne URENI
+  frequenceRespiratoireMin       Int?
+  seancesEducationNutritionnelle Int? // par visite — distinct de Nutrition.seancesCcsc (cumulatif, sortie)
+  seancesStimulation             Int? // par visite — distinct de Nutrition.seancesStimulationPsychocognitive (cumulatif, sortie)
+  observations                   String? // texte libre : médicaments, traitement spécifique, labo…
+
+  createdAt DateTime @default(now())
+
+  @@unique([nutritionId, numeroVisite])
+}
+
+// Évènement ponctuel durant le traitement URENAS — VAD (visite à domicile)
+// ou référence/transfert. Contrôle de type applicatif uniquement (POST
+// route), pas de contrainte au niveau du schéma, même principe que
+// NutritionVisiteSuivi pour URENAM avant l'ouverture aux 3 types. Pas de
+// organizationId propre — scoping transitif via nutrition -> patient ->
+// organization.
+model NutritionEvenement {
+  id          String    @id @default(cuid())
+  nutritionId String
+  nutrition   Nutrition @relation(fields: [nutritionId], references: [id], onDelete: Cascade)
+
+  type       String // VAD | REFERENCE_TRANSFERT
+  date       DateTime @default(now())
+  raison     String?
+  conclusion String? // VAD uniquement
+  centre     String? // REFERENCE_TRANSFERT uniquement
+  resultat   String? // REFERENCE_TRANSFERT uniquement
+
+  createdAt DateTime @default(now())
+
+  @@index([nutritionId, date])
 }
 
 // Une dose de vaccin administrée — PEV (Programme Élargi de Vaccination,

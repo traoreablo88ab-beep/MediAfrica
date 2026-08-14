@@ -59,6 +59,7 @@ function consultationRow(overrides: Partial<Record<string, unknown>> = {}) {
     tensionArterielle: null,
     poidsKg: null,
     temperatureC: null,
+    indigent: null,
     createdAt: new Date('2026-01-12T07:45:00Z'),
     updatedAt: new Date('2026-01-12T07:45:00Z'),
     ...overrides,
@@ -96,6 +97,14 @@ describe('PATCH /api/consultations/[id]', () => {
     expect(prismaMock.consultation.update).not.toHaveBeenCalled();
   });
 
+  it('empty body (neither status nor indigent) → 400 VALIDATION_FAILED', async () => {
+    const res = await PATCH(makePatch({}), ctxWith('c-1'));
+    expect(res.status).toBe(400);
+    const body = await res.json();
+    expect(body.error).toBe('VALIDATION_FAILED');
+    expect(prismaMock.consultation.update).not.toHaveBeenCalled();
+  });
+
   it('404 CONSULTATION_NOT_FOUND when the consultation does not exist', async () => {
     prismaMock.consultation.findFirst.mockResolvedValue(null);
     const res = await PATCH(makePatch({ status: 'traite' }), ctxWith('missing'));
@@ -122,10 +131,22 @@ describe('PATCH /api/consultations/[id]', () => {
     const res = await PATCH(makePatch({ status: 'traite' }), ctxWith('c-1'));
     expect(res.status).toBe(200);
     const body = await res.json();
-    expect(body).toEqual({ id: 'c-1', status: 'traite' });
+    expect(body).toEqual({ id: 'c-1', status: 'traite', indigent: null });
     const updateArg = prismaMock.consultation.update.mock.calls[0]?.[0];
     expect(updateArg?.where).toEqual({ id: 'c-1' });
     expect(updateArg?.data).toEqual({ status: 'traite' });
+  });
+
+  it('happy path: updates indigent only, returns 200', async () => {
+    prismaMock.consultation.findFirst.mockResolvedValue(consultationRow() as never);
+    prismaMock.consultation.update.mockResolvedValue(consultationRow({ indigent: true }) as never);
+    const res = await PATCH(makePatch({ indigent: true }), ctxWith('c-1'));
+    expect(res.status).toBe(200);
+    const body = await res.json();
+    expect(body).toEqual({ id: 'c-1', status: 'attente', indigent: true });
+    const updateArg = prismaMock.consultation.update.mock.calls[0]?.[0];
+    expect(updateArg?.where).toEqual({ id: 'c-1' });
+    expect(updateArg?.data).toEqual({ indigent: true });
   });
 });
 

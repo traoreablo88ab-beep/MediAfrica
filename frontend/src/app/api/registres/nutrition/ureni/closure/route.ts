@@ -1,5 +1,5 @@
-// GET /api/registres/nutrition/closure?month=2026-01 — closure status for a
-// given month (default: current month) of the nutrition register. Any
+// GET /api/registres/nutrition/ureni/closure?month=2026-01 — closure status
+// for a given month (default: current month) of the URENI register. Any
 // authenticated staff member can read this (used to show the "Clôturé"
 // badge / gate the close button).
 export const runtime = 'nodejs';
@@ -12,7 +12,7 @@ import { prisma } from '@/lib/server/prisma';
 import { monthKey } from '@/lib/server/registers/closure';
 import { makeRequestContext, withRequestContext } from '@/lib/server/observability/request-context';
 
-const REGISTER_TYPE = 'nutrition';
+const REGISTER_TYPE = 'nutrition-ureni';
 
 export async function GET(req: NextRequest): Promise<NextResponse> {
   const ctx = makeRequestContext(req.headers);

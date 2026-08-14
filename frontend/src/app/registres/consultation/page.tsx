@@ -9,8 +9,9 @@ import { Skeleton } from '@/components/Skeleton';
 import { useClinicName } from '@/lib/useClinicName';
 import { MonthPicker } from '@/components/MonthPicker';
 import { downloadRegisterPdf } from '@/lib/exportPdf';
+import { useToast } from '@/contexts/ToastContext';
 
-const REGISTER_COLUMN_COUNT = 19;
+const REGISTER_COLUMN_COUNT = 24;
 
 interface ConsultationRow {
   id: string;
@@ -108,6 +109,8 @@ function buildRegisterRows(rows: ConsultationRow[]): { headers: string[]; lines:
     'Âge',
     'Sexe',
     'Provenance',
+    'Téléphone',
+    'Localisation',
     'Motif',
     'NC',
     'AC',
@@ -119,6 +122,8 @@ function buildRegisterRows(rows: ConsultationRow[]): { headers: string[]; lines:
     'PB (cm)',
     'P/T',
     'MDO',
+    'Indigent (Oui)',
+    'Indigent (Non)',
     'Traitement',
     'Soignant',
   ];
@@ -130,6 +135,8 @@ function buildRegisterRows(rows: ConsultationRow[]): { headers: string[]; lines:
     String(computeAge(c.patient.dateNaissance)),
     c.patient.sexe,
     c.patient.communeResidence,
+    c.telephoneContact ?? '',
+    c.localisationPrecise ?? '',
     c.motif,
     c.typeCas === 'NC' ? 'X' : '',
     c.typeCas === 'AC' ? 'X' : '',
@@ -141,6 +148,8 @@ function buildRegisterRows(rows: ConsultationRow[]): { headers: string[]; lines:
     c.perimetreBrachialCm != null ? String(c.perimetreBrachialCm) : '',
     c.statutPT ?? '',
     c.mdo ? (c.mdoMaladie ?? 'Oui') : '',
+    c.indigent === true ? 'X' : '',
+    c.indigent === false ? 'X' : '',
     c.traitementPrescrit ?? '',
     c.providerName ?? '',
   ]);
@@ -187,12 +196,14 @@ function formatDateTime(iso: string): string {
 
 export default function RegistreConsultationPage() {
   const clinicName = useClinicName();
+  const { toast } = useToast();
   const [month, setMonth] = useState(currentMonth());
   const [items, setItems] = useState<ConsultationRow[]>([]);
   const [closure, setClosure] = useState<ClosureStatus | null>(null);
   const [loading, setLoading] = useState(true);
   const [closing, setClosing] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [savingIndigentIds, setSavingIndigentIds] = useState<Set<string>>(new Set());
 
   const load = useCallback(async (selectedMonth: string) => {
     setLoading(true);
@@ -246,6 +257,25 @@ export default function RegistreConsultationPage() {
       setError(friendlyError(err, 'Une erreur est survenue. Réessayez.'));
     } finally {
       setClosing(false);
+    }
+  }
+
+  async function toggleIndigent(id: string, value: boolean) {
+    const previous = items.find((c) => c.id === id)?.indigent ?? null;
+    if (previous === value) return;
+    setItems((prev) => prev.map((c) => (c.id === id ? { ...c, indigent: value } : c)));
+    setSavingIndigentIds((prev) => new Set(prev).add(id));
+    try {
+      await api(`/api/consultations/${id}`, { method: 'PATCH', body: { indigent: value } });
+    } catch (err) {
+      setItems((prev) => prev.map((c) => (c.id === id ? { ...c, indigent: previous } : c)));
+      toast(friendlyError(err, 'Une erreur est survenue. Réessayez.'), 'error');
+    } finally {
+      setSavingIndigentIds((prev) => {
+        const next = new Set(prev);
+        next.delete(id);
+        return next;
+      });
     }
   }
 
@@ -397,26 +427,85 @@ export default function RegistreConsultationPage() {
           <table className="w-full text-left text-xs">
             <thead>
               <tr className="border-b border-[#e1e0d9] uppercase tracking-wide text-[#898781]">
-                <th className="px-3 py-2 font-medium">N°</th>
-                <th className="px-3 py-2 font-medium">Date</th>
-                <th className="px-3 py-2 font-medium">N° dossier</th>
-                <th className="px-3 py-2 font-medium">Nom et prénom</th>
-                <th className="px-3 py-2 font-medium">Âge</th>
-                <th className="px-3 py-2 font-medium">Sexe</th>
-                <th className="px-3 py-2 font-medium">Provenance</th>
-                <th className="px-3 py-2 font-medium">Motif</th>
-                <th className="px-3 py-2 font-medium">NC</th>
-                <th className="px-3 py-2 font-medium">AC</th>
-                <th className="px-3 py-2 font-medium">Diagnostic</th>
-                <th className="px-3 py-2 font-medium">TDR</th>
-                <th className="px-3 py-2 font-medium">GE</th>
-                <th className="px-3 py-2 font-medium">Poids</th>
-                <th className="px-3 py-2 font-medium">Taille</th>
-                <th className="px-3 py-2 font-medium">PB</th>
-                <th className="px-3 py-2 font-medium">P/T</th>
-                <th className="px-3 py-2 font-medium">MDO</th>
-                <th className="px-3 py-2 font-medium">Traitement</th>
-                <th className="px-3 py-2 font-medium">Soignant</th>
+                <th rowSpan={2} className="px-3 py-2 align-bottom font-medium">
+                  N°
+                </th>
+                <th rowSpan={2} className="px-3 py-2 align-bottom font-medium">
+                  Date
+                </th>
+                <th rowSpan={2} className="px-3 py-2 align-bottom font-medium">
+                  N° dossier
+                </th>
+                <th rowSpan={2} className="px-3 py-2 align-bottom font-medium">
+                  Nom et prénom
+                </th>
+                <th rowSpan={2} className="px-3 py-2 align-bottom font-medium">
+                  Âge
+                </th>
+                <th rowSpan={2} className="px-3 py-2 align-bottom font-medium">
+                  Sexe
+                </th>
+                <th rowSpan={2} className="px-3 py-2 align-bottom font-medium">
+                  Provenance
+                </th>
+                <th rowSpan={2} className="px-3 py-2 align-bottom font-medium">
+                  Téléphone
+                </th>
+                <th rowSpan={2} className="px-3 py-2 align-bottom font-medium">
+                  Localisation
+                </th>
+                <th rowSpan={2} className="px-3 py-2 align-bottom font-medium">
+                  Motif
+                </th>
+                <th rowSpan={2} className="px-3 py-2 align-bottom font-medium">
+                  NC
+                </th>
+                <th rowSpan={2} className="px-3 py-2 align-bottom font-medium">
+                  AC
+                </th>
+                <th rowSpan={2} className="px-3 py-2 align-bottom font-medium">
+                  Diagnostic
+                </th>
+                <th rowSpan={2} className="px-3 py-2 align-bottom font-medium">
+                  TDR
+                </th>
+                <th rowSpan={2} className="px-3 py-2 align-bottom font-medium">
+                  GE
+                </th>
+                <th rowSpan={2} className="px-3 py-2 align-bottom font-medium">
+                  Poids
+                </th>
+                <th rowSpan={2} className="px-3 py-2 align-bottom font-medium">
+                  Taille
+                </th>
+                <th rowSpan={2} className="px-3 py-2 align-bottom font-medium">
+                  PB
+                </th>
+                <th rowSpan={2} className="px-3 py-2 align-bottom font-medium">
+                  P/T
+                </th>
+                <th rowSpan={2} className="px-3 py-2 align-bottom font-medium">
+                  MDO
+                </th>
+                <th
+                  colSpan={2}
+                  className="border-l border-[#e1e0d9] px-3 py-2 text-center font-medium"
+                >
+                  Indigent
+                </th>
+                <th
+                  rowSpan={2}
+                  className="border-l border-[#e1e0d9] px-3 py-2 align-bottom font-medium"
+                >
+                  Traitement
+                </th>
+                <th rowSpan={2} className="px-3 py-2 align-bottom font-medium">
+                  Soignant
+                </th>
+              </tr>
+              <tr className="border-b border-[#e1e0d9] uppercase tracking-wide text-[#898781]">
+                <th className="border-l border-[#e1e0d9] px-2 py-1 text-center font-medium">Oui</th>
+                <th className="px-2 py-1 text-center font-medium">Non</th>
               </tr>
             </thead>
             <tbody>
@@ -451,6 +540,8 @@ export default function RegistreConsultationPage() {
                   </td>
                   <td className="px-3 py-2 text-[#52514e]">{c.patient.sexe === 'F' ? 'F' : 'M'}</td>
                   <td className="px-3 py-2 text-[#52514e]">{c.patient.communeResidence}</td>
+                  <td className="px-3 py-2 text-[#52514e]">{c.telephoneContact ?? '—'}</td>
+                  <td className="px-3 py-2 text-[#52514e]">{c.localisationPrecise ?? '—'}</td>
                   <td className="px-3 py-2 text-[#52514e]">{c.motif}</td>
                   <td className="px-3 py-2 text-center">{c.typeCas === 'NC' ? '✓' : ''}</td>
                   <td className="px-3 py-2 text-center">{c.typeCas === 'AC' ? '✓' : ''}</td>
@@ -464,13 +555,36 @@ export default function RegistreConsultationPage() {
                   <td className="px-3 py-2 text-[#52514e]">
                     {c.mdo ? (c.mdoMaladie ?? 'Oui') : '—'}
                   </td>
+                  <td className="border-l border-[#e1e0d9] px-3 py-2 text-center">
+                    <input
+                      type="checkbox"
+                      aria-label={`Indigent — oui (${c.patient.nom} ${c.patient.prenom})`}
+                      checked={c.indigent === true}
+                      disabled={closure?.closed || savingIndigentIds.has(c.id)}
+                      onChange={() => toggleIndigent(c.id, true)}
+                      className="h-3.5 w-3.5 accent-[#d03b3b] disabled:opacity-50"
+                    />
+                  </td>
+                  <td className="px-3 py-2 text-center">
+                    <input
+                      type="checkbox"
+                      aria-label={`Indigent — non (${c.patient.nom} ${c.patient.prenom})`}
+                      checked={c.indigent === false}
+                      disabled={closure?.closed || savingIndigentIds.has(c.id)}
+                      onChange={() => toggleIndigent(c.id, false)}
+                      className="h-3.5 w-3.5 accent-[#898781] disabled:opacity-50"
+                    />
+                  </td>
                   <td className="px-3 py-2 text-[#52514e]">{c.traitementPrescrit ?? '—'}</td>
                   <td className="px-3 py-2 text-[#52514e]">{c.providerName ?? '—'}</td>
                 </tr>
               ))}
               {!loading && items.length === 0 && !error && (
                 <tr>
-                  <td colSpan={20} className="px-3 py-8 text-center text-[#898781]">
+                  <td
+                    colSpan={REGISTER_COLUMN_COUNT}
+                    className="px-3 py-8 text-center text-[#898781]"
+                  >
                     Aucune consultation ce mois-ci.
                   </td>
                 </tr>

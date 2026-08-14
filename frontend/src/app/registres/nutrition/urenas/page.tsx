@@ -10,23 +10,29 @@ import { useClinicName } from '@/lib/useClinicName';
 import { MonthPicker } from '@/components/MonthPicker';
 import { downloadRegisterPdf } from '@/lib/exportPdf';
 
-const REGISTER_COLUMN_COUNT = 14;
+const REGISTER_LABEL = 'Registre URENAS';
+const REGISTER_TYPE = 'URENAS';
+const REGISTER_COLUMN_COUNT = 15;
+
+interface NutritionVisite {
+  numeroVisite: number;
+  date: string;
+}
 
 interface NutritionRow {
   id: string;
   date: string;
-  typeCas: string | null;
+  numeroMas: string | null;
+  ageMois: number | null;
+  modeAdmission: string | null;
   poidsKg: number | null;
   tailleCm: number | null;
   perimetreBrachialCm: number | null;
+  ptIndice: string | null;
   oedemes: string | null;
-  classification: string | null;
-  testAppetit: string | null;
-  priseEnCharge: string | null;
-  numeroVisiteSuivi: number | null;
-  evolution: string | null;
-  prochainRdv: string | null;
-  observations: string | null;
+  dateSortie: string | null;
+  typeSortie: string | null;
+  visites: NutritionVisite[];
   patient: {
     id: string;
     nom: string;
@@ -72,88 +78,11 @@ function monthBounds(month: string): { dateFrom: string; dateTo: string } {
   };
 }
 
-function computeAge(dateNaissanceIso: string): number {
-  const dob = new Date(dateNaissanceIso);
-  const now = new Date();
-  let age = now.getFullYear() - dob.getFullYear();
-  const monthDiff = now.getMonth() - dob.getMonth();
-  if (monthDiff < 0 || (monthDiff === 0 && now.getDate() < dob.getDate())) age -= 1;
-  return age;
-}
-
 function formatDate(iso: string): string {
   return new Date(iso).toLocaleDateString('fr-FR', {
     day: 'numeric',
     month: 'short',
     year: 'numeric',
-  });
-}
-
-function csvEscape(value: string): string {
-  return /[",;\n]/.test(value) ? `"${value.replace(/"/g, '""')}"` : value;
-}
-
-function buildRegisterRows(rows: NutritionRow[]): { headers: string[]; lines: string[][] } {
-  const headers = [
-    'N°',
-    'Date',
-    'N° dossier',
-    'Nom et prénom',
-    'Âge',
-    'Sexe',
-    'PB (cm)',
-    'Œdèmes',
-    'Classification',
-    'Test appétit',
-    'Prise en charge',
-    'N° visite',
-    'Évolution',
-    'Soignant',
-  ];
-  const lines = rows.map((n, i) => [
-    String(i + 1),
-    formatDate(n.date),
-    n.patient.dossierNumber,
-    `${n.patient.nom}, ${n.patient.prenom}`,
-    String(computeAge(n.patient.dateNaissance)),
-    n.patient.sexe,
-    n.perimetreBrachialCm != null ? String(n.perimetreBrachialCm) : '',
-    n.oedemes ?? '',
-    n.classification ?? '',
-    n.testAppetit ?? '',
-    n.priseEnCharge ?? '',
-    n.numeroVisiteSuivi != null ? String(n.numeroVisiteSuivi) : '',
-    n.evolution ?? '',
-    n.providerName ?? '',
-  ]);
-  return { headers, lines };
-}
-
-// Semicolon delimiter + UTF-8 BOM — the format Excel with a French locale
-// expects (comma is the decimal separator there, so it can't be the
-// column separator; the BOM keeps accented names/text readable).
-function downloadCsv(month: string, rows: NutritionRow[]): void {
-  const { headers, lines } = buildRegisterRows(rows);
-  const csv = [headers, ...lines].map((row) => row.map(csvEscape).join(';')).join('\r\n');
-  const BOM = String.fromCharCode(0xfeff);
-  const blob = new Blob([BOM + csv], { type: 'text/csv;charset=utf-8;' });
-  const url = URL.createObjectURL(blob);
-  const a = document.createElement('a');
-  a.href = url;
-  a.download = `registre-nutrition-${month}.csv`;
-  a.click();
-  URL.revokeObjectURL(url);
-}
-
-function downloadPdf(clinicName: string, month: string, rows: NutritionRow[]): void {
-  const { headers, lines } = buildRegisterRows(rows);
-  downloadRegisterPdf({
-    title: 'Registre de nutrition (PCIMA)',
-    clinicName,
-    month,
-    headers,
-    rows: lines,
-    fileName: `registre-nutrition-${month}.pdf`,
   });
 }
 
@@ -167,7 +96,82 @@ function formatDateTime(iso: string): string {
   });
 }
 
-export default function RegistreNutritionPage() {
+function lastVisite(row: NutritionRow): NutritionVisite | null {
+  return row.visites.length > 0 ? (row.visites[row.visites.length - 1] ?? null) : null;
+}
+
+function csvEscape(value: string): string {
+  return /[",;\n]/.test(value) ? `"${value.replace(/"/g, '""')}"` : value;
+}
+
+function buildRegisterRows(rows: NutritionRow[]): { headers: string[]; lines: string[][] } {
+  const headers = [
+    'N°',
+    'N° MAS',
+    'Date',
+    'N° dossier',
+    'Nom et prénom',
+    'Âge (mois)',
+    'Sexe',
+    'Mode admission',
+    'Poids (kg)',
+    'Taille (cm)',
+    'PB (cm)',
+    'P/T Z',
+    'Œdèmes',
+    'Nb visites',
+    'Sortie',
+    'Type de sortie',
+    'Soignant',
+  ];
+  const lines = rows.map((n, i) => [
+    String(i + 1),
+    n.numeroMas ?? '',
+    formatDate(n.date),
+    n.patient.dossierNumber,
+    `${n.patient.nom}, ${n.patient.prenom}`,
+    n.ageMois != null ? String(n.ageMois) : '',
+    n.patient.sexe,
+    n.modeAdmission ?? '',
+    n.poidsKg != null ? String(n.poidsKg) : '',
+    n.tailleCm != null ? String(n.tailleCm) : '',
+    n.perimetreBrachialCm != null ? String(n.perimetreBrachialCm) : '',
+    n.ptIndice ?? '',
+    n.oedemes ?? '',
+    String(n.visites.length),
+    n.dateSortie ? formatDate(n.dateSortie) : 'En cours',
+    n.typeSortie ?? '',
+    n.providerName ?? '',
+  ]);
+  return { headers, lines };
+}
+
+function downloadCsv(month: string, rows: NutritionRow[]): void {
+  const { headers, lines } = buildRegisterRows(rows);
+  const csv = [headers, ...lines].map((row) => row.map(csvEscape).join(';')).join('\r\n');
+  const BOM = String.fromCharCode(0xfeff);
+  const blob = new Blob([BOM + csv], { type: 'text/csv;charset=utf-8;' });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url;
+  a.download = `registre-nutrition-urenas-${month}.csv`;
+  a.click();
+  URL.revokeObjectURL(url);
+}
+
+function downloadPdf(clinicName: string, month: string, rows: NutritionRow[]): void {
+  const { headers, lines } = buildRegisterRows(rows);
+  downloadRegisterPdf({
+    title: REGISTER_LABEL,
+    clinicName,
+    month,
+    headers,
+    rows: lines,
+    fileName: `registre-nutrition-urenas-${month}.pdf`,
+  });
+}
+
+export default function RegistreNutritionUrenasPage() {
   const clinicName = useClinicName();
   const [month, setMonth] = useState(currentMonth());
   const [items, setItems] = useState<NutritionRow[]>([]);
@@ -181,7 +185,7 @@ export default function RegistreNutritionPage() {
     setError(null);
     try {
       const closureRes = await api<ClosureStatus>(
-        `/api/registres/nutrition/closure?month=${selectedMonth}`,
+        `/api/registres/nutrition/urenas/closure?month=${selectedMonth}`,
       );
       setClosure(closureRes);
 
@@ -189,7 +193,12 @@ export default function RegistreNutritionPage() {
       const all: NutritionRow[] = [];
       let cursor: string | null = null;
       do {
-        const params = new URLSearchParams({ dateFrom, dateTo, limit: '50' });
+        const params = new URLSearchParams({
+          type: REGISTER_TYPE,
+          dateFrom,
+          dateTo,
+          limit: '50',
+        });
         if (cursor) params.set('cursor', cursor);
         const page: NutritionPage = await api<NutritionPage>(`/api/nutrition?${params.toString()}`);
         all.push(...page.items);
@@ -212,7 +221,7 @@ export default function RegistreNutritionPage() {
   async function onClose() {
     if (
       !window.confirm(
-        `Clôturer le registre de ${month} ? Aucune fiche nutrition ne pourra plus être ajoutée pour ce mois.`,
+        `Clôturer le registre URENAS de ${month} ? Aucune fiche ne pourra plus être ajoutée ou modifiée pour ce mois.`,
       )
     ) {
       return;
@@ -220,7 +229,7 @@ export default function RegistreNutritionPage() {
     setClosing(true);
     setError(null);
     try {
-      await api('/api/registres/nutrition/close', { method: 'POST', body: { month } });
+      await api('/api/registres/nutrition/urenas/close', { method: 'POST', body: { month } });
       await load(month);
     } catch (err) {
       setError(friendlyError(err, 'Une erreur est survenue. Réessayez.'));
@@ -229,12 +238,7 @@ export default function RegistreNutritionPage() {
     }
   }
 
-  const classificationCounts = new Map<string, number>();
-  for (const n of items) {
-    const key = n.classification?.trim() || 'Non précisé';
-    classificationCounts.set(key, (classificationCounts.get(key) ?? 0) + 1);
-  }
-  const masCount = items.filter((n) => n.classification?.startsWith('MAS')).length;
+  const enCoursCount = items.filter((n) => !n.dateSortie).length;
 
   return (
     <main className="min-h-screen bg-[#f9f9f7] md:pl-64">
@@ -245,8 +249,14 @@ export default function RegistreNutritionPage() {
       <div className="animate-fade-in-up mx-auto max-w-7xl px-6 py-6">
         <div className="mb-6 flex flex-col gap-4 print:hidden sm:flex-row sm:items-center sm:justify-between">
           <div>
-            <h1 className="text-2xl font-bold text-[#0b0b0b]">Registre de nutrition (PCIMA)</h1>
+            <h1 className="text-2xl font-bold text-[#0b0b0b]">{REGISTER_LABEL}</h1>
             <p className="mt-1 text-sm text-[#52514e]">{clinicName}</p>
+            <Link
+              href="/registres/rma"
+              className="mt-1 inline-block text-xs text-[#2a78d6] hover:underline"
+            >
+              Aide à la saisie RMA →
+            </Link>
           </div>
           <div className="flex flex-col gap-3 sm:flex-row sm:items-center">
             <div className="flex items-center gap-1">
@@ -326,32 +336,18 @@ export default function RegistreNutritionPage() {
           )}
         </div>
 
-        <div className="mb-6 grid grid-cols-1 gap-4 sm:grid-cols-3">
+        <div className="mb-6 grid grid-cols-1 gap-4 sm:grid-cols-2">
           <div className="rounded-xl border border-[#e1e0d9] bg-white p-4 shadow-[0_1px_2px_rgba(11,11,11,0.04)]">
             <p className="text-xs font-medium uppercase tracking-wide text-[#898781]">
-              Total fiches
+              Total admissions
             </p>
             <p className="mt-1 text-2xl font-semibold text-[#0b0b0b]">{items.length}</p>
-            <p className="mt-1 text-xs text-[#898781]">{masCount} cas MAS ce mois-ci</p>
           </div>
-          <div className="rounded-xl border border-[#e1e0d9] bg-white p-4 shadow-[0_1px_2px_rgba(11,11,11,0.04)] sm:col-span-2">
+          <div className="rounded-xl border border-[#e1e0d9] bg-white p-4 shadow-[0_1px_2px_rgba(11,11,11,0.04)]">
             <p className="text-xs font-medium uppercase tracking-wide text-[#898781]">
-              Répartition par classification
+              Toujours en cours
             </p>
-            {classificationCounts.size === 0 ? (
-              <p className="mt-1 text-sm text-[#52514e]">Aucune fiche ce mois-ci.</p>
-            ) : (
-              <ul className="mt-2 flex flex-wrap gap-2">
-                {[...classificationCounts.entries()].map(([classification, count]) => (
-                  <li
-                    key={classification}
-                    className="rounded-full bg-[#2a78d6]/10 px-3 py-1 text-xs font-medium text-[#2a78d6]"
-                  >
-                    {classification} × {count}
-                  </li>
-                ))}
-              </ul>
-            )}
+            <p className="mt-1 text-2xl font-semibold text-[#d08a1c]">{enCoursCount}</p>
           </div>
         </div>
 
@@ -360,18 +356,19 @@ export default function RegistreNutritionPage() {
             <thead>
               <tr className="border-b border-[#e1e0d9] uppercase tracking-wide text-[#898781]">
                 <th className="px-3 py-2 font-medium">N°</th>
+                <th className="px-3 py-2 font-medium">N° MAS</th>
                 <th className="px-3 py-2 font-medium">Date</th>
-                <th className="px-3 py-2 font-medium">N° dossier</th>
                 <th className="px-3 py-2 font-medium">Nom et prénom</th>
-                <th className="px-3 py-2 font-medium">Âge</th>
+                <th className="px-3 py-2 font-medium">Âge (mois)</th>
                 <th className="px-3 py-2 font-medium">Sexe</th>
+                <th className="px-3 py-2 font-medium">Mode admission</th>
+                <th className="px-3 py-2 font-medium">Poids</th>
+                <th className="px-3 py-2 font-medium">Taille</th>
                 <th className="px-3 py-2 font-medium">PB</th>
-                <th className="px-3 py-2 font-medium">Œdèmes</th>
-                <th className="px-3 py-2 font-medium">Classification</th>
-                <th className="px-3 py-2 font-medium">Test appétit</th>
-                <th className="px-3 py-2 font-medium">Prise en charge</th>
-                <th className="px-3 py-2 font-medium">N° visite</th>
-                <th className="px-3 py-2 font-medium">Évolution</th>
+                <th className="px-3 py-2 font-medium">P/T Z</th>
+                <th className="px-3 py-2 font-medium">Œd.</th>
+                <th className="px-3 py-2 font-medium">Visites</th>
+                <th className="px-3 py-2 font-medium">Sortie</th>
                 <th className="px-3 py-2 font-medium">Soignant</th>
               </tr>
             </thead>
@@ -387,42 +384,60 @@ export default function RegistreNutritionPage() {
                     ))}
                   </tr>
                 ))}
-              {items.map((n, i) => (
-                <tr
-                  key={n.id}
-                  className="border-b border-[#e1e0d9] transition-colors last:border-0 hover:bg-[#f9f9f7]"
-                >
-                  <td className="px-3 py-2 text-[#898781]">{i + 1}</td>
-                  <td className="px-3 py-2 text-[#52514e]">{formatDate(n.date)}</td>
-                  <td className="px-3 py-2 text-[#898781]">
-                    <Link href={`/patients/${n.patient.id}`} className="hover:underline">
-                      {n.patient.dossierNumber}
-                    </Link>
-                  </td>
-                  <td className="px-3 py-2 font-medium text-[#0b0b0b]">
-                    {n.patient.nom}, {n.patient.prenom}
-                  </td>
-                  <td className="px-3 py-2 text-[#52514e]">
-                    {computeAge(n.patient.dateNaissance)}
-                  </td>
-                  <td className="px-3 py-2 text-[#52514e]">{n.patient.sexe === 'F' ? 'F' : 'M'}</td>
-                  <td className="px-3 py-2 text-[#52514e]">{n.perimetreBrachialCm ?? '—'}</td>
-                  <td className="px-3 py-2 text-[#52514e]">{n.oedemes ?? '—'}</td>
-                  <td className="px-3 py-2 text-[#52514e]">{n.classification ?? '—'}</td>
-                  <td className="px-3 py-2 text-[#52514e]">{n.testAppetit ?? '—'}</td>
-                  <td className="px-3 py-2 text-[#52514e]">{n.priseEnCharge ?? '—'}</td>
-                  <td className="px-3 py-2 text-[#52514e]">{n.numeroVisiteSuivi ?? '—'}</td>
-                  <td className="px-3 py-2 text-[#52514e]">{n.evolution ?? '—'}</td>
-                  <td className="px-3 py-2 text-[#52514e]">{n.providerName ?? '—'}</td>
-                </tr>
-              ))}
+              {items.map((n, i) => {
+                const last = lastVisite(n);
+                return (
+                  <tr
+                    key={n.id}
+                    className="border-b border-[#e1e0d9] transition-colors last:border-0 hover:bg-[#f9f9f7]"
+                  >
+                    <td className="px-3 py-2 text-[#898781]">{i + 1}</td>
+                    <td className="px-3 py-2 text-[#898781]">{n.numeroMas ?? '—'}</td>
+                    <td className="px-3 py-2 text-[#52514e]">{formatDate(n.date)}</td>
+                    <td className="px-3 py-2 font-medium text-[#0b0b0b]">
+                      <Link href={`/patients/${n.patient.id}`} className="hover:underline">
+                        {n.patient.nom}, {n.patient.prenom}
+                      </Link>
+                    </td>
+                    <td className="px-3 py-2 text-[#52514e]">{n.ageMois ?? '—'}</td>
+                    <td className="px-3 py-2 text-[#52514e]">
+                      {n.patient.sexe === 'F' ? 'F' : 'M'}
+                    </td>
+                    <td className="px-3 py-2 text-[#52514e]">{n.modeAdmission ?? '—'}</td>
+                    <td className="px-3 py-2 text-[#52514e]">{n.poidsKg ?? '—'}</td>
+                    <td className="px-3 py-2 text-[#52514e]">{n.tailleCm ?? '—'}</td>
+                    <td className="px-3 py-2 text-[#52514e]">{n.perimetreBrachialCm ?? '—'}</td>
+                    <td className="px-3 py-2 text-[#52514e]">{n.ptIndice ?? '—'}</td>
+                    <td className="px-3 py-2 text-[#52514e]">{n.oedemes ?? '—'}</td>
+                    <td className="px-3 py-2 text-[#52514e]">
+                      {n.visites.length > 0 ? (
+                        <span title={last ? `Dernière : ${formatDate(last.date)}` : undefined}>
+                          {n.visites.length} · {last ? formatDate(last.date) : '—'}
+                        </span>
+                      ) : (
+                        '—'
+                      )}
+                    </td>
+                    <td className="px-3 py-2">
+                      {n.dateSortie ? (
+                        <span className="text-[#52514e]">{formatDate(n.dateSortie)}</span>
+                      ) : (
+                        <span className="rounded-full bg-[#d08a1c]/10 px-2 py-0.5 text-xs font-medium text-[#d08a1c]">
+                          En cours
+                        </span>
+                      )}
+                    </td>
+                    <td className="px-3 py-2 text-[#52514e]">{n.providerName ?? '—'}</td>
+                  </tr>
+                );
+              })}
               {!loading && items.length === 0 && !error && (
                 <tr>
                   <td
                     colSpan={REGISTER_COLUMN_COUNT}
                     className="px-3 py-8 text-center text-[#898781]"
                   >
-                    Aucune fiche nutrition ce mois-ci.
+                    Aucune fiche URENAS ce mois-ci.
                   </td>
                 </tr>
               )}

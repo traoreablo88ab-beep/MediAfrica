@@ -31,9 +31,20 @@ const REGISTERS: RegisterCard[] = [
     description: 'Consultations post-natales du mois, clôture et export CSV.',
   },
   {
-    href: '/registres/nutrition',
-    title: 'Registre Nutrition',
-    description: 'Dépistage et suivi PCIMA (URENAM/URENI) du mois, clôture et export CSV.',
+    href: '/registres/nutrition/ureni',
+    title: 'Registre URENI',
+    description:
+      'Admissions/sorties de malnutrition sévère avec complications, clôture et export CSV.',
+  },
+  {
+    href: '/registres/nutrition/urenas',
+    title: 'Registre URENAS',
+    description: 'Admissions/sorties de malnutrition sévère ambulatoire, clôture et export CSV.',
+  },
+  {
+    href: '/registres/nutrition/urenam',
+    title: 'Registre URENAM',
+    description: 'Épisodes et visites de suivi de malnutrition modérée, clôture et export CSV.',
   },
   {
     href: '/registres/vaccination',

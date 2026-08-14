@@ -1,8 +1,9 @@
-// POST /api/registres/nutrition/close — manually close a month's nutrition
-// register. Any authenticated staff member can close (no ADMIN gate —
+// POST /api/registres/nutrition/ureni/close — manually close a month's
+// URENI register. Any authenticated staff member can close (no ADMIN gate —
 // matches the rest of Patients/Consultations, not back-office). Once
-// closed, POST /api/patients/[id]/nutrition refuses new entries for that
-// month with REGISTER_CLOSED (see lib/server/registers/closure.ts).
+// closed, POST /api/patients/[id]/nutrition refuses new URENI entries for
+// that month with REGISTER_CLOSED (see lib/server/registers/closure.ts).
+// Closing this register does not affect URENAS/URENAM.
 export const runtime = 'nodejs';
 
 import 'server-only';
@@ -15,7 +16,7 @@ import { prisma } from '@/lib/server/prisma';
 import { monthKey } from '@/lib/server/registers/closure';
 import { makeRequestContext, withRequestContext } from '@/lib/server/observability/request-context';
 
-const REGISTER_TYPE = 'nutrition';
+const REGISTER_TYPE = 'nutrition-ureni';
 
 const CloseBody = z.object({
   month: z

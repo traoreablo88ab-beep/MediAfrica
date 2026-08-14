@@ -1,8 +1,7 @@
-// PATCH /api/consultations/[id] — update a consultation's status. This is
-// the only mutation the Consultations queue page needs: moving a patient
-// through attente → consultation → traite (or urgent) as staff work the
-// queue. Full clinical fields (diagnostic, traitement…) are still written
-// via POST /api/patients/[id]/consultations at creation time.
+// PATCH /api/consultations/[id] — update a consultation's status, and/or its
+// indigent flag (toggled inline from the "Registre de consultation" table's
+// Oui/Non checkboxes). Full clinical fields (diagnostic, traitement…) are
+// still written via POST /api/patients/[id]/consultations at creation time.
 // DELETE /api/consultations/[id] — removes a wrongly-created consultation
 // entry (wrong patient selected, duplicate entry). Same month-closure guard
 // as PATCH so a closed register stays immutable.
@@ -18,9 +17,14 @@ import { prisma } from '@/lib/server/prisma';
 import { isMonthClosed } from '@/lib/server/registers/closure';
 import { makeRequestContext, withRequestContext } from '@/lib/server/observability/request-context';
 
-const PatchConsultationBody = z.object({
-  status: z.enum(['attente', 'consultation', 'traite', 'urgent']),
-});
+const PatchConsultationBody = z
+  .object({
+    status: z.enum(['attente', 'consultation', 'traite', 'urgent']).optional(),
+    indigent: z.boolean().optional(),
+  })
+  .refine((d) => d.status !== undefined || d.indigent !== undefined, {
+    message: 'At least one field must be provided',
+  });
 
 export async function PATCH(
   req: NextRequest,
@@ -76,11 +80,14 @@ export async function PATCH(
 
     const updated = await prisma.consultation.update({
       where: { id },
-      data: { status: parsed.data.status },
+      data: {
+        ...(parsed.data.status !== undefined ? { status: parsed.data.status } : {}),
+        ...(parsed.data.indigent !== undefined ? { indigent: parsed.data.indigent } : {}),
+      },
     });
 
     return NextResponse.json(
-      { id: updated.id, status: updated.status },
+      { id: updated.id, status: updated.status, indigent: updated.indigent },
       { headers: { 'x-request-id': reqCtx.requestId } },
     );
   });

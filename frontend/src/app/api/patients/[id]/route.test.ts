@@ -109,16 +109,58 @@ function fullPatient() {
       {
         id: 'n-1',
         date: new Date('2026-01-20T09:00:00Z'),
+        type: 'URENAM',
+        numeroMas: null,
+        telephoneContact: null,
+        localisationPrecise: null,
+        ageMois: 22,
+        modeAdmission: null,
         typeCas: 'NC',
         poidsKg: 9.5,
         tailleCm: 72,
         perimetreBrachialCm: 11.2,
+        ptIndice: null,
         oedemes: 'Non',
-        classification: 'MAM',
-        priseEnCharge: 'URENAM',
-        evolution: 'En cours',
-        prochainRdv: null,
+        pathologiesAssociees: null,
+        nomPere: null,
+        nomMere: null,
+        allaite: null,
+        jumeaux: null,
+        parentsVivants: null,
+        sourceAdmission: null,
+        provenanceProgramme: null,
+        carteVaccination: null,
+        vaccinationAJour: null,
+        dateSortie: null,
+        poidsSortieKg: null,
+        tailleSortieCm: null,
+        perimetreBrachialSortieCm: null,
+        ptIndiceSortie: null,
+        oedemeSortie: null,
+        typeSortie: null,
+        destinationProgramme: null,
+        datePoidsMinimum: null,
+        poidsMinimumKg: null,
+        seancesStimulationPsychocognitive: null,
+        seancesCcsc: null,
+        beneficiairePoudreNutritive: null,
+        beneficiairePlaquette: null,
+        dureeSejourJours: null,
         observations: null,
+        visites: [
+          { id: 'v-1', numeroVisite: 1, date: new Date('2026-01-27T09:00:00Z'), poidsKg: 9.7 },
+        ],
+        evenements: [
+          {
+            id: 'e-1',
+            type: 'VAD',
+            date: new Date('2026-01-30T09:00:00Z'),
+            raison: 'Non retour',
+            conclusion: 'Retour prévu',
+            centre: null,
+            resultat: null,
+          },
+        ],
         provider: { name: 'Amadou Diallo' },
       },
     ],
@@ -235,8 +277,16 @@ describe('GET /api/patients/[id]', () => {
     expect(body.maternites[0].telephoneContact).toBe('65 11 22 33');
     expect(body.maternites[0].localisationPrecise).toBe('Quartier Hippodrome');
     expect(body.nutritions).toHaveLength(1);
-    expect(body.nutritions[0].classification).toBe('MAM');
+    expect(body.nutritions[0].type).toBe('URENAM');
+    expect(body.nutritions[0].typeCas).toBe('NC');
+    expect(body.nutritions[0].ageMois).toBe(22);
     expect(body.nutritions[0].providerName).toBe('Amadou Diallo');
+    expect(body.nutritions[0].visites).toHaveLength(1);
+    expect(body.nutritions[0].visites[0].numeroVisite).toBe(1);
+    expect(body.nutritions[0].visites[0].poidsKg).toBe(9.7);
+    expect(body.nutritions[0].evenements).toHaveLength(1);
+    expect(body.nutritions[0].evenements[0].type).toBe('VAD');
+    expect(body.nutritions[0].evenements[0].raison).toBe('Non retour');
     expect(body.vaccinations).toHaveLength(1);
     expect(body.vaccinations[0].antigene).toBe('BCG');
     expect(body.vaccinations[0].providerName).toBe('Amadou Diallo');

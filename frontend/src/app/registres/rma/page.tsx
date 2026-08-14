@@ -74,10 +74,46 @@ interface MaterniteRow {
   poidsNaissanceG: number | null;
 }
 
+interface NutritionSummaryRow {
+  date: string;
+  dateSortie: string | null;
+  ageMois: number | null;
+  typeCas: string | null;
+  modeAdmission: string | null;
+  typeSortie: string | null;
+  sourceAdmission: string | null;
+  provenanceProgramme: string | null;
+  destinationProgramme: string | null;
+  patient: { sexe: string };
+}
+
+interface PfSummaryRow {
+  date: string;
+  typeVisite: string;
+  methodeChoisie: string;
+  typeUtilisateur: string | null;
+  counselingDonne: boolean | null;
+  serviceProvenance: string | null;
+  patient: { sexe: string; dateNaissance: string };
+}
+
+interface VaccinationSummaryRow {
+  date: string;
+  antigene: string;
+  effetsSecondaires: string | null;
+  patient: { sexe: string; dateNaissance: string };
+}
+
 interface ApiPage<T> {
   items: T[];
   nextCursor: string | null;
 }
+
+// PEC malnutrition (URENAM/URENAS/URENI) n'a pas d'historique antérieur à
+// l'existence du registre PCIMA dans MediAfrica — un seul fetch large depuis
+// cette date suffit à calculer début/fin de mois pour n'importe quel mois
+// choisi, sans jamais rater une admission antérieure encore active.
+const NUTRITION_EPOCH = '2020-01-01';
 
 function currentMonth(): string {
   return new Date().toISOString().slice(0, 7);
@@ -87,6 +123,20 @@ function shiftMonth(month: string, delta: number): string {
   const [yearStr, monthStr] = month.split('-');
   const d = new Date(Number(yearStr), Number(monthStr) - 1 + delta, 1);
   return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`;
+}
+
+// Bornes exactes du mois choisi, en Date locales (pas des chaînes) — utilisées
+// pour classifier chaque enregistrement PCIMA en admission/sortie/actif du
+// mois. nextMonthStart est une borne EXCLUSIVE : évite l'ambiguïté d'une
+// admission et une sortie le même jour calendaire.
+function monthStartAndNext(month: string): { monthStart: Date; nextMonthStart: Date } {
+  const [yearStr, monthStr] = month.split('-');
+  const year = Number(yearStr);
+  const monthNum = Number(monthStr);
+  return {
+    monthStart: new Date(year, monthNum - 1, 1),
+    nextMonthStart: new Date(year, monthNum, 1),
+  };
 }
 
 function monthBounds(month: string): { dateFrom: string; dateTo: string } {
@@ -140,6 +190,561 @@ const CURATIVE_ROWS: CurativeRow[] = [
   { label: 'Nombre de consultations curatives évacuées', filter: null },
 ];
 
+// Correspond au bloc "2. PRISE EN CHARGE DE LA MALNUTRITION (TRAITEMENT)" du
+// RMA (page 16) : URENAM = MAM, URENAS = MAS sans complications, URENI = MAS
+// avec complications. Chaque table repose sur UN SEUL fetch large par type
+// (voir NUTRITION_EPOCH) classifié en 4 natures de ligne :
+//  - admissionMonth : admis(e) pendant le mois choisi
+//  - sortieMonth    : sorti(e) (dateSortie renseignée) pendant le mois choisi
+//  - snapshotDebut  : déjà admis(e) avant le mois et encore actif au 1er jour
+//  - snapshotFin    : admis(e) avant/pendant le mois et encore actif au dernier jour
+// Les sorties URENAM enregistrées avant l'ajout de dateSortie (typeSortie
+// renseigné, dateSortie vide) sont exclues des 2 natures "snapshot" — ni
+// comptées actives, ni comptées sorties — plutôt que de fausser silencieusement
+// le calcul (voir note affichée sous le tableau URENAM).
+function isLegacyUrenamSortieSansDate(n: NutritionSummaryRow): boolean {
+  return n.typeSortie != null && n.dateSortie == null;
+}
+
+type NutritionRowNature = 'admissionMonth' | 'sortieMonth' | 'snapshotDebut' | 'snapshotFin';
+
+function nutritionNatureMatches(
+  n: NutritionSummaryRow,
+  nature: NutritionRowNature,
+  monthStart: Date,
+  nextMonthStart: Date,
+): boolean {
+  switch (nature) {
+    case 'admissionMonth': {
+      const d = new Date(n.date);
+      return d >= monthStart && d < nextMonthStart;
+    }
+    case 'sortieMonth': {
+      if (!n.dateSortie) return false;
+      const d = new Date(n.dateSortie);
+      return d >= monthStart && d < nextMonthStart;
+    }
+    case 'snapshotDebut': {
+      if (isLegacyUrenamSortieSansDate(n)) return false;
+      const d = new Date(n.date);
+      if (d >= monthStart) return false;
+      return n.dateSortie == null || new Date(n.dateSortie) >= monthStart;
+    }
+    case 'snapshotFin': {
+      if (isLegacyUrenamSortieSansDate(n)) return false;
+      const d = new Date(n.date);
+      if (d >= nextMonthStart) return false;
+      return n.dateSortie == null || new Date(n.dateSortie) >= nextMonthStart;
+    }
+  }
+}
+
+type NutritionTableRowDef = {
+  label: string;
+  nature: NutritionRowNature;
+  filter?: (n: NutritionSummaryRow) => boolean;
+};
+
+const URENAM_ROWS: NutritionTableRowDef[] = [
+  { label: 'Anciens malades début de mois', nature: 'snapshotDebut' },
+  { label: 'Malades admis', nature: 'admissionMonth' },
+  { label: 'Réadmis', nature: 'admissionMonth', filter: (n) => n.typeCas === 'Réadmission' },
+  {
+    label: 'Admis sur référencement communautaire',
+    nature: 'admissionMonth',
+    filter: (n) => n.sourceAdmission === 'Dépistage actif',
+  },
+  { label: 'Guéris', nature: 'sortieMonth', filter: (n) => n.typeSortie === 'Guéri' },
+  { label: 'Abandon', nature: 'sortieMonth', filter: (n) => n.typeSortie === 'Abandon' },
+  { label: 'Décès', nature: 'sortieMonth', filter: (n) => n.typeSortie === 'Décès' },
+  {
+    label: 'Non répondant',
+    nature: 'sortieMonth',
+    filter: (n) => n.typeSortie === 'Non répondant',
+  },
+  {
+    label: "Référés à l'URENAS",
+    nature: 'sortieMonth',
+    filter: (n) => n.typeSortie === 'Transféré/référé' && n.destinationProgramme === 'URENAS',
+  },
+  { label: 'Total fin de mois', nature: 'snapshotFin' },
+];
+
+const URENAS_ROWS: NutritionTableRowDef[] = [
+  { label: 'Anciens malades début de mois', nature: 'snapshotDebut' },
+  { label: 'Malades admis', nature: 'admissionMonth' },
+  {
+    label: 'Réadmis',
+    nature: 'admissionMonth',
+    filter: (n) => n.modeAdmission === 'Réadmission',
+  },
+  {
+    label: 'Admis sur référencement communautaire',
+    nature: 'admissionMonth',
+    filter: (n) => n.sourceAdmission === 'Dépistage actif',
+  },
+  { label: 'Guéris', nature: 'sortieMonth', filter: (n) => n.typeSortie === 'Guéri' },
+  { label: 'Abandon', nature: 'sortieMonth', filter: (n) => n.typeSortie === 'Abandon' },
+  { label: 'Décès', nature: 'sortieMonth', filter: (n) => n.typeSortie === 'Décès' },
+  {
+    label: 'Non répondant',
+    nature: 'sortieMonth',
+    filter: (n) => n.typeSortie === 'Non répondant',
+  },
+  {
+    label: "Référés à l'URENI",
+    nature: 'sortieMonth',
+    filter: (n) => n.destinationProgramme === 'URENI',
+  },
+  {
+    label: "Transférés de l'URENI",
+    nature: 'admissionMonth',
+    filter: (n) => n.provenanceProgramme === 'URENI',
+  },
+  {
+    label: "Référés de l'URENAM",
+    nature: 'admissionMonth',
+    filter: (n) => n.provenanceProgramme === 'URENAM',
+  },
+  { label: 'Total fin de mois', nature: 'snapshotFin' },
+];
+
+const URENI_ROWS: NutritionTableRowDef[] = [
+  { label: 'Anciens malades début de mois', nature: 'snapshotDebut' },
+  { label: 'Malades admis', nature: 'admissionMonth' },
+  {
+    label: 'Réadmis',
+    nature: 'admissionMonth',
+    filter: (n) => n.modeAdmission === 'Réadmission',
+  },
+  {
+    label: 'Admis sur référencement communautaire',
+    nature: 'admissionMonth',
+    filter: (n) => n.sourceAdmission === 'Dépistage actif',
+  },
+  { label: 'Traités avec succès', nature: 'sortieMonth', filter: (n) => n.typeSortie === 'Guéri' },
+  { label: 'Abandon', nature: 'sortieMonth', filter: (n) => n.typeSortie === 'Abandon' },
+  { label: 'Décès', nature: 'sortieMonth', filter: (n) => n.typeSortie === 'Décès' },
+  {
+    label: 'Non répondant',
+    nature: 'sortieMonth',
+    filter: (n) => n.typeSortie === 'Non répondant',
+  },
+  {
+    label: 'En provenance des URENAS/URENAM',
+    nature: 'admissionMonth',
+    filter: (n) => n.provenanceProgramme === 'URENAS' || n.provenanceProgramme === 'URENAM',
+  },
+  {
+    label: "En provenance d'une autre URENI",
+    nature: 'admissionMonth',
+    filter: (n) => n.provenanceProgramme === 'URENI',
+  },
+  { label: 'Total fin de mois', nature: 'snapshotFin' },
+];
+
+// Tranches d'âge propres à chaque tableau PCIMA (distinctes des tranches
+// "ACTIVITES CURATIVES" ci-dessus) — reprennent le découpage des critères
+// d'admission PCIMA maliens. Calculées sur ageMois enregistré à l'admission,
+// pas recalculées à la date du mois affiché.
+const URENAM_AGE_BRACKETS = ['6-23 mois', '24-59 mois', '60 mois et plus'] as const;
+const URENAS_AGE_BRACKETS = ['6-59 mois', '60 mois et plus'] as const;
+const URENI_AGE_BRACKETS = ['< 6 mois', '6-59 mois', '60 mois et plus'] as const;
+
+function bracketUrenam(ageMois: number | null): (typeof URENAM_AGE_BRACKETS)[number] | null {
+  if (ageMois == null) return null;
+  if (ageMois < 24) return '6-23 mois';
+  if (ageMois < 60) return '24-59 mois';
+  return '60 mois et plus';
+}
+
+function bracketUrenas(ageMois: number | null): (typeof URENAS_AGE_BRACKETS)[number] | null {
+  if (ageMois == null) return null;
+  if (ageMois < 60) return '6-59 mois';
+  return '60 mois et plus';
+}
+
+function bracketUreni(ageMois: number | null): (typeof URENI_AGE_BRACKETS)[number] | null {
+  if (ageMois == null) return null;
+  if (ageMois < 6) return '< 6 mois';
+  if (ageMois < 60) return '6-59 mois';
+  return '60 mois et plus';
+}
+
+// Correspond au bloc "PLANIFICATION FAMILIALE" du RMA (pages 7-9) : sections
+// "1. NOUVEAUX UTILISATEURS" / "2. ANCIENS UTILISATEURS" (tableau méthode ×
+// tranche d'âge × sexe) et "3. COUNSELING...". Contrairement à la nutrition,
+// une visite PF est un événement ponctuel (pas d'admission/sortie) : le
+// classement se fait simplement sur `date` dans le mois choisi, comme les
+// consultations curatives.
+const PF_AGE_BRACKETS = ['10-14 ans', '15-19 ans', '20-24 ans', '25 ans et plus'] as const;
+
+function pfAgeBracket(
+  dateNaissanceIso: string,
+  atIso: string,
+): (typeof PF_AGE_BRACKETS)[number] | null {
+  const dob = new Date(dateNaissanceIso);
+  const at = new Date(atIso);
+  let years = at.getFullYear() - dob.getFullYear();
+  if (
+    at.getMonth() < dob.getMonth() ||
+    (at.getMonth() === dob.getMonth() && at.getDate() < dob.getDate())
+  ) {
+    years -= 1;
+  }
+  if (years < 10) return null;
+  if (years <= 14) return '10-14 ans';
+  if (years <= 19) return '15-19 ans';
+  if (years <= 24) return '20-24 ans';
+  return '25 ans et plus';
+}
+
+// Reprend les méthodes suivies par MediAfrica (PlanificationFamiliale.
+// methodeChoisie dans schema.prisma) avec le libellé du RMA officiel. Le RMA
+// distingue en plus DIUPP / Spermicide / Auto-injection DMPA-S/C comme
+// lignes séparées — MediAfrica ne les suit pas séparément (pas de champ
+// dédié), elles resteraient sous DIU/Autre/DMPA-SC.
+const PF_METHODE_ROWS: { label: string; methode: string }[] = [
+  { label: 'Pilule COC', methode: 'Pilule COC' },
+  { label: 'Pilule COP', methode: 'Pilule COP' },
+  { label: 'Injectable DMPA-IM', methode: 'DMPA-IM' },
+  { label: 'Injectable DMPA-S/C', methode: 'DMPA-SC' },
+  { label: 'Condoms masculins', methode: 'Condom masculin' },
+  { label: 'Condoms féminins', methode: 'Condom féminin' },
+  { label: 'Implants (Jadelle)', methode: 'Jadelle' },
+  { label: 'Implanon', methode: 'Implanon' },
+  { label: 'Collier du cycle', methode: 'Collier' },
+  { label: 'DIU', methode: 'DIU' },
+  { label: 'MAMA', methode: 'MAMA' },
+  { label: 'Contraception chirurgicale volontaire (CCV)', methode: 'CCV' },
+  { label: 'Autre', methode: 'Autre' },
+];
+
+function buildPfMethodeCounts(
+  rows: PfSummaryRow[],
+  typeUtilisateur: 'Nouveau' | 'Ancien',
+  monthStart: Date,
+  nextMonthStart: Date,
+): AgeSexCountRow[] {
+  const inMonth = rows.filter((r) => {
+    const d = new Date(r.date);
+    return d >= monthStart && d < nextMonthStart && r.typeUtilisateur === typeUtilisateur;
+  });
+  return PF_METHODE_ROWS.map(({ label, methode }) => {
+    const byBracket = new Map<string, { M: number; F: number }>(
+      PF_AGE_BRACKETS.map((b) => [b, { M: 0, F: 0 }]),
+    );
+    let total = 0;
+    for (const r of inMonth) {
+      if (r.methodeChoisie !== methode) continue;
+      total += 1;
+      const bracket = pfAgeBracket(r.patient.dateNaissance, r.date);
+      if (!bracket) continue;
+      const cell = byBracket.get(bracket);
+      if (!cell) continue;
+      if (r.patient.sexe === 'M') cell.M += 1;
+      else if (r.patient.sexe === 'F') cell.F += 1;
+    }
+    return { label, byBracket, total };
+  });
+}
+
+function buildPfCounselingCounts(
+  rows: PfSummaryRow[],
+  monthStart: Date,
+  nextMonthStart: Date,
+): AgeSexCountRow[] {
+  const byBracket = new Map<string, { M: number; F: number }>(
+    PF_AGE_BRACKETS.map((b) => [b, { M: 0, F: 0 }]),
+  );
+  let total = 0;
+  for (const r of rows) {
+    const d = new Date(r.date);
+    if (d < monthStart || d >= nextMonthStart) continue;
+    if (r.counselingDonne !== true) continue;
+    total += 1;
+    const bracket = pfAgeBracket(r.patient.dateNaissance, r.date);
+    if (!bracket) continue;
+    const cell = byBracket.get(bracket);
+    if (!cell) continue;
+    if (r.patient.sexe === 'M') cell.M += 1;
+    else if (r.patient.sexe === 'F') cell.F += 1;
+  }
+  return [{ label: 'Utilisateurs ayant bénéficié du counseling PF', byBracket, total }];
+}
+
+// Correspond au bloc "VACCINATION" du RMA — mais ce tableau détaillé
+// antigène × tranche d'âge × sexe n'existe QUE dans le RMA 1er échelon
+// (CSCom, pages 14-16), pas dans le 2ème échelon (CSRéf) suivi par le reste
+// de cette page — le 2ème échelon n'a qu'un tableau de stock de vaccins
+// (pharmacie, hors périmètre). La liste d'antigènes ci-dessous reprend
+// exactement `ANTIGENES` de patients/[id]/vaccination/new/page.tsx, qui a
+// elle-même été construite à partir des colonnes 8-45 du registre PEV
+// officiel. Comme pour la PF, MediAfrica ne suit pas la stratégie (Centre
+// fixe / Avancée / Mobile / Hors aire) : les tableaux ci-dessous donnent un
+// total toutes stratégies confondues.
+function ageInMonthsAt(dateNaissanceIso: string, atIso: string): number {
+  const dob = new Date(dateNaissanceIso);
+  const at = new Date(atIso);
+  let months = (at.getFullYear() - dob.getFullYear()) * 12 + (at.getMonth() - dob.getMonth());
+  if (at.getDate() < dob.getDate()) months -= 1;
+  return Math.max(months, 0);
+}
+
+const PEV_AGE_BRACKETS = ['0-11 mois', '12-23 mois', '24 mois et plus'] as const;
+
+function pevAgeBracket(dateNaissanceIso: string, atIso: string): (typeof PEV_AGE_BRACKETS)[number] {
+  const m = ageInMonthsAt(dateNaissanceIso, atIso);
+  if (m < 12) return '0-11 mois';
+  if (m < 24) return '12-23 mois';
+  return '24 mois et plus';
+}
+
+// Tranches propres au tableau "Vaccination contre le Paludisme chez les
+// enfants de 5 à 36 mois" (RMA 1er échelon, page 14) — distinctes des
+// tranches PEV ci-dessus.
+const R21_AGE_BRACKETS = ['5-11 mois', '12-23 mois', '24-36 mois'] as const;
+
+function r21AgeBracket(
+  dateNaissanceIso: string,
+  atIso: string,
+): (typeof R21_AGE_BRACKETS)[number] | null {
+  const m = ageInMonthsAt(dateNaissanceIso, atIso);
+  if (m < 5) return null;
+  if (m <= 11) return '5-11 mois';
+  if (m <= 23) return '12-23 mois';
+  if (m <= 36) return '24-36 mois';
+  return null;
+}
+
+const PEV_ANTIGENE_ROWS: { label: string; antigene: string }[] = [
+  { label: 'BCG', antigene: 'BCG' },
+  { label: 'Hépatite B', antigene: 'Hépatite B' },
+  { label: 'VPO-0', antigene: 'VPO0' },
+  { label: 'VPO-1', antigene: 'VPO1' },
+  { label: 'VPO-2', antigene: 'VPO2' },
+  { label: 'VPO-3', antigene: 'VPO3' },
+  { label: 'VPI-1', antigene: 'VPI1' },
+  { label: 'VPI-2', antigene: 'VPI2' },
+  { label: 'Penta-1', antigene: 'Penta1' },
+  { label: 'Penta-2', antigene: 'Penta2' },
+  { label: 'Penta-3', antigene: 'Penta3' },
+  { label: 'PCV13-1', antigene: 'PCV13-1' },
+  { label: 'PCV13-2', antigene: 'PCV13-2' },
+  { label: 'PCV13-3', antigene: 'PCV13-3' },
+  { label: 'Rota-1', antigene: 'Rota1' },
+  { label: 'Rota-2', antigene: 'Rota2' },
+  { label: 'Rota-3', antigene: 'Rota3' },
+  { label: 'VAR-1 (VRR-1)', antigene: 'VAR1' },
+  { label: 'VAR-2 (VRR-2)', antigene: 'VAR2' },
+  { label: 'VAA', antigene: 'VAA' },
+  { label: 'MenSCV', antigene: 'MenSCV' },
+  { label: 'MenAfriVac', antigene: 'MenAfriVac' },
+];
+
+const R21_ANTIGENE_ROWS: { label: string; antigene: string }[] = [
+  { label: 'Vaccin anti-palu R21-1', antigene: 'Vaccin anti-palu R21-1' },
+  { label: 'Vaccin anti-palu R21-2', antigene: 'Vaccin anti-palu R21-2' },
+  { label: 'Vaccin anti-palu R21-3', antigene: 'Vaccin anti-palu R21-3' },
+];
+
+function buildAntigeneCounts(
+  rows: VaccinationSummaryRow[],
+  rowDefs: { label: string; antigene: string }[],
+  ageBrackets: readonly string[],
+  bracketOf: (dateNaissanceIso: string, atIso: string) => string | null,
+  monthStart: Date,
+  nextMonthStart: Date,
+): AgeSexCountRow[] {
+  const inMonth = rows.filter((r) => {
+    const d = new Date(r.date);
+    return d >= monthStart && d < nextMonthStart;
+  });
+  return rowDefs.map(({ label, antigene }) => {
+    const byBracket = new Map<string, { M: number; F: number }>(
+      ageBrackets.map((b) => [b, { M: 0, F: 0 }]),
+    );
+    let total = 0;
+    for (const r of inMonth) {
+      if (r.antigene !== antigene) continue;
+      total += 1;
+      const bracket = bracketOf(r.patient.dateNaissance, r.date);
+      if (!bracket) continue;
+      const cell = byBracket.get(bracket);
+      if (!cell) continue;
+      if (r.patient.sexe === 'M') cell.M += 1;
+      else if (r.patient.sexe === 'F') cell.F += 1;
+    }
+    return { label, byBracket, total };
+  });
+}
+
+interface AgeSexCountRow {
+  label: string;
+  byBracket: Map<string, { M: number; F: number }>;
+  total: number;
+}
+
+// Additionne une liste de AgeSexCountRow en une seule ligne de total (ex.
+// "Total Utilisateurs par méthode" du tableau PF) — chaque bracket est
+// sommé indépendamment, plus le total global.
+function withTotalRow(rows: AgeSexCountRow[], label: string): AgeSexCountRow[] {
+  const byBracket = new Map<string, { M: number; F: number }>();
+  let total = 0;
+  for (const r of rows) {
+    total += r.total;
+    for (const [bracket, cell] of r.byBracket) {
+      const acc = byBracket.get(bracket) ?? { M: 0, F: 0 };
+      acc.M += cell.M;
+      acc.F += cell.F;
+      byBracket.set(bracket, acc);
+    }
+  }
+  return [...rows, { label, byBracket, total }];
+}
+
+function buildNutritionCounts(
+  rows: NutritionSummaryRow[],
+  rowDefs: NutritionTableRowDef[],
+  ageBrackets: readonly string[],
+  bracketOf: (ageMois: number | null) => string | null,
+  monthStart: Date,
+  nextMonthStart: Date,
+): AgeSexCountRow[] {
+  return rowDefs.map((def) => {
+    const byBracket = new Map<string, { M: number; F: number }>(
+      ageBrackets.map((b) => [b, { M: 0, F: 0 }]),
+    );
+    let total = 0;
+    for (const n of rows) {
+      if (!nutritionNatureMatches(n, def.nature, monthStart, nextMonthStart)) continue;
+      if (def.filter && !def.filter(n)) continue;
+      total += 1;
+      const bracket = bracketOf(n.ageMois);
+      if (!bracket) continue;
+      const cell = byBracket.get(bracket);
+      if (!cell) continue;
+      if (n.patient.sexe === 'M') cell.M += 1;
+      else if (n.patient.sexe === 'F') cell.F += 1;
+    }
+    return { label: def.label, byBracket, total };
+  });
+}
+
+function AgeSexTable({
+  title,
+  ageBrackets,
+  counts,
+  note,
+  summaryLines,
+}: {
+  title: string;
+  ageBrackets: readonly string[];
+  counts: AgeSexCountRow[];
+  note?: string;
+  summaryLines?: RmaLine[];
+}) {
+  const columns = ageBrackets.flatMap((b) => [
+    { bracket: b, sex: 'M' as const },
+    { bracket: b, sex: 'F' as const },
+  ]);
+
+  return (
+    <div className="overflow-hidden rounded-xl border border-[#e1e0d9] bg-white shadow-[0_1px_2px_rgba(11,11,11,0.04)]">
+      <h2 className="border-b border-[#e1e0d9] bg-[#f9f9f7] px-4 py-2 text-sm font-semibold text-[#0b0b0b]">
+        {title}
+      </h2>
+      {note && <p className="border-b border-[#e1e0d9] px-4 py-2 text-xs text-[#898781]">{note}</p>}
+      {summaryLines && summaryLines.length > 0 && (
+        <dl className="border-b border-[#e1e0d9]">
+          {summaryLines.map((line, i) => (
+            <div
+              key={line.label}
+              className={`flex items-center justify-between gap-4 px-4 py-2.5 text-sm ${
+                i !== summaryLines.length - 1 ? 'border-b border-[#e1e0d9]' : ''
+              }`}
+            >
+              <dt className="text-[#52514e]">
+                {line.label}
+                {line.note && <span className="ml-1 text-xs text-[#898781]">({line.note})</span>}
+              </dt>
+              <dd className="shrink-0 text-base font-semibold text-[#0b0b0b]">
+                {line.value ?? '—'}
+              </dd>
+            </div>
+          ))}
+        </dl>
+      )}
+      <div className="overflow-x-auto">
+        <table className="w-full text-left text-xs">
+          <thead>
+            <tr className="border-b border-[#e1e0d9] uppercase tracking-wide text-[#898781]">
+              <th rowSpan={2} className="px-3 py-2 align-bottom font-medium whitespace-nowrap">
+                Indicateur
+              </th>
+              {ageBrackets.map((b) => (
+                <th
+                  key={b}
+                  colSpan={2}
+                  className="border-l border-[#e1e0d9] px-3 py-2 text-center font-medium whitespace-nowrap"
+                >
+                  {b}
+                </th>
+              ))}
+              <th
+                rowSpan={2}
+                className="border-l border-[#e1e0d9] px-3 py-2 text-right align-bottom font-medium"
+              >
+                Total mois
+              </th>
+            </tr>
+            <tr className="border-b border-[#e1e0d9] uppercase tracking-wide text-[#898781]">
+              {columns.map((col) => (
+                <th
+                  key={`${col.bracket}-${col.sex}`}
+                  className={`px-2 py-1 text-right font-medium ${
+                    col.sex === 'M' ? 'border-l border-[#e1e0d9]' : ''
+                  }`}
+                >
+                  {col.sex}
+                </th>
+              ))}
+            </tr>
+          </thead>
+          <tbody>
+            {counts.map((row, i) => (
+              <tr
+                key={row.label}
+                className={i !== counts.length - 1 ? 'border-b border-[#e1e0d9]' : ''}
+              >
+                <td className="px-3 py-2 font-medium text-[#0b0b0b] whitespace-nowrap">
+                  {row.label}
+                </td>
+                {columns.map((col) => {
+                  const cell = row.byBracket.get(col.bracket) ?? { M: 0, F: 0 };
+                  return (
+                    <td
+                      key={`${col.bracket}-${col.sex}`}
+                      className={`px-2 py-2 text-right text-[#52514e] ${
+                        col.sex === 'M' ? 'border-l border-[#e1e0d9]' : ''
+                      }`}
+                    >
+                      {cell[col.sex]}
+                    </td>
+                  );
+                })}
+                <td className="border-l border-[#e1e0d9] px-3 py-2 text-right font-semibold text-[#0b0b0b]">
+                  {row.total}
+                </td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </div>
+    </div>
+  );
+}
+
 export default function RmaPage() {
   const clinicName = useClinicName();
   const [month, setMonth] = useState(currentMonth());
@@ -147,6 +752,11 @@ export default function RmaPage() {
   const [cpn, setCpn] = useState<MaterniteRow[]>([]);
   const [accouchements, setAccouchements] = useState<MaterniteRow[]>([]);
   const [cpon, setCpon] = useState<MaterniteRow[]>([]);
+  const [urenam, setUrenam] = useState<NutritionSummaryRow[]>([]);
+  const [urenas, setUrenas] = useState<NutritionSummaryRow[]>([]);
+  const [ureni, setUreni] = useState<NutritionSummaryRow[]>([]);
+  const [pf, setPf] = useState<PfSummaryRow[]>([]);
+  const [vaccinations, setVaccinations] = useState<VaccinationSummaryRow[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
@@ -155,16 +765,45 @@ export default function RmaPage() {
     setError(null);
     try {
       const { dateFrom, dateTo } = monthBounds(selectedMonth);
-      const [consultationRows, cpnRows, accouchementRows, cponRows] = await Promise.all([
+      const [
+        consultationRows,
+        cpnRows,
+        accouchementRows,
+        cponRows,
+        urenamRows,
+        urenasRows,
+        ureniRows,
+        pfRows,
+        vaccinationRows,
+      ] = await Promise.all([
         fetchAllPages<ConsultationRow>('/api/consultations', dateFrom, dateTo),
         fetchAllPages<MaterniteRow>('/api/maternite', dateFrom, dateTo, { type: 'CPN' }),
         fetchAllPages<MaterniteRow>('/api/maternite', dateFrom, dateTo, { type: 'ACCOUCHEMENT' }),
         fetchAllPages<MaterniteRow>('/api/maternite', dateFrom, dateTo, { type: 'CPON' }),
+        fetchAllPages<NutritionSummaryRow>('/api/nutrition', NUTRITION_EPOCH, dateTo, {
+          type: 'URENAM',
+          summary: '1',
+        }),
+        fetchAllPages<NutritionSummaryRow>('/api/nutrition', NUTRITION_EPOCH, dateTo, {
+          type: 'URENAS',
+          summary: '1',
+        }),
+        fetchAllPages<NutritionSummaryRow>('/api/nutrition', NUTRITION_EPOCH, dateTo, {
+          type: 'URENI',
+          summary: '1',
+        }),
+        fetchAllPages<PfSummaryRow>('/api/planification-familiale', dateFrom, dateTo),
+        fetchAllPages<VaccinationSummaryRow>('/api/vaccination', dateFrom, dateTo),
       ]);
       setConsultations(consultationRows);
       setCpn(cpnRows);
       setAccouchements(accouchementRows);
       setCpon(cponRows);
+      setUrenam(urenamRows);
+      setUrenas(urenasRows);
+      setUreni(ureniRows);
+      setPf(pfRows);
+      setVaccinations(vaccinationRows);
     } catch (err) {
       setError(friendlyError(err, 'Une erreur est survenue. Réessayez.'));
     } finally {
@@ -196,6 +835,191 @@ export default function RmaPage() {
     const total = row.filter ? [...byBracket.values()].reduce((a, b) => a + b, 0) : null;
     return { ...row, byBracket, total };
   });
+
+  const { monthStart, nextMonthStart } = monthStartAndNext(month);
+  const urenamCounts = buildNutritionCounts(
+    urenam,
+    URENAM_ROWS,
+    URENAM_AGE_BRACKETS,
+    bracketUrenam,
+    monthStart,
+    nextMonthStart,
+  );
+  const urenasCounts = buildNutritionCounts(
+    urenas,
+    URENAS_ROWS,
+    URENAS_AGE_BRACKETS,
+    bracketUrenas,
+    monthStart,
+    nextMonthStart,
+  );
+  const ureniCounts = buildNutritionCounts(
+    ureni,
+    URENI_ROWS,
+    URENI_AGE_BRACKETS,
+    bracketUreni,
+    monthStart,
+    nextMonthStart,
+  );
+  const hasLegacyUrenamSortie = urenam.some(isLegacyUrenamSortieSansDate);
+
+  const pfNouveauxCounts = withTotalRow(
+    buildPfMethodeCounts(pf, 'Nouveau', monthStart, nextMonthStart),
+    'Total Nouveaux Utilisateurs par méthode',
+  );
+  const pfAnciensCounts = withTotalRow(
+    buildPfMethodeCounts(pf, 'Ancien', monthStart, nextMonthStart),
+    'Total Anciens Utilisateurs par méthode',
+  );
+  const pfCounselingCounts = buildPfCounselingCounts(pf, monthStart, nextMonthStart);
+
+  const pfMonth = pf.filter((r) => {
+    const d = new Date(r.date);
+    return d >= monthStart && d < nextMonthStart;
+  });
+  const pfDistinctDays = new Set(pfMonth.map((r) => new Date(r.date).toDateString())).size;
+  const isPfPostPartum = (r: PfSummaryRow) =>
+    r.serviceProvenance === 'Accouchement' || r.serviceProvenance === 'CPoN';
+
+  // "1. NOUVEAUX UTILISATEURS" (page 7) — la ligne "séances de consultation
+  // PF" est un total combiné nouveaux+anciens dans le PDF (placée avant la
+  // scission), donc affichée une seule fois, ici. Le PDF sépare aussi les
+  // colonnes CENTRE FIXE / STRATEGIE AVANCEE OU MOBILE — MediAfrica ne suit
+  // pas le lieu de la visite, ces 2 lignes restent donc "—".
+  const pfNouveauxLines: RmaLine[] = [
+    {
+      label: 'Nombre de séances de consultation PF dans le mois',
+      value: pfDistinctDays,
+      note: 'jours distincts avec au moins une visite PF, nouveaux + anciens confondus',
+    },
+    { label: 'Nombre de nouvelles consultations en centre fixe', value: null },
+    { label: 'Nombre de nouvelles consultations en Stratégie avancée ou mobile', value: null },
+    {
+      label: 'Nombre de nouvelles utilisatrices de PF en post-partum',
+      value: pfMonth.filter((r) => r.typeUtilisateur === 'Nouveau' && isPfPostPartum(r)).length,
+      note: 'approximation : provenance Accouchement ou CPoN',
+    },
+  ];
+
+  const pfAnciensLines: RmaLine[] = [
+    { label: "Nombre d'anciennes consultations en centre fixe", value: null },
+    { label: "Nombre d'anciennes consultations en Stratégie avancée ou mobile", value: null },
+    {
+      label: "Nombre d'anciennes utilisatrices de PF en post partum",
+      value: pfMonth.filter((r) => r.typeUtilisateur === 'Ancien' && isPfPostPartum(r)).length,
+      note: 'approximation : provenance Accouchement ou CPoN',
+    },
+  ];
+
+  // "4. SENSIBILISATION SUR LA PF" (page 9) — activités communautaires
+  // (plaidoyer, causeries, conférences, projections de films) sans lien à un
+  // dossier patient : aucun modèle MediAfrica ne les suit, entièrement "—".
+  const pfSensibilisationLines: RmaLine[] = [
+    { label: 'Plaidoyer — Hommes', value: null },
+    { label: 'Plaidoyer — Femmes', value: null },
+    { label: 'Causeries en centre de santé — Hommes', value: null },
+    { label: 'Causeries en centre de santé — Femmes', value: null },
+    { label: 'Causeries dans la communauté — Hommes', value: null },
+    { label: 'Causeries dans la communauté — Femmes', value: null },
+    { label: 'Conférence — Hommes', value: null },
+    { label: 'Conférence — Femmes', value: null },
+    { label: 'Projection de films — Hommes', value: null },
+    { label: 'Projection de films — Femmes', value: null },
+    { label: "Nombre total de participants aux activités d'IEC", value: null },
+  ];
+
+  const pevCounts = withTotalRow(
+    buildAntigeneCounts(
+      vaccinations,
+      PEV_ANTIGENE_ROWS,
+      PEV_AGE_BRACKETS,
+      pevAgeBracket,
+      monthStart,
+      nextMonthStart,
+    ),
+    'Total doses administrées',
+  );
+  const r21Counts = withTotalRow(
+    buildAntigeneCounts(
+      vaccinations,
+      R21_ANTIGENE_ROWS,
+      R21_AGE_BRACKETS,
+      r21AgeBracket,
+      monthStart,
+      nextMonthStart,
+    ),
+    'Total doses administrées',
+  );
+
+  const vaccinationMonth = vaccinations.filter((r) => {
+    const d = new Date(r.date);
+    return d >= monthStart && d < nextMonthStart;
+  });
+  const vaccinationDistinctDays = new Set(
+    vaccinationMonth.map((r) => new Date(r.date).toDateString()),
+  ).size;
+  function countAntigenes(...names: string[]): number {
+    return vaccinationMonth.filter((r) => names.includes(r.antigene)).length;
+  }
+
+  const pevSummaryLines: RmaLine[] = [
+    {
+      label: 'Nombre de séances de vaccination dans le mois',
+      value: vaccinationDistinctDays,
+      note: 'jours distincts avec au moins une vaccination, toutes stratégies confondues',
+    },
+    { label: 'Séances en centre fixe', value: null },
+    { label: 'Séances en stratégie avancée', value: null },
+    { label: 'Séances en stratégie mobile', value: null },
+  ];
+
+  // "VACCINATION HPV CHEZ LES FILLES AGEES DE 10 ANS", "VACCINATIONS DES
+  // FEMMES" (Td/TdR) et "ACTIVITES PROMOTIONNELLES DE VACCINATION" (RMA 1er
+  // échelon, pages 15-16) — regroupées ici en une seule carte car aucune
+  // n'a besoin d'une matrice âge × sexe (cible déjà fixée par le vaccin, ou
+  // non calculable du tout).
+  const vaccinationAutresLines: RmaLine[] = [
+    { label: 'HPV — Filles scolarisées', value: countAntigenes('HPV Cible scolarisée') },
+    { label: 'HPV — Filles non scolarisées', value: countAntigenes('HPV Cible non scolarisée') },
+    {
+      label: 'HPV — 2ème dose (immunodéprimées)',
+      value: countAntigenes('HPV 2ème dose (immunodéprimées)'),
+    },
+    {
+      label: 'Td-1 (femmes)',
+      value: countAntigenes('Td1'),
+      note: 'total, non distingué femmes enceintes / non enceintes comme dans le RMA',
+    },
+    {
+      label: 'Td-2 (femmes)',
+      value: countAntigenes('Td2'),
+      note: 'total, non distingué femmes enceintes / non enceintes comme dans le RMA',
+    },
+    {
+      label: 'Td-R (femmes)',
+      value: countAntigenes('TdR'),
+      note: 'total, non distingué femmes enceintes / non enceintes comme dans le RMA',
+    },
+    {
+      label: 'Vitamine A (toutes doses)',
+      value: countAntigenes('Vitamine A-1', 'Vitamine A-2', 'Vitamine A-3'),
+    },
+    { label: 'Albendazole', value: countAntigenes('Albendazole') },
+    { label: 'Enfants ayant reçu une MILD au cours du PEV', value: countAntigenes('MILD') },
+    { label: 'Rappel 1', value: countAntigenes('Rappel 1') },
+    { label: 'Rappel 2', value: countAntigenes('Rappel 2') },
+    { label: 'Nombre IEC PEV au cours des séances', value: null },
+    { label: 'Nombre de participants aux séances', value: null },
+    { label: 'Nombre de VAD/PEV effectuées', value: null },
+    { label: 'Nombre émission radio PEV', value: null },
+    {
+      label: 'Nombre de MAPI/EIM notifiées',
+      value: vaccinationMonth.filter(
+        (r) => r.effetsSecondaires != null && r.effetsSecondaires.trim() !== '',
+      ).length,
+      note: 'via le champ « effets secondaires » de la fiche de vaccination',
+    },
+  ];
 
   // Reprend l'ordre et l'intitulé exact du bloc "GROSSESSE, ACCOUCHEMENT ET
   // SUITES DE COUCHE" du PDF (pages 5-6). Le PDF détaille CPN et
@@ -352,15 +1176,29 @@ export default function RmaPage() {
         </div>
 
         <p className="mb-6 rounded-xl border border-[#e1e0d9] bg-white p-4 text-xs leading-relaxed text-[#52514e] print:hidden">
-          Ces tableaux reprennent l'intitulé exact des lignes « ACTIVITES CURATIVES » et «
-          GROSSESSE, ACCOUCHEMENT ET SUITES DE COUCHE » du RMA (2ème échelon / CSRéf, janvier 2019,
-          pages 5-6). Les lignes avec un chiffre sont calculées automatiquement à partir des données
-          déjà enregistrées dans MediAfrica. Les lignes avec « — » n'ont pas de champ correspondant
-          dans l'application aujourd'hui — à compléter à la main. Ça ne soumet rien à DHIS2 :
-          reporte les chiffres dans le formulaire papier ou dans DHIS2. Les autres sections du RMA
-          (RH/matériel/financier, planning familial, urgences obstétricales, chirurgie, fistule,
-          laboratoire, lèpre/dracunculose/paludisme détaillé, nutrition, pharmacie, hygiène) restent
-          hors périmètre de cette page.
+          Ces tableaux reprennent l'intitulé exact des lignes « ACTIVITES CURATIVES », « GROSSESSE,
+          ACCOUCHEMENT ET SUITES DE COUCHE », « PRISE EN CHARGE DE LA MALNUTRITION » et «
+          PLANIFICATION FAMILIALE » du RMA 2ème échelon / CSRéf (janvier 2019, pages 5-9 et 16), et
+          « VACCINATION » du RMA <strong>1er échelon</strong> / CSCom (même version, pages 14-16) —
+          le 2ème échelon n'a qu'un tableau de stock de vaccins (pharmacie), pas le détail des doses
+          administrées, d'où l'emprunt au 1er échelon pour cette seule section. Les lignes avec un
+          chiffre sont calculées automatiquement à partir des données déjà enregistrées dans
+          MediAfrica. Les lignes avec « — » n'ont pas de champ correspondant dans l'application
+          aujourd'hui — à compléter à la main. Ça ne soumet rien à DHIS2 : reporte les chiffres dans
+          le formulaire papier ou dans DHIS2. Pour les 3 tableaux de malnutrition, l'âge est réparti
+          selon la tranche enregistrée à l'admission (pas recalculée pour le mois affiché), la
+          colonne « FE/FA » du RMA officiel n'est pas reproduite (MediAfrica ne marque pas femme
+          enceinte/allaitante) et la ligne « Admis sur référencement communautaire » est une
+          approximation (source d'admission « Dépistage actif »). Pour la planification familiale et
+          la vaccination, MediAfrica ne suit pas le lieu de la visite (colonnes « Centre fixe » / «
+          Stratégie avancée ou mobile » du RMA officiel toujours « — »), les lignes « post-partum »
+          (PF) sont une approximation (provenance Accouchement ou CPoN), les lignes Td/TdR ne
+          distinguent pas femmes enceintes/non enceintes, et les sections « Sensibilisation » (PF)
+          et « activités promotionnelles » (vaccination) — activités communautaires sans lien à un
+          dossier patient — ne sont pas suivies du tout. Les autres sections du RMA
+          (RH/matériel/financier, urgences obstétricales, chirurgie, fistule, laboratoire,
+          lèpre/dracunculose/paludisme détaillé, pharmacie, hygiène) restent hors périmètre de cette
+          page.
         </p>
 
         {error && (
@@ -430,6 +1268,110 @@ export default function RmaPage() {
                   key={line.label}
                   className={`flex items-center justify-between gap-4 px-4 py-3 text-sm ${
                     i !== grossesseAccouchementLines.length - 1 ? 'border-b border-[#e1e0d9]' : ''
+                  }`}
+                >
+                  <dt className="text-[#52514e]">
+                    {line.label}
+                    {line.note && (
+                      <span className="ml-1 text-xs text-[#898781]">({line.note})</span>
+                    )}
+                  </dt>
+                  <dd className="shrink-0 text-base font-semibold text-[#0b0b0b]">
+                    {line.value ?? '—'}
+                  </dd>
+                </div>
+              ))}
+            </dl>
+          </div>
+
+          <AgeSexTable
+            title="PRISE EN CHARGE DE LA MALNUTRITION — URENI (MAS avec complications)"
+            ageBrackets={URENI_AGE_BRACKETS}
+            counts={ureniCounts}
+          />
+
+          <AgeSexTable
+            title="PRISE EN CHARGE DE LA MALNUTRITION — URENAS (MAS sans complications)"
+            ageBrackets={URENAS_AGE_BRACKETS}
+            counts={urenasCounts}
+          />
+
+          <AgeSexTable
+            title="PRISE EN CHARGE DE LA MALNUTRITION — URENAM (MAM)"
+            ageBrackets={URENAM_AGE_BRACKETS}
+            counts={urenamCounts}
+            {...(hasLegacyUrenamSortie
+              ? {
+                  note: "Certaines sorties URENAM enregistrées avant l'ajout de la date de sortie n'ont pas de date — elles sont exclues des lignes « début » et « fin de mois » (ni actives, ni sorties) plutôt que de fausser le calcul.",
+                }
+              : {})}
+          />
+
+          <AgeSexTable
+            title="PLANIFICATION FAMILIALE — 1. Nouveaux utilisateurs"
+            ageBrackets={PF_AGE_BRACKETS}
+            counts={pfNouveauxCounts}
+            summaryLines={pfNouveauxLines}
+          />
+
+          <AgeSexTable
+            title="PLANIFICATION FAMILIALE — 2. Anciens utilisateurs"
+            ageBrackets={PF_AGE_BRACKETS}
+            counts={pfAnciensCounts}
+            summaryLines={pfAnciensLines}
+          />
+
+          <AgeSexTable
+            title="PLANIFICATION FAMILIALE — 3. Counseling"
+            ageBrackets={PF_AGE_BRACKETS}
+            counts={pfCounselingCounts}
+            note="Sources d'information des utilisateurs sur la PF (radio, télévision, causerie, ami/connaissance, ASC/relais, réseaux sociaux, autres) : non suivies dans MediAfrica."
+          />
+
+          <div className="overflow-hidden rounded-xl border border-[#e1e0d9] bg-white shadow-[0_1px_2px_rgba(11,11,11,0.04)]">
+            <h2 className="border-b border-[#e1e0d9] bg-[#f9f9f7] px-4 py-2 text-sm font-semibold text-[#0b0b0b]">
+              PLANIFICATION FAMILIALE — 4. Sensibilisation
+            </h2>
+            <dl>
+              {pfSensibilisationLines.map((line, i) => (
+                <div
+                  key={line.label}
+                  className={`flex items-center justify-between gap-4 px-4 py-3 text-sm ${
+                    i !== pfSensibilisationLines.length - 1 ? 'border-b border-[#e1e0d9]' : ''
+                  }`}
+                >
+                  <dt className="text-[#52514e]">{line.label}</dt>
+                  <dd className="shrink-0 text-base font-semibold text-[#0b0b0b]">
+                    {line.value ?? '—'}
+                  </dd>
+                </div>
+              ))}
+            </dl>
+          </div>
+
+          <AgeSexTable
+            title="VACCINATION — Couverture vaccinale PEV"
+            ageBrackets={PEV_AGE_BRACKETS}
+            counts={pevCounts}
+            summaryLines={pevSummaryLines}
+          />
+
+          <AgeSexTable
+            title="VACCINATION — Vaccination antipaludique R21 (enfants 5-36 mois)"
+            ageBrackets={R21_AGE_BRACKETS}
+            counts={r21Counts}
+          />
+
+          <div className="overflow-hidden rounded-xl border border-[#e1e0d9] bg-white shadow-[0_1px_2px_rgba(11,11,11,0.04)]">
+            <h2 className="border-b border-[#e1e0d9] bg-[#f9f9f7] px-4 py-2 text-sm font-semibold text-[#0b0b0b]">
+              VACCINATION — HPV, Td/TdR, suppléments &amp; activités promotionnelles
+            </h2>
+            <dl>
+              {vaccinationAutresLines.map((line, i) => (
+                <div
+                  key={line.label}
+                  className={`flex items-center justify-between gap-4 px-4 py-3 text-sm ${
+                    i !== vaccinationAutresLines.length - 1 ? 'border-b border-[#e1e0d9]' : ''
                   }`}
                 >
                   <dt className="text-[#52514e]">

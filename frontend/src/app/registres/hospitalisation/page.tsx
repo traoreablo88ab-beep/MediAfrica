@@ -71,6 +71,19 @@ function monthBounds(month: string): { dateFrom: string; dateTo: string } {
   };
 }
 
+// Bornes du mois choisi en Date locales — monthEndExclusive est le 1er jour
+// du mois SUIVANT (borne exclusive), utilisées pour la sommation "Durée de
+// séjour par service" ci-dessous.
+function monthStartAndEnd(month: string): { monthStart: Date; monthEndExclusive: Date } {
+  const [yearStr, monthStr] = month.split('-');
+  const year = Number(yearStr);
+  const monthNum = Number(monthStr);
+  return {
+    monthStart: new Date(year, monthNum - 1, 1),
+    monthEndExclusive: new Date(year, monthNum, 1),
+  };
+}
+
 function computeAge(dateNaissanceIso: string): number {
   const dob = new Date(dateNaissanceIso);
   const now = new Date();
@@ -80,12 +93,126 @@ function computeAge(dateNaissanceIso: string): number {
   return age;
 }
 
-function computeDureeSejour(entreeIso: string, sortieIso: string | null): string {
-  if (!sortieIso) return 'En cours';
+function dureeSejourJours(entreeIso: string, sortieIso: string): number {
   const entree = new Date(entreeIso);
   const sortie = new Date(sortieIso);
-  const days = Math.max(0, Math.round((sortie.getTime() - entree.getTime()) / 86_400_000));
-  return `${days} j`;
+  return Math.max(0, Math.round((sortie.getTime() - entree.getTime()) / 86_400_000));
+}
+
+function computeDureeSejour(entreeIso: string, sortieIso: string | null): string {
+  if (!sortieIso) return 'En cours';
+  return `${dureeSejourJours(entreeIso, sortieIso)} j`;
+}
+
+// Hospitalisation n'a pas d'historique antérieur à l'existence du registre
+// dans MediAfrica — un seul fetch large depuis cette date (voir `load()`,
+// alimente `dureeSejourRows`) suffit à retrouver un patient admis un mois
+// antérieur et toujours hospitalisé (ou sorti) ce mois-ci, que le fetch
+// scopé par mois d'admission de `items` ne peut pas voir.
+const HOSPITALISATION_EPOCH = '2020-01-01';
+
+// Services du registre Hospitalisation couverts par le tableau "Durée de
+// séjour par service" ci-dessous. URENI (malnutrition sévère avec
+// complications) est un séjour hospitalier lui aussi, mais suivi dans le
+// registre Nutrition (pas Hospitalisation) — voir ureniSejours plus bas,
+// ajouté comme ligne à part dans le même tableau.
+const DUREE_SEJOUR_SERVICES = ['Médecine', 'Chirurgie', 'Pédiatrie', 'Maternité', 'Néonatologie'];
+
+// Forme minimale commune à un séjour, quelle que soit sa source
+// (Hospitalisation.dateHeureEntree/dateHeureSortie ou Nutrition.date/
+// dateSortie pour URENI) — permet de réutiliser exactement le même calcul
+// pour les deux registres. `indigent` est optionnel car le registre Nutrition
+// (URENI) ne suit pas ce statut — seul Hospitalisation le renseigne.
+interface Sejour {
+  entree: string;
+  sortie: string | null;
+  indigent?: boolean;
+}
+
+interface DureeSejourStats {
+  label: string;
+  admissions: number;
+  sorties: number;
+  totalJournees: number;
+  indigentJournees: number | null;
+  dms: number | null;
+}
+
+// Un séjour "concerne" le mois choisi s'il n'est pas entièrement avant ou
+// entièrement après : admis avant la fin du mois, et pas sorti avant son
+// début.
+function isActiveInMonth(s: Sejour, monthStart: Date, monthEndExclusive: Date): boolean {
+  if (new Date(s.entree) >= monthEndExclusive) return false;
+  if (s.sortie && new Date(s.sortie) < monthStart) return false;
+  return true;
+}
+
+// Même sommation que "Total journées d'hospitalisation" (voir plus bas),
+// factorisée pour être appliquée soit à tous les séjours, soit au seul
+// sous-ensemble des séjours indigents.
+function sumJournees(sejours: Sejour[], monthStart: Date, monthEndExclusive: Date): number {
+  const monthEndCap = new Date(monthEndExclusive.getTime() - 1);
+  let total = 0;
+  for (const s of sejours) {
+    if (!isActiveInMonth(s, monthStart, monthEndExclusive)) continue;
+    const entree = new Date(s.entree);
+    const sortieOrCap = s.sortie ? new Date(s.sortie) : monthEndCap;
+    const cap = sortieOrCap < monthEndCap ? sortieOrCap : monthEndCap;
+    total += Math.max(0, Math.round((cap.getTime() - entree.getTime()) / 86_400_000));
+  }
+  return total;
+}
+
+// "Total journées d'hospitalisation" cumule, pour CHAQUE séjour touchant le
+// mois (même admis un mois plus tôt), le nombre de jours entre son entrée et
+// sa sortie réelle — ou, si toujours en cours, jusqu'à la fin du mois
+// affiché (pas juste jusqu'à aujourd'hui : on veut pouvoir consulter un mois
+// passé). "Sorties (mois)" et la DMS ne comptent, eux, que les séjours
+// réellement terminés PENDANT le mois choisi — la DMS resterait faussée si
+// on y mélangeait des séjours encore en cours. `trackIndigent` distingue les
+// sources qui suivent ce statut (Hospitalisation) de celles qui ne le suivent
+// pas (Nutrition/URENI) — dans ce dernier cas, indigentJournees reste `null`
+// plutôt que 0, pour ne pas laisser croire à "zéro indigent".
+function buildDureeSejourStats(
+  sejours: Sejour[],
+  label: string,
+  monthStart: Date,
+  monthEndExclusive: Date,
+  trackIndigent: boolean,
+): DureeSejourStats {
+  const admissions = sejours.filter((s) => {
+    const entree = new Date(s.entree);
+    return entree >= monthStart && entree < monthEndExclusive;
+  }).length;
+
+  const totalJournees = sumJournees(sejours, monthStart, monthEndExclusive);
+  const indigentJournees = trackIndigent
+    ? sumJournees(
+        sejours.filter((s) => s.indigent === true),
+        monthStart,
+        monthEndExclusive,
+      )
+    : null;
+
+  const completedThisMonth = sejours.filter((s) => {
+    if (!s.sortie) return false;
+    const sortie = new Date(s.sortie);
+    return sortie >= monthStart && sortie < monthEndExclusive;
+  });
+  const completedJournees = completedThisMonth.reduce(
+    (sum, s) => sum + dureeSejourJours(s.entree, s.sortie as string),
+    0,
+  );
+  const dms = completedThisMonth.length > 0 ? completedJournees / completedThisMonth.length : null;
+
+  return {
+    label,
+    admissions,
+    sorties: completedThisMonth.length,
+    totalJournees,
+    indigentJournees,
+    dms,
+  };
 }
 
 function formatDate(iso: string): string {
@@ -164,6 +291,61 @@ function downloadPdf(clinicName: string, month: string, rows: HospitalisationRow
   });
 }
 
+async function fetchAllHospitalisations(
+  dateFrom: string,
+  dateTo: string,
+  service?: string,
+): Promise<HospitalisationRow[]> {
+  const all: HospitalisationRow[] = [];
+  let cursor: string | null = null;
+  do {
+    const params = new URLSearchParams({
+      dateFrom,
+      dateTo,
+      limit: '50',
+      ...(service ? { service } : {}),
+    });
+    if (cursor) params.set('cursor', cursor);
+    const page: HospitalisationPage = await api<HospitalisationPage>(
+      `/api/hospitalisation?${params.toString()}`,
+    );
+    all.push(...page.items);
+    cursor = page.nextCursor;
+  } while (cursor);
+  return all;
+}
+
+// URENI (malnutrition sévère avec complications) est le seul type PCIMA pris
+// en charge en hospitalisation — mêmes champs date (entrée) / dateSortie que
+// Hospitalisation, mais stockés dans le registre Nutrition. Même convention
+// de fetch large (?summary=1 pour éviter de charger visites/évènements
+// imbriqués, sans intérêt ici) que la page RMA.
+interface NutritionEpisodePage {
+  items: { date: string; dateSortie: string | null }[];
+  nextCursor: string | null;
+}
+
+async function fetchUreniSejours(dateTo: string): Promise<Sejour[]> {
+  const all: Sejour[] = [];
+  let cursor: string | null = null;
+  do {
+    const params = new URLSearchParams({
+      dateFrom: HOSPITALISATION_EPOCH,
+      dateTo,
+      type: 'URENI',
+      summary: '1',
+      limit: '50',
+    });
+    if (cursor) params.set('cursor', cursor);
+    const page: NutritionEpisodePage = await api<NutritionEpisodePage>(
+      `/api/nutrition?${params.toString()}`,
+    );
+    all.push(...page.items.map((n) => ({ entree: n.date, sortie: n.dateSortie })));
+    cursor = page.nextCursor;
+  } while (cursor);
+  return all;
+}
+
 function formatDateTime(iso: string): string {
   return new Date(iso).toLocaleString('fr-FR', {
     day: 'numeric',
@@ -178,6 +360,8 @@ export default function RegistreHospitalisationPage() {
   const clinicName = useClinicName();
   const [month, setMonth] = useState(currentMonth());
   const [items, setItems] = useState<HospitalisationRow[]>([]);
+  const [dureeSejourRows, setDureeSejourRows] = useState<HospitalisationRow[]>([]);
+  const [ureniSejours, setUreniSejours] = useState<Sejour[]>([]);
   const [closure, setClosure] = useState<ClosureStatus | null>(null);
   const [loading, setLoading] = useState(true);
   const [closing, setClosing] = useState(false);
@@ -193,20 +377,16 @@ export default function RegistreHospitalisationPage() {
       setClosure(closureRes);
 
       const { dateFrom, dateTo } = monthBounds(selectedMonth);
-      const all: HospitalisationRow[] = [];
-      let cursor: string | null = null;
-      do {
-        const params = new URLSearchParams({ dateFrom, dateTo, limit: '50' });
-        if (cursor) params.set('cursor', cursor);
-        const page: HospitalisationPage = await api<HospitalisationPage>(
-          `/api/hospitalisation?${params.toString()}`,
-        );
-        all.push(...page.items);
-        cursor = page.nextCursor;
-      } while (cursor);
+      const [all, wideRows, ureni] = await Promise.all([
+        fetchAllHospitalisations(dateFrom, dateTo),
+        fetchAllHospitalisations(HOSPITALISATION_EPOCH, dateTo, DUREE_SEJOUR_SERVICES.join(',')),
+        fetchUreniSejours(dateTo),
+      ]);
 
       all.sort((a, b) => a.dateHeureEntree.localeCompare(b.dateHeureEntree));
       setItems(all);
+      setDureeSejourRows(wideRows);
+      setUreniSejours(ureni);
     } catch (err) {
       setError(friendlyError(err, 'Une erreur est survenue. Réessayez.'));
     } finally {
@@ -240,6 +420,26 @@ export default function RegistreHospitalisationPage() {
 
   const enCoursCount = items.filter((h) => !h.dateHeureSortie).length;
   const indigentCount = items.filter((h) => h.indigent).length;
+  const { monthStart, monthEndExclusive } = monthStartAndEnd(month);
+  const dureeSejourStats = [
+    ...DUREE_SEJOUR_SERVICES.map((s) => {
+      const sejours = dureeSejourRows
+        .filter((h) => h.service === s)
+        .map((h) => ({
+          entree: h.dateHeureEntree,
+          sortie: h.dateHeureSortie,
+          indigent: h.indigent === true,
+        }));
+      return buildDureeSejourStats(sejours, s, monthStart, monthEndExclusive, true);
+    }),
+    buildDureeSejourStats(
+      ureniSejours,
+      'URENI (nutrition, hospitalisation)',
+      monthStart,
+      monthEndExclusive,
+      false,
+    ),
+  ];
 
   return (
     <main className="min-h-screen bg-[#f9f9f7] md:pl-64">
@@ -349,6 +549,57 @@ export default function RegistreHospitalisationPage() {
               Patients indigents
             </p>
             <p className="mt-1 text-2xl font-semibold text-[#d03b3b]">{indigentCount}</p>
+          </div>
+        </div>
+
+        <div className="mb-6 overflow-hidden rounded-xl border border-[#e1e0d9] bg-white shadow-[0_1px_2px_rgba(11,11,11,0.04)] print:hidden">
+          <h2 className="border-b border-[#e1e0d9] bg-[#f9f9f7] px-4 py-2 text-sm font-semibold text-[#0b0b0b]">
+            Durée de séjour par service
+          </h2>
+          <p className="border-b border-[#e1e0d9] px-4 py-2 text-xs text-[#898781]">
+            Total journées d&apos;hospitalisation = somme des jours d&apos;hospitalisation de chaque
+            patient dont le séjour touche ce mois, même admis un mois antérieur — un patient
+            toujours hospitalisé est compté jusqu&apos;à la fin du mois affiché. Dont indigents =
+            même calcul, limité aux séjours marqués indigent (non disponible pour l&apos;URENI, ce
+            statut n&apos;étant pas suivi dans le registre Nutrition). DMS (durée moyenne de séjour)
+            = total des jours des séjours effectivement terminés ce mois-ci / nombre de ces sorties.
+            La ligne URENI (malnutrition sévère avec complications) vient du registre Nutrition, pas
+            du registre Hospitalisation — même formule, source différente.
+          </p>
+          <div className="overflow-x-auto">
+            <table className="w-full text-left text-xs">
+              <thead>
+                <tr className="border-b border-[#e1e0d9] uppercase tracking-wide text-[#898781]">
+                  <th className="px-3 py-2 font-medium">Service / registre</th>
+                  <th className="px-3 py-2 text-right font-medium">Admissions (mois)</th>
+                  <th className="px-3 py-2 text-right font-medium">Sorties (mois)</th>
+                  <th className="px-3 py-2 text-right font-medium">
+                    Total journées d&apos;hospitalisation
+                  </th>
+                  <th className="px-3 py-2 text-right font-medium">Dont indigents (journées)</th>
+                  <th className="px-3 py-2 text-right font-medium">DMS (jours)</th>
+                </tr>
+              </thead>
+              <tbody>
+                {dureeSejourStats.map((s, i) => (
+                  <tr
+                    key={s.label}
+                    className={i !== dureeSejourStats.length - 1 ? 'border-b border-[#e1e0d9]' : ''}
+                  >
+                    <td className="px-3 py-2 font-medium text-[#0b0b0b]">{s.label}</td>
+                    <td className="px-3 py-2 text-right text-[#52514e]">{s.admissions}</td>
+                    <td className="px-3 py-2 text-right text-[#52514e]">{s.sorties}</td>
+                    <td className="px-3 py-2 text-right text-[#52514e]">{s.totalJournees}</td>
+                    <td className="px-3 py-2 text-right text-[#d03b3b]">
+                      {s.indigentJournees != null ? s.indigentJournees : '—'}
+                    </td>
+                    <td className="px-3 py-2 text-right font-semibold text-[#0b0b0b]">
+                      {s.dms != null ? s.dms.toFixed(1) : '—'}
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
           </div>
         </div>
 

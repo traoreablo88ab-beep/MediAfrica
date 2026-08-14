@@ -51,19 +51,83 @@ interface MaterniteDetail {
   providerName: string | null;
 }
 
+interface NutritionVisiteSuiviDetail {
+  id: string;
+  numeroVisite: number;
+  date: string;
+  poidsKg: number | null;
+  tailleCm: number | null;
+  perimetreBrachialCm: number | null;
+  ptIndice: string | null;
+  oedemes: string | null;
+  type: string | null;
+  testAppetit: string | null;
+  diarrheeJours: number | null;
+  vomissementJours: number | null;
+  fievreJours: number | null;
+  touxJours: number | null;
+  temperatureC: number | null;
+  resultatTestPalu: string | null;
+  atpeSachets: number | null;
+  dermatoses: string | null;
+  alerteLethargique: string | null;
+  frequenceRespiratoireMin: number | null;
+  seancesEducationNutritionnelle: number | null;
+  seancesStimulation: number | null;
+  observations: string | null;
+}
+
+interface NutritionEvenementDetail {
+  id: string;
+  type: string;
+  date: string;
+  raison: string | null;
+  conclusion: string | null;
+  centre: string | null;
+  resultat: string | null;
+}
+
 interface NutritionDetail {
   id: string;
   date: string;
+  type: string;
+  numeroMas: string | null;
+  telephoneContact: string | null;
+  localisationPrecise: string | null;
+  ageMois: number | null;
+  modeAdmission: string | null;
   typeCas: string | null;
   poidsKg: number | null;
   tailleCm: number | null;
   perimetreBrachialCm: number | null;
+  ptIndice: string | null;
   oedemes: string | null;
-  classification: string | null;
-  priseEnCharge: string | null;
-  evolution: string | null;
-  prochainRdv: string | null;
+  pathologiesAssociees: string | null;
+  nomPere: string | null;
+  nomMere: string | null;
+  allaite: boolean | null;
+  jumeaux: boolean | null;
+  parentsVivants: boolean | null;
+  sourceAdmission: string | null;
+  carteVaccination: boolean | null;
+  vaccinationAJour: boolean | null;
+  dateSortie: string | null;
+  poidsSortieKg: number | null;
+  tailleSortieCm: number | null;
+  perimetreBrachialSortieCm: number | null;
+  ptIndiceSortie: string | null;
+  oedemeSortie: string | null;
+  typeSortie: string | null;
+  datePoidsMinimum: string | null;
+  poidsMinimumKg: number | null;
+  seancesStimulationPsychocognitive: number | null;
+  seancesCcsc: number | null;
+  beneficiairePoudreNutritive: boolean | null;
+  beneficiairePlaquette: boolean | null;
+  dureeSejourJours: number | null;
   observations: string | null;
+  visites: NutritionVisiteSuiviDetail[];
+  evenements: NutritionEvenementDetail[];
   providerName: string | null;
 }
 
@@ -153,6 +217,18 @@ interface PatientDetail {
 const MATERNITE_TYPE_LABEL: Record<string, string> = {
   CPN: 'CPN',
   ACCOUCHEMENT: 'Accouchement',
+};
+
+const NUTRITION_TYPE_LABEL: Record<string, string> = {
+  URENI: 'URENI',
+  URENAS: 'URENAS',
+  URENAM: 'URENAM',
+};
+
+const VISIT_NUMBER_LABEL: Record<string, string> = {
+  URENI: 'Jour',
+  URENAS: 'Semaine',
+  URENAM: 'Visite',
 };
 
 function computeAge(dateNaissanceIso: string): number {
@@ -693,87 +769,294 @@ export default function PatientDetailPage() {
               </div>
             )}
 
-            <h2 className="mb-4 mt-8 font-semibold text-[#0b0b0b]">Historique nutrition</h2>
+            <h2 className="mb-4 mt-8 font-semibold text-[#0b0b0b]">Historique nutrition (PCIMA)</h2>
             {patient.nutritions.length === 0 ? (
-              <p className="text-sm text-[#898781]">Aucune fiche nutrition enregistrée.</p>
+              <p className="text-sm text-[#898781]">Aucune fiche PCIMA enregistrée.</p>
             ) : (
               <div className="flex flex-col gap-4">
-                {patient.nutritions.map((n) => (
-                  <div
-                    key={n.id}
-                    className="overflow-hidden rounded-lg border border-[#e1e0d9] bg-white"
-                  >
-                    <div className="flex items-center justify-between border-b border-[#e1e0d9] bg-[#f9f9f7] px-5 py-3">
-                      <div>
-                        <span className="text-sm font-semibold text-[#0b0b0b]">
-                          {formatDate(n.date)}
-                        </span>{' '}
-                        {n.classification && (
-                          <span
-                            className={`ml-2 rounded-full px-2 py-0.5 text-xs font-medium ${
-                              n.classification.startsWith('MAS')
-                                ? 'bg-[#d03b3b]/10 text-[#d03b3b]'
-                                : 'bg-[#2a78d6]/10 text-[#2a78d6]'
-                            }`}
-                          >
-                            {n.classification}
+                {patient.nutritions.map((n) => {
+                  const isUrenam = n.type === 'URENAM';
+                  const isUrenas = n.type === 'URENAS';
+                  const closed = isUrenam ? n.typeSortie != null : n.dateSortie != null;
+                  return (
+                    <div
+                      key={n.id}
+                      className="overflow-hidden rounded-lg border border-[#e1e0d9] bg-white"
+                    >
+                      <div className="flex items-center justify-between border-b border-[#e1e0d9] bg-[#f9f9f7] px-5 py-3">
+                        <div>
+                          <span className="text-sm font-semibold text-[#0b0b0b]">
+                            {formatDate(n.date)}
+                          </span>{' '}
+                          <span className="ml-2 rounded-full bg-[#2a78d6]/10 px-2 py-0.5 text-xs font-medium text-[#2a78d6]">
+                            {NUTRITION_TYPE_LABEL[n.type] ?? n.type}
+                          </span>
+                          {closed ? (
+                            <span className="ml-2 rounded-full bg-[#2a78d6]/10 px-2 py-0.5 text-xs font-medium text-[#2a78d6]">
+                              {isUrenam
+                                ? (n.typeSortie ?? 'Clôturé')
+                                : `Sorti le ${n.dateSortie ? formatDate(n.dateSortie) : ''}`}
+                            </span>
+                          ) : (
+                            <span className="ml-2 rounded-full bg-[#d08a1c]/10 px-2 py-0.5 text-xs font-medium text-[#d08a1c]">
+                              En cours
+                            </span>
+                          )}
+                        </div>
+                        <div className="flex items-center gap-3">
+                          {n.providerName && (
+                            <span className="text-xs text-[#898781]">{n.providerName}</span>
+                          )}
+                          {!closed && (
+                            <Link
+                              href={`/patients/${patient.id}/nutrition/${n.id}/visite`}
+                              className="print:hidden text-xs font-medium text-[#2a78d6] hover:underline"
+                            >
+                              + Ajouter une visite
+                            </Link>
+                          )}
+                          {!closed && isUrenas && (
+                            <Link
+                              href={`/patients/${patient.id}/nutrition/${n.id}/evenement`}
+                              className="print:hidden text-xs font-medium text-[#2a78d6] hover:underline"
+                            >
+                              + VAD / transfert
+                            </Link>
+                          )}
+                          {!closed && (
+                            <Link
+                              href={`/patients/${patient.id}/nutrition/${n.id}/sortie`}
+                              className="print:hidden text-xs font-medium text-[#2a78d6] hover:underline"
+                            >
+                              {isUrenam ? 'Clôturer l’épisode →' : 'Enregistrer la sortie →'}
+                            </Link>
+                          )}
+                        </div>
+                      </div>
+                      <div className="flex flex-wrap gap-6 px-5 py-3 text-sm text-[#52514e]">
+                        {n.numeroMas && (
+                          <span>
+                            N° MAS{' '}
+                            <span className="font-semibold text-[#0b0b0b]">{n.numeroMas}</span>
+                          </span>
+                        )}
+                        {n.ageMois != null && (
+                          <span>
+                            Âge{' '}
+                            <span className="font-semibold text-[#0b0b0b]">{n.ageMois} mois</span>
+                          </span>
+                        )}
+                        {!isUrenam && n.modeAdmission && (
+                          <span>
+                            Mode admission{' '}
+                            <span className="font-semibold text-[#0b0b0b]">{n.modeAdmission}</span>
+                          </span>
+                        )}
+                        {isUrenam && n.typeCas && (
+                          <span>
+                            Type de cas{' '}
+                            <span className="font-semibold text-[#0b0b0b]">{n.typeCas}</span>
+                          </span>
+                        )}
+                        {n.poidsKg != null && (
+                          <span>
+                            Poids{' '}
+                            <span className="font-semibold text-[#0b0b0b]">{n.poidsKg} kg</span>
+                          </span>
+                        )}
+                        {n.tailleCm != null && (
+                          <span>
+                            Taille{' '}
+                            <span className="font-semibold text-[#0b0b0b]">{n.tailleCm} cm</span>
+                          </span>
+                        )}
+                        {n.perimetreBrachialCm != null && (
+                          <span>
+                            PB{' '}
+                            <span className="font-semibold text-[#0b0b0b]">
+                              {n.perimetreBrachialCm} cm
+                            </span>
+                          </span>
+                        )}
+                        {n.ptIndice && (
+                          <span>
+                            {n.type === 'URENI' ? 'P/T ou IMC' : 'P/T Z'}{' '}
+                            <span className="font-semibold text-[#0b0b0b]">{n.ptIndice}</span>
+                          </span>
+                        )}
+                        {n.oedemes && (
+                          <span>
+                            Œdèmes <span className="font-semibold text-[#0b0b0b]">{n.oedemes}</span>
+                          </span>
+                        )}
+                        {n.telephoneContact && (
+                          <span>
+                            Téléphone{' '}
+                            <span className="font-semibold text-[#0b0b0b]">
+                              {n.telephoneContact}
+                            </span>
+                          </span>
+                        )}
+                        {n.localisationPrecise && (
+                          <span>
+                            Localisation{' '}
+                            <span className="font-semibold text-[#0b0b0b]">
+                              {n.localisationPrecise}
+                            </span>
                           </span>
                         )}
                       </div>
-                      {n.providerName && (
-                        <span className="text-xs text-[#898781]">{n.providerName}</span>
+                      {n.pathologiesAssociees && (
+                        <div className="border-t border-[#e1e0d9] px-5 py-3">
+                          <p className="text-xs uppercase tracking-wide text-[#898781]">
+                            Pathologies associées
+                          </p>
+                          <p className="mt-0.5 text-sm text-[#0b0b0b]">{n.pathologiesAssociees}</p>
+                        </div>
+                      )}
+                      {n.visites.length > 0 && (
+                        <div className="border-t border-[#e1e0d9] px-5 py-3">
+                          <p className="mb-2 text-xs uppercase tracking-wide text-[#898781]">
+                            Visites de suivi
+                          </p>
+                          <div className="flex flex-col gap-2">
+                            {n.visites.map((v) => (
+                              <div
+                                key={v.id}
+                                className="flex flex-wrap items-center gap-4 rounded-md bg-[#f9f9f7] px-3 py-2 text-sm text-[#52514e]"
+                              >
+                                <span className="font-semibold text-[#0b0b0b]">
+                                  {VISIT_NUMBER_LABEL[n.type] ?? 'Visite'} {v.numeroVisite}
+                                </span>
+                                <span>{formatDate(v.date)}</span>
+                                {v.poidsKg != null && <span>Poids {v.poidsKg} kg</span>}
+                                {v.perimetreBrachialCm != null && (
+                                  <span>PB {v.perimetreBrachialCm} cm</span>
+                                )}
+                                {v.ptIndice && <span>P/T Z {v.ptIndice}</span>}
+                                {v.oedemes && <span>Œd. {v.oedemes}</span>}
+                                {v.testAppetit && <span>Appétit {v.testAppetit}</span>}
+                                {v.temperatureC != null && <span>Temp. {v.temperatureC}°C</span>}
+                                {v.type && <span>{v.type}</span>}
+                              </div>
+                            ))}
+                          </div>
+                        </div>
+                      )}
+                      {isUrenas && n.evenements.length > 0 && (
+                        <div className="border-t border-[#e1e0d9] px-5 py-3">
+                          <p className="mb-2 text-xs uppercase tracking-wide text-[#898781]">
+                            VAD / références / transferts
+                          </p>
+                          <div className="flex flex-col gap-2">
+                            {n.evenements.map((ev) => (
+                              <div
+                                key={ev.id}
+                                className="flex flex-wrap items-center gap-4 rounded-md bg-[#f9f9f7] px-3 py-2 text-sm text-[#52514e]"
+                              >
+                                <span className="font-semibold text-[#0b0b0b]">
+                                  {ev.type === 'VAD' ? 'VAD' : 'Référence/transfert'}
+                                </span>
+                                <span>{formatDate(ev.date)}</span>
+                                {ev.raison && <span>Raison {ev.raison}</span>}
+                                {ev.conclusion && <span>Conclusion {ev.conclusion}</span>}
+                                {ev.centre && <span>Centre {ev.centre}</span>}
+                                {ev.resultat && <span>Résultat {ev.resultat}</span>}
+                              </div>
+                            ))}
+                          </div>
+                        </div>
+                      )}
+                      {!isUrenam &&
+                        (n.typeSortie ||
+                          n.poidsSortieKg != null ||
+                          n.poidsMinimumKg != null ||
+                          n.seancesStimulationPsychocognitive != null ||
+                          n.seancesCcsc != null) && (
+                          <div className="flex flex-wrap gap-6 border-t border-[#e1e0d9] px-5 py-3 text-sm text-[#52514e]">
+                            {n.typeSortie && (
+                              <span>
+                                Type de sortie{' '}
+                                <span className="font-semibold text-[#0b0b0b]">{n.typeSortie}</span>
+                              </span>
+                            )}
+                            {n.poidsSortieKg != null && (
+                              <span>
+                                Poids sortie{' '}
+                                <span className="font-semibold text-[#0b0b0b]">
+                                  {n.poidsSortieKg} kg
+                                </span>
+                              </span>
+                            )}
+                            {n.poidsMinimumKg != null && (
+                              <span>
+                                Poids minimum{' '}
+                                <span className="font-semibold text-[#0b0b0b]">
+                                  {n.poidsMinimumKg} kg
+                                  {n.datePoidsMinimum ? ` (${formatDate(n.datePoidsMinimum)})` : ''}
+                                </span>
+                              </span>
+                            )}
+                            {n.seancesStimulationPsychocognitive != null && (
+                              <span>
+                                Séances stimulation{' '}
+                                <span className="font-semibold text-[#0b0b0b]">
+                                  {n.seancesStimulationPsychocognitive}
+                                </span>
+                              </span>
+                            )}
+                            {n.seancesCcsc != null && (
+                              <span>
+                                Séances CCSC{' '}
+                                <span className="font-semibold text-[#0b0b0b]">
+                                  {n.seancesCcsc}
+                                </span>
+                              </span>
+                            )}
+                          </div>
+                        )}
+                      {isUrenam &&
+                        (n.beneficiairePoudreNutritive != null ||
+                          n.beneficiairePlaquette != null ||
+                          n.dureeSejourJours != null) && (
+                          <div className="flex flex-wrap gap-6 border-t border-[#e1e0d9] px-5 py-3 text-sm text-[#52514e]">
+                            {n.beneficiairePoudreNutritive != null && (
+                              <span>
+                                Poudre nutritive{' '}
+                                <span className="font-semibold text-[#0b0b0b]">
+                                  {n.beneficiairePoudreNutritive ? 'Oui' : 'Non'}
+                                </span>
+                              </span>
+                            )}
+                            {n.beneficiairePlaquette != null && (
+                              <span>
+                                Plaquette{' '}
+                                <span className="font-semibold text-[#0b0b0b]">
+                                  {n.beneficiairePlaquette ? 'Oui' : 'Non'}
+                                </span>
+                              </span>
+                            )}
+                            {n.dureeSejourJours != null && (
+                              <span>
+                                Durée{' '}
+                                <span className="font-semibold text-[#0b0b0b]">
+                                  {n.dureeSejourJours} j
+                                </span>
+                              </span>
+                            )}
+                          </div>
+                        )}
+                      {n.observations && (
+                        <div className="border-t border-[#e1e0d9] px-5 py-3">
+                          <p className="text-xs uppercase tracking-wide text-[#898781]">
+                            Observations
+                          </p>
+                          <p className="mt-0.5 text-sm text-[#0b0b0b]">{n.observations}</p>
+                        </div>
                       )}
                     </div>
-                    <div className="flex flex-wrap gap-6 px-5 py-3 text-sm text-[#52514e]">
-                      {n.perimetreBrachialCm != null && (
-                        <span>
-                          PB{' '}
-                          <span className="font-semibold text-[#0b0b0b]">
-                            {n.perimetreBrachialCm} cm
-                          </span>
-                        </span>
-                      )}
-                      {n.poidsKg != null && (
-                        <span>
-                          Poids <span className="font-semibold text-[#0b0b0b]">{n.poidsKg} kg</span>
-                        </span>
-                      )}
-                      {n.oedemes && (
-                        <span>
-                          Œdèmes <span className="font-semibold text-[#0b0b0b]">{n.oedemes}</span>
-                        </span>
-                      )}
-                      {n.priseEnCharge && (
-                        <span>
-                          Prise en charge{' '}
-                          <span className="font-semibold text-[#0b0b0b]">{n.priseEnCharge}</span>
-                        </span>
-                      )}
-                      {n.evolution && (
-                        <span>
-                          Évolution{' '}
-                          <span className="font-semibold text-[#0b0b0b]">{n.evolution}</span>
-                        </span>
-                      )}
-                      {n.prochainRdv && (
-                        <span>
-                          Prochain RDV{' '}
-                          <span className="font-semibold text-[#0b0b0b]">
-                            {formatDate(n.prochainRdv)}
-                          </span>
-                        </span>
-                      )}
-                    </div>
-                    {n.observations && (
-                      <div className="border-t border-[#e1e0d9] px-5 py-3">
-                        <p className="text-xs uppercase tracking-wide text-[#898781]">
-                          Observations
-                        </p>
-                        <p className="mt-0.5 text-sm text-[#0b0b0b]">{n.observations}</p>
-                      </div>
-                    )}
-                  </div>
-                ))}
+                  );
+                })}
               </div>
             )}
 

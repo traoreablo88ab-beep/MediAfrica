@@ -34,30 +34,30 @@ afterEach(() => {
   vi.useRealTimers();
 });
 
-describe('GET /api/registres/nutrition/closure', () => {
+describe('GET /api/registres/nutrition/ureni/closure', () => {
   it('returns 401 when requireAuth bails', async () => {
     mockRequireOrgMember.mockResolvedValueOnce(
       NextResponse.json({ error: 'Missing token' }, { status: 401 }),
     );
-    const res = await GET(makeGet('http://test/api/registres/nutrition/closure'));
+    const res = await GET(makeGet('http://test/api/registres/nutrition/ureni/closure'));
     expect(res.status).toBe(401);
   });
 
   it('defaults to the current month; closed=false when no closure row', async () => {
     prismaMock.registerClosure.findUnique.mockResolvedValue(null);
-    const res = await GET(makeGet('http://test/api/registres/nutrition/closure'));
+    const res = await GET(makeGet('http://test/api/registres/nutrition/ureni/closure'));
     const body = await res.json();
     expect(body).toEqual({ month: '2026-01', closed: false, closedAt: null, closedByName: null });
   });
 
   it('?month= overrides the default', async () => {
     prismaMock.registerClosure.findUnique.mockResolvedValue(null);
-    await GET(makeGet('http://test/api/registres/nutrition/closure?month=2025-12'));
+    await GET(makeGet('http://test/api/registres/nutrition/ureni/closure?month=2025-12'));
     const args = prismaMock.registerClosure.findUnique.mock.calls[0]?.[0];
     expect(args?.where).toEqual({
       organizationId_registerType_month: {
         organizationId: 'org-1',
-        registerType: 'nutrition',
+        registerType: 'nutrition-ureni',
         month: '2025-12',
       },
     });
@@ -66,14 +66,14 @@ describe('GET /api/registres/nutrition/closure', () => {
   it('closed=true with closedAt + closedByName when a closure row exists', async () => {
     prismaMock.registerClosure.findUnique.mockResolvedValue({
       id: 'rc-1',
-      registerType: 'nutrition',
+      registerType: 'nutrition-ureni',
       month: '2026-01',
       closedAt: new Date('2026-02-01T08:00:00Z'),
       closedById: 'user-1',
       closedBy: { name: 'Amadou Diallo', email: 'staff@example.com' },
       createdAt: new Date('2026-02-01T08:00:00Z'),
     } as never);
-    const res = await GET(makeGet('http://test/api/registres/nutrition/closure'));
+    const res = await GET(makeGet('http://test/api/registres/nutrition/ureni/closure'));
     const body = await res.json();
     expect(body.closed).toBe(true);
     expect(body.closedAt).toBe('2026-02-01T08:00:00.000Z');
@@ -83,14 +83,14 @@ describe('GET /api/registres/nutrition/closure', () => {
   it('falls back to email when closedBy has no name', async () => {
     prismaMock.registerClosure.findUnique.mockResolvedValue({
       id: 'rc-1',
-      registerType: 'nutrition',
+      registerType: 'nutrition-ureni',
       month: '2026-01',
       closedAt: new Date('2026-02-01T08:00:00Z'),
       closedById: 'user-1',
       closedBy: { name: null, email: 'staff@example.com' },
       createdAt: new Date('2026-02-01T08:00:00Z'),
     } as never);
-    const res = await GET(makeGet('http://test/api/registres/nutrition/closure'));
+    const res = await GET(makeGet('http://test/api/registres/nutrition/ureni/closure'));
     const body = await res.json();
     expect(body.closedByName).toBe('staff@example.com');
   });

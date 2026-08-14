@@ -7,6 +7,15 @@ import type { PrismaClient } from '@prisma/client';
 
 export type ClosureClient = Pick<PrismaClient, 'registerClosure'>;
 
+// Shared by every Nutrition (PCIMA) route that needs to resolve the
+// per-type register for a closure check (creation, sortie, visites,
+// évènements) — was duplicated verbatim across route files before.
+export const REGISTER_TYPE_BY_NUTRITION_TYPE: Record<string, string> = {
+  URENI: 'nutrition-ureni',
+  URENAS: 'nutrition-urenas',
+  URENAM: 'nutrition-urenam',
+};
+
 export function monthKey(date: Date): string {
   const year = date.getFullYear();
   const month = String(date.getMonth() + 1).padStart(2, '0');
