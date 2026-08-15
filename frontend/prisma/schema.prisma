@@ -47,6 +47,7 @@ model User {
   hospitalisationsProvided         Hospitalisation[]
   planificationsFamilialesProvided PlanificationFamiliale[]
   registerClosures                 RegisterClosure[]
+  hygieneRapportsUpdated           HygieneRapport[]
   reportsFiled                     Report[]
 
   // Multi-tenancy: MediAfrica is a multi-tenant SaaS — each User belongs to
@@ -127,6 +128,7 @@ model Organization {
 
   patients         Patient[]
   registerClosures RegisterClosure[]
+  hygieneRapports  HygieneRapport[]
   clinicSettings   ClinicSettings?
   subscription     Subscription?
   orders           Order[]
@@ -424,6 +426,13 @@ model Consultation {
   indigent            Boolean?
   telephoneContact    String?
   localisationPrecise String?
+
+  // RMA — rapport de morbidité et de mortalité (section 7) : code+libellé de
+  // l'affection officielle (ex: "A00 — Choléra") si renseigné à la saisie, et
+  // décès imputé à cette affection pendant cette consultation. Optionnels —
+  // seules les consultations créées après l'ajout de ces champs les renseignent.
+  codeAffection String?
+  deces         Boolean?
 
   // Offline-queue replay safety — same pattern as Order.idempotencyKey.
   // Nullable so existing rows are unaffected; a retried sync with the same
@@ -859,6 +868,107 @@ model RegisterClosure {
   createdAt      DateTime     @default(now())
 
   @@unique([organizationId, registerType, month])
+}
+
+// RMA — section "Activités d'hygiène publique et salubrité" : un seul
+// enregistrement par organisation et par mois, saisi manuellement (pas de
+// lien patient — ce sont des totaux d'infrastructure/assainissement, pas
+// des évènements par patient). Compteurs regroupés par les 7 sous-parties
+// officielles du RMA (numérotées ci-dessous) ; tous nullables (mois pas
+// encore rempli, ou indicateur non applicable/non suivi par le centre).
+model HygieneRapport {
+  id             String       @id @default(cuid())
+  organizationId String
+  organization   Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  month          String // "2026-01"
+
+  // 1. Hygiène de l'eau (surveillance/contrôle qualité eau de boisson)
+  nbComparateursChlorePh         Int?
+  nbNouveauxPuitsRealises        Int?
+  nbPuitsExistants               Int?
+  nbNouveauxPuitsAmenages        Int?
+  nbPuitsTraites                 Int?
+  nbNouveauxForagesRealises      Int?
+  nbForagesExistants             Int?
+  nbNouveauxForagesAmenages      Int?
+  nbForagesFonctionnels          Int?
+  nbAesExistants                 Int?
+  nbAesChloreesAvantDistribution Int?
+  nbControlesChloreEffectues     Int?
+  nbControlesChloreNormes        Int?
+
+  // 2. Hygiène de l'habitat et des établissements classés
+  nbVisitesDomicileEffectuees     Int?
+  nbConcessionsSourceEauPotable   Int?
+  nbConcessionsLatrines           Int?
+  nbConcessionsLatrinesAmeliorees Int?
+  nbLatrinesDesinfectees          Int?
+  nbConcessionsPuisard            Int?
+  nbConcessionsDesinsectisees     Int?
+  nbConcessionsDeratisees         Int?
+  nbMenagesLavageMains            Int?
+  nbEcolesPointEauPotable         Int?
+  nbEcolesLavageMains             Int?
+  nbEcolesLatrinesAmeliorees      Int?
+
+  // 3. Hygiène des aliments (restauration collective)
+  nbControlesIodationSel            Int?
+  nbCasIntoxicationsAlimentaires    Int?
+  nbTiacEnregistres                 Int?
+  nbEtabsRestaurationExistants      Int?
+  nbEtabsRestaurationInspectes      Int?
+  nbEtabsRestaurationConformes      Int?
+  nbInspectionsSanitairesEffectuees Int?
+  nbVisitesMedicalesManipulateurs   Int?
+
+  // 4. Accès à l'eau potable, hygiène et assainissement (AEP) dans les
+  //    établissements de santé
+  nbSourcesEauExistantesCS           Int?
+  nbSourcesEauFonctionnellesCS       Int?
+  nbPointsDistributionFonctionnelsCS Int?
+  nbPointsDistributionExistantsCS    Int?
+  nbReservoirsStockageExistantsCS    Int?
+  nbReservoirsStockageFonctionnelsCS Int?
+  nbControlesChloreCS                Int?
+  nbControlesChloreNormesCS          Int?
+
+  // 5. Gestion des eaux usées et excréta
+  nbToilettesExistantesCS             Int?
+  nbToilettesFonctionnellesCS         Int?
+  nbToilettesSepareesCS               Int?
+  nbToilettesHandicapCS               Int?
+  nbToilettesLavageMainsCS            Int?
+  nbDispositifsTraitementExistants    Int?
+  nbDispositifsTraitementFonctionnels Int?
+
+  // 6. Gestion des déchets biomédicaux
+  nbKitsProtectionExistants   Int?
+  nbUnitesSoinsTotal          Int?
+  nbUnitesSoinsTriSource      Int?
+  nbCsIncinerateurFonctionnel Int?
+  nbBoitesSecuriteCollectees  Int?
+  nbBoitesSecuriteConvoyees   Int?
+  nbBoitesSecuriteIncinerees  Int?
+
+  // 7. Prévention/contrôle des infections + promotion de l'hygiène
+  nbUnitesSoinsLavageMainsFonctionnel   Int?
+  nbPersonnelEquipementProtection       Int?
+  nbPersonnelTotal                      Int?
+  nbUnitesProduitsEntretien             Int?
+  nbAppareilsSterilisationExistants     Int?
+  nbAppareilsSterilisationFonctionnels  Int?
+  nbComitesHygieneSalubrite             Int?
+  nbComitesHygieneSalubriteFonctionnels Int?
+  nbAteliersConfectionDalles            Int?
+  nbSeancesSensibilisationRealisees     Int?
+  nbSeancesSensibilisationPlanifiees    Int?
+
+  updatedById String?
+  updatedBy   User?    @relation(fields: [updatedById], references: [id], onDelete: SetNull)
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  @@unique([organizationId, month])
 }
 
 // ───────────────────────────────────────────────────────────────────────

@@ -48,6 +48,11 @@ const CreateConsultationBody = z.object({
   indigent: z.boolean().optional(),
   telephoneContact: z.string().trim().optional(),
   localisationPrecise: z.string().trim().optional(),
+  // Required — every consultation must be classifiable in the RMA Morbidité
+  // table (staff picks "Autres" when no specific affection fits; see
+  // MORBIDITE_AFFECTIONS in patients/[id]/consultations/new/page.tsx).
+  codeAffection: z.string().trim().min(1),
+  deces: z.boolean().optional(),
 });
 
 export async function POST(
@@ -168,6 +173,8 @@ export async function POST(
         ...(d.indigent !== undefined ? { indigent: d.indigent } : {}),
         ...(d.telephoneContact ? { telephoneContact: d.telephoneContact } : {}),
         ...(d.localisationPrecise ? { localisationPrecise: d.localisationPrecise } : {}),
+        codeAffection: d.codeAffection,
+        ...(d.deces !== undefined ? { deces: d.deces } : {}),
         ...(idemKey
           ? {
               idempotencyKey: idemKey,

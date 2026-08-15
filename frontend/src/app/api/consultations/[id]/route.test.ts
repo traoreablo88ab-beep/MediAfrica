@@ -60,6 +60,8 @@ function consultationRow(overrides: Partial<Record<string, unknown>> = {}) {
     poidsKg: null,
     temperatureC: null,
     indigent: null,
+    codeAffection: null,
+    deces: null,
     createdAt: new Date('2026-01-12T07:45:00Z'),
     updatedAt: new Date('2026-01-12T07:45:00Z'),
     ...overrides,
@@ -97,7 +99,7 @@ describe('PATCH /api/consultations/[id]', () => {
     expect(prismaMock.consultation.update).not.toHaveBeenCalled();
   });
 
-  it('empty body (neither status nor indigent) → 400 VALIDATION_FAILED', async () => {
+  it('empty body (neither status, indigent, codeAffection, nor deces) → 400 VALIDATION_FAILED', async () => {
     const res = await PATCH(makePatch({}), ctxWith('c-1'));
     expect(res.status).toBe(400);
     const body = await res.json();
@@ -131,7 +133,13 @@ describe('PATCH /api/consultations/[id]', () => {
     const res = await PATCH(makePatch({ status: 'traite' }), ctxWith('c-1'));
     expect(res.status).toBe(200);
     const body = await res.json();
-    expect(body).toEqual({ id: 'c-1', status: 'traite', indigent: null });
+    expect(body).toEqual({
+      id: 'c-1',
+      status: 'traite',
+      indigent: null,
+      codeAffection: null,
+      deces: null,
+    });
     const updateArg = prismaMock.consultation.update.mock.calls[0]?.[0];
     expect(updateArg?.where).toEqual({ id: 'c-1' });
     expect(updateArg?.data).toEqual({ status: 'traite' });
@@ -143,10 +151,57 @@ describe('PATCH /api/consultations/[id]', () => {
     const res = await PATCH(makePatch({ indigent: true }), ctxWith('c-1'));
     expect(res.status).toBe(200);
     const body = await res.json();
-    expect(body).toEqual({ id: 'c-1', status: 'attente', indigent: true });
+    expect(body).toEqual({
+      id: 'c-1',
+      status: 'attente',
+      indigent: true,
+      codeAffection: null,
+      deces: null,
+    });
     const updateArg = prismaMock.consultation.update.mock.calls[0]?.[0];
     expect(updateArg?.where).toEqual({ id: 'c-1' });
     expect(updateArg?.data).toEqual({ indigent: true });
+  });
+
+  it('happy path: sets codeAffection + deces together, returns 200', async () => {
+    prismaMock.consultation.findFirst.mockResolvedValue(consultationRow() as never);
+    prismaMock.consultation.update.mockResolvedValue(
+      consultationRow({ codeAffection: 'B05 — Rougeole', deces: true }) as never,
+    );
+    const res = await PATCH(
+      makePatch({ codeAffection: 'B05 — Rougeole', deces: true }),
+      ctxWith('c-1'),
+    );
+    expect(res.status).toBe(200);
+    const body = await res.json();
+    expect(body).toEqual({
+      id: 'c-1',
+      status: 'attente',
+      indigent: null,
+      codeAffection: 'B05 — Rougeole',
+      deces: true,
+    });
+    const updateArg = prismaMock.consultation.update.mock.calls[0]?.[0];
+    expect(updateArg?.data).toEqual({ codeAffection: 'B05 — Rougeole', deces: true });
+  });
+
+  it('codeAffection: null clears the field (and deces along with it)', async () => {
+    prismaMock.consultation.findFirst.mockResolvedValue(
+      consultationRow({ codeAffection: 'B05 — Rougeole', deces: true }) as never,
+    );
+    prismaMock.consultation.update.mockResolvedValue(
+      consultationRow({ codeAffection: null, deces: false }) as never,
+    );
+    const res = await PATCH(makePatch({ codeAffection: null, deces: false }), ctxWith('c-1'));
+    expect(res.status).toBe(200);
+    const updateArg = prismaMock.consultation.update.mock.calls[0]?.[0];
+    expect(updateArg?.data).toEqual({ codeAffection: null, deces: false });
+  });
+
+  it('empty-string codeAffection → 400 VALIDATION_FAILED (use null to clear)', async () => {
+    const res = await PATCH(makePatch({ codeAffection: '' }), ctxWith('c-1'));
+    expect(res.status).toBe(400);
+    expect(prismaMock.consultation.update).not.toHaveBeenCalled();
   });
 });
 

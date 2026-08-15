@@ -60,7 +60,9 @@ interface ConsultationRow {
   mdoMaladie: string | null;
   tdr: string | null;
   ge: string | null;
-  patient: { dateNaissance: string };
+  codeAffection: string | null;
+  deces: boolean | null;
+  patient: { dateNaissance: string; sexe: string };
 }
 
 interface MaterniteRow {
@@ -631,6 +633,133 @@ function buildNutritionCounts(
   });
 }
 
+// Liste officielle du "Rapport de morbidité et de mortalité" (RMA, section 7).
+// Même liste que MORBIDITE_AFFECTIONS sur le formulaire de nouvelle
+// consultation (dupliquée localement par page, même précédent que
+// PEV_ANTIGENE_ROWS vs ANTIGENES) — `label` doit rester identique entre les
+// deux pour que `codeAffection` (stocké tel quel) matche ici. `hasDeces`
+// détermine si une ligne "— Décès" est ajoutée sous la ligne "— Cas".
+const MORBIDITE_ROWS: { label: string; hasDeces: boolean }[] = [
+  { label: 'Choléra', hasDeces: true },
+  { label: 'Diarrhée présumée infectieuse (hors choléra)', hasDeces: true },
+  { label: 'Rougeole', hasDeces: true },
+  { label: 'Tétanos', hasDeces: true },
+  { label: 'Tétanos néo-natal', hasDeces: true },
+  { label: 'Fistule obstétricale', hasDeces: true },
+  { label: "Cancer du col de l'utérus", hasDeces: true },
+  { label: 'Cancer du sein', hasDeces: true },
+  { label: 'Paralysie Flasque Aiguë', hasDeces: false },
+  { label: 'Méningite cérébrospinale', hasDeces: true },
+  { label: 'Toux<15j, IRA basses (pneumonie, bronchopneumonie)', hasDeces: true },
+  { label: 'IRA hautes (rhinopharyngite, rhinite, trachéite)', hasDeces: false },
+  { label: 'Toux > 15 jours', hasDeces: true },
+  { label: 'Tuberculose suspecte', hasDeces: true },
+  { label: 'Tuberculose confirmée', hasDeces: true },
+  { label: 'Paludisme suspect', hasDeces: false },
+  { label: 'Cas présumés de paludisme simple (diagnostic clinique)', hasDeces: false },
+  { label: 'Cas présumés de paludisme grave (diagnostic clinique)', hasDeces: true },
+  { label: 'Paludisme simple confirmé', hasDeces: false },
+  { label: 'Paludisme grave confirmé', hasDeces: true },
+  { label: 'Fièvre typhoïde', hasDeces: true },
+  { label: 'Conjonctivites', hasDeces: false },
+  { label: 'Trachome', hasDeces: false },
+  { label: 'Trichiasis', hasDeces: false },
+  { label: 'Cataracte', hasDeces: false },
+  { label: 'Glaucome', hasDeces: false },
+  { label: 'Vices de réfraction et basses de vision', hasDeces: false },
+  { label: "Baisse d'Acuité visuelle (BAV)", hasDeces: false },
+  { label: 'Traumatismes oculaires (coup, accident domestique/travail)', hasDeces: false },
+  { label: 'Rétinopathie diabétique', hasDeces: false },
+  { label: 'Bilharziose urinaire', hasDeces: false },
+  { label: 'Vers intestinaux', hasDeces: false },
+  { label: 'Écoulement urétral et/ou dysurie', hasDeces: false },
+  { label: 'Ulcération génitale', hasDeces: false },
+  { label: 'Syphilis endémique', hasDeces: false },
+  { label: 'Écoulement vaginal', hasDeces: false },
+  { label: 'Douleurs abdominales basses', hasDeces: false },
+  { label: 'Conjonctivite du nouveau-né', hasDeces: false },
+  { label: 'Insuffisance pondérale', hasDeces: false },
+  { label: 'Malnutrition Aiguë Sévère', hasDeces: true },
+  { label: 'Retard de croissance', hasDeces: false },
+  { label: "Intoxication alimentaire d'origine chimique", hasDeces: true },
+  { label: "Intoxication alimentaire d'origine microbienne", hasDeces: true },
+  { label: 'Troubles liés à la grossesse', hasDeces: true },
+  { label: "Troubles liés à l'accouchement et au post-partum", hasDeces: true },
+  { label: 'Traumatisme lié aux accidents de la voie publique', hasDeces: true },
+  { label: 'Traumatisme non lié aux accidents de la voie publique', hasDeces: true },
+  { label: 'Traumatismes : coups et blessures volontaires', hasDeces: true },
+  { label: 'Traumatismes : accidents domestiques', hasDeces: true },
+  { label: 'Carie dentaire', hasDeces: false },
+  { label: 'Gingivite simple', hasDeces: false },
+  { label: 'Gingivite ulcéro-nécrotique aiguë', hasDeces: false },
+  { label: 'Noma', hasDeces: true },
+  { label: 'Autres affections de la bouche et des dents', hasDeces: true },
+  { label: 'HTA', hasDeces: true },
+  { label: 'Otite aiguë', hasDeces: false },
+  { label: 'Otite purulente', hasDeces: false },
+  { label: 'Sinusite', hasDeces: false },
+  { label: 'Angine', hasDeces: false },
+  { label: 'Drépanocytose', hasDeces: true },
+  { label: 'Anémie', hasDeces: true },
+  { label: 'Diabète', hasDeces: true },
+  { label: 'Dracunculose', hasDeces: false },
+  { label: 'SIDA', hasDeces: true },
+  { label: 'Troubles mentaux', hasDeces: true },
+  { label: 'Eczéma', hasDeces: false },
+  { label: 'Intertrigo (mycose des plis)', hasDeces: false },
+  { label: 'Teigne', hasDeces: false },
+  { label: 'Gale', hasDeces: false },
+  { label: 'Pyodermite', hasDeces: false },
+  { label: 'Onchocercose', hasDeces: false },
+  { label: 'Trypanosomiase humaine africaine', hasDeces: true },
+  { label: 'Autres', hasDeces: true },
+];
+
+// Toute consultation du mois doit apparaître dans ce tableau, pas seulement
+// celles codées avec une des 72 affections nommées : une consultation dont
+// codeAffection est vide ou ne correspond à aucune d'elles tombe dans
+// "Autres" (dernière ligne), le fourre-tout officiel du RMA — jamais
+// silencieusement exclue du rapport.
+const NAMED_MORBIDITE_LABELS = new Set(
+  MORBIDITE_ROWS.filter((r) => r.label !== 'Autres').map((r) => r.label),
+);
+
+// `consultations` est déjà fetché pour le mois exact choisi (voir load()) —
+// pas de filtrage par date ici, contrairement à buildNutritionCounts qui
+// travaille sur un fetch large multi-mois.
+function buildMorbiditeCounts(rows: ConsultationRow[]): AgeSexCountRow[] {
+  function countRow(label: string, matches: (c: ConsultationRow) => boolean): AgeSexCountRow {
+    const byBracket = new Map<string, { M: number; F: number }>(
+      AGE_BRACKETS.map((b) => [b, { M: 0, F: 0 }]),
+    );
+    let total = 0;
+    for (const c of rows) {
+      if (!matches(c)) continue;
+      total += 1;
+      const bracket = ageBracketAt(c.patient.dateNaissance, c.date);
+      const cell = byBracket.get(bracket);
+      if (!cell) continue;
+      if (c.patient.sexe === 'M') cell.M += 1;
+      else if (c.patient.sexe === 'F') cell.F += 1;
+    }
+    return { label, byBracket, total };
+  }
+
+  const out: AgeSexCountRow[] = [];
+  for (const def of MORBIDITE_ROWS) {
+    const isCatchAll = def.label === 'Autres';
+    const matchesDisease = (c: ConsultationRow) =>
+      isCatchAll
+        ? !NAMED_MORBIDITE_LABELS.has(c.codeAffection ?? '')
+        : c.codeAffection === def.label;
+    out.push(countRow(`${def.label} — Cas`, matchesDisease));
+    if (def.hasDeces) {
+      out.push(countRow(`${def.label} — Décès`, (c) => matchesDisease(c) && c.deces === true));
+    }
+  }
+  return out;
+}
+
 function AgeSexTable({
   title,
   ageBrackets,
@@ -835,6 +964,8 @@ export default function RmaPage() {
     const total = row.filter ? [...byBracket.values()].reduce((a, b) => a + b, 0) : null;
     return { ...row, byBracket, total };
   });
+
+  const morbiditeCounts = buildMorbiditeCounts(consultations);
 
   const { monthStart, nextMonthStart } = monthStartAndNext(month);
   const urenamCounts = buildNutritionCounts(
@@ -1195,10 +1326,16 @@ export default function RmaPage() {
           (PF) sont une approximation (provenance Accouchement ou CPoN), les lignes Td/TdR ne
           distinguent pas femmes enceintes/non enceintes, et les sections « Sensibilisation » (PF)
           et « activités promotionnelles » (vaccination) — activités communautaires sans lien à un
-          dossier patient — ne sont pas suivies du tout. Les autres sections du RMA
+          dossier patient — ne sont pas suivies du tout. Le tableau « Morbidité et mortalité »
+          couvre toutes les consultations du mois : chacune compte sous sa maladie si un code
+          d'affection RMA lui a été assigné, sinon sous « Autres ». Les autres sections du RMA
           (RH/matériel/financier, urgences obstétricales, chirurgie, fistule, laboratoire,
-          lèpre/dracunculose/paludisme détaillé, pharmacie, hygiène) restent hors périmètre de cette
-          page.
+          lèpre/dracunculose/paludisme détaillé, pharmacie) restent hors périmètre de cette page —
+          la section Hygiène est disponible séparément sur{' '}
+          <Link href="/registres/hygiene" className="text-[#2a78d6] hover:underline">
+            /registres/hygiene
+          </Link>
+          .
         </p>
 
         {error && (
@@ -1257,6 +1394,13 @@ export default function RmaPage() {
               </table>
             </div>
           </div>
+
+          <AgeSexTable
+            title="Morbidité et mortalité"
+            ageBrackets={AGE_BRACKETS}
+            counts={morbiditeCounts}
+            note="Toute consultation du mois est comptée ici : sous sa maladie si un code d'affection RMA lui a été assigné (depuis le formulaire de consultation ou directement depuis le registre), sinon sous « Autres — Cas »."
+          />
 
           <div className="overflow-hidden rounded-xl border border-[#e1e0d9] bg-white shadow-[0_1px_2px_rgba(11,11,11,0.04)]">
             <h2 className="border-b border-[#e1e0d9] bg-[#f9f9f7] px-4 py-2 text-sm font-semibold text-[#0b0b0b]">

@@ -1,0 +1,90 @@
+-- AlterTable
+ALTER TABLE "Consultation" ADD COLUMN     "codeAffection" TEXT,
+ADD COLUMN     "deces" BOOLEAN;
+
+-- CreateTable
+CREATE TABLE "HygieneRapport" (
+    "id" TEXT NOT NULL,
+    "organizationId" TEXT NOT NULL,
+    "month" TEXT NOT NULL,
+    "nbComparateursChlorePh" INTEGER,
+    "nbNouveauxPuitsRealises" INTEGER,
+    "nbPuitsExistants" INTEGER,
+    "nbNouveauxPuitsAmenages" INTEGER,
+    "nbPuitsTraites" INTEGER,
+    "nbNouveauxForagesRealises" INTEGER,
+    "nbForagesExistants" INTEGER,
+    "nbNouveauxForagesAmenages" INTEGER,
+    "nbForagesFonctionnels" INTEGER,
+    "nbAesExistants" INTEGER,
+    "nbAesChloreesAvantDistribution" INTEGER,
+    "nbControlesChloreEffectues" INTEGER,
+    "nbControlesChloreNormes" INTEGER,
+    "nbVisitesDomicileEffectuees" INTEGER,
+    "nbConcessionsSourceEauPotable" INTEGER,
+    "nbConcessionsLatrines" INTEGER,
+    "nbConcessionsLatrinesAmeliorees" INTEGER,
+    "nbLatrinesDesinfectees" INTEGER,
+    "nbConcessionsPuisard" INTEGER,
+    "nbConcessionsDesinsectisees" INTEGER,
+    "nbConcessionsDeratisees" INTEGER,
+    "nbMenagesLavageMains" INTEGER,
+    "nbEcolesPointEauPotable" INTEGER,
+    "nbEcolesLavageMains" INTEGER,
+    "nbEcolesLatrinesAmeliorees" INTEGER,
+    "nbControlesIodationSel" INTEGER,
+    "nbCasIntoxicationsAlimentaires" INTEGER,
+    "nbTiacEnregistres" INTEGER,
+    "nbEtabsRestaurationExistants" INTEGER,
+    "nbEtabsRestaurationInspectes" INTEGER,
+    "nbEtabsRestaurationConformes" INTEGER,
+    "nbInspectionsSanitairesEffectuees" INTEGER,
+    "nbVisitesMedicalesManipulateurs" INTEGER,
+    "nbSourcesEauExistantesCS" INTEGER,
+    "nbSourcesEauFonctionnellesCS" INTEGER,
+    "nbPointsDistributionFonctionnelsCS" INTEGER,
+    "nbPointsDistributionExistantsCS" INTEGER,
+    "nbReservoirsStockageExistantsCS" INTEGER,
+    "nbReservoirsStockageFonctionnelsCS" INTEGER,
+    "nbControlesChloreCS" INTEGER,
+    "nbControlesChloreNormesCS" INTEGER,
+    "nbToilettesExistantesCS" INTEGER,
+    "nbToilettesFonctionnellesCS" INTEGER,
+    "nbToilettesSepareesCS" INTEGER,
+    "nbToilettesHandicapCS" INTEGER,
+    "nbToilettesLavageMainsCS" INTEGER,
+    "nbDispositifsTraitementExistants" INTEGER,
+    "nbDispositifsTraitementFonctionnels" INTEGER,
+    "nbKitsProtectionExistants" INTEGER,
+    "nbUnitesSoinsTotal" INTEGER,
+    "nbUnitesSoinsTriSource" INTEGER,
+    "nbCsIncinerateurFonctionnel" INTEGER,
+    "nbBoitesSecuriteCollectees" INTEGER,
+    "nbBoitesSecuriteConvoyees" INTEGER,
+    "nbBoitesSecuriteIncinerees" INTEGER,
+    "nbUnitesSoinsLavageMainsFonctionnel" INTEGER,
+    "nbPersonnelEquipementProtection" INTEGER,
+    "nbPersonnelTotal" INTEGER,
+    "nbUnitesProduitsEntretien" INTEGER,
+    "nbAppareilsSterilisationExistants" INTEGER,
+    "nbAppareilsSterilisationFonctionnels" INTEGER,
+    "nbComitesHygieneSalubrite" INTEGER,
+    "nbComitesHygieneSalubriteFonctionnels" INTEGER,
+    "nbAteliersConfectionDalles" INTEGER,
+    "nbSeancesSensibilisationRealisees" INTEGER,
+    "nbSeancesSensibilisationPlanifiees" INTEGER,
+    "updatedById" TEXT,
+    "createdAt" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    "updatedAt" TIMESTAMP(3) NOT NULL,
+
+    CONSTRAINT "HygieneRapport_pkey" PRIMARY KEY ("id")
+);
+
+-- CreateIndex
+CREATE UNIQUE INDEX "HygieneRapport_organizationId_month_key" ON "HygieneRapport"("organizationId", "month");
+
+-- AddForeignKey
+ALTER TABLE "HygieneRapport" ADD CONSTRAINT "HygieneRapport_organizationId_fkey" FOREIGN KEY ("organizationId") REFERENCES "Organization"("id") ON DELETE CASCADE ON UPDATE CASCADE;
+
+-- AddForeignKey
+ALTER TABLE "HygieneRapport" ADD CONSTRAINT "HygieneRapport_updatedById_fkey" FOREIGN KEY ("updatedById") REFERENCES "User"("id") ON DELETE SET NULL ON UPDATE CASCADE;

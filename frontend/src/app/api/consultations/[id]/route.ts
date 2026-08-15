@@ -1,7 +1,10 @@
-// PATCH /api/consultations/[id] — update a consultation's status, and/or its
-// indigent flag (toggled inline from the "Registre de consultation" table's
-// Oui/Non checkboxes). Full clinical fields (diagnostic, traitement…) are
-// still written via POST /api/patients/[id]/consultations at creation time.
+// PATCH /api/consultations/[id] — update a consultation's status, indigent
+// flag, and/or its RMA morbidité coding (codeAffection/deces), all toggled
+// inline from the "Registre de consultation" table — so consultations
+// created before the coding UI existed (or left uncoded at creation time)
+// can still be retroactively linked to the Morbidité report. Full clinical
+// fields (diagnostic, traitement…) are still written via
+// POST /api/patients/[id]/consultations at creation time.
 // DELETE /api/consultations/[id] — removes a wrongly-created consultation
 // entry (wrong patient selected, duplicate entry). Same month-closure guard
 // as PATCH so a closed register stays immutable.
@@ -21,10 +24,19 @@ const PatchConsultationBody = z
   .object({
     status: z.enum(['attente', 'consultation', 'traite', 'urgent']).optional(),
     indigent: z.boolean().optional(),
+    // null clears the field (e.g. "— Aucun —" selected in the register's
+    // dropdown); undefined means the field was not part of this PATCH.
+    codeAffection: z.string().trim().min(1).nullable().optional(),
+    deces: z.boolean().nullable().optional(),
   })
-  .refine((d) => d.status !== undefined || d.indigent !== undefined, {
-    message: 'At least one field must be provided',
-  });
+  .refine(
+    (d) =>
+      d.status !== undefined ||
+      d.indigent !== undefined ||
+      d.codeAffection !== undefined ||
+      d.deces !== undefined,
+    { message: 'At least one field must be provided' },
+  );
 
 export async function PATCH(
   req: NextRequest,
@@ -83,11 +95,21 @@ export async function PATCH(
       data: {
         ...(parsed.data.status !== undefined ? { status: parsed.data.status } : {}),
         ...(parsed.data.indigent !== undefined ? { indigent: parsed.data.indigent } : {}),
+        ...(parsed.data.codeAffection !== undefined
+          ? { codeAffection: parsed.data.codeAffection }
+          : {}),
+        ...(parsed.data.deces !== undefined ? { deces: parsed.data.deces } : {}),
       },
     });
 
     return NextResponse.json(
-      { id: updated.id, status: updated.status, indigent: updated.indigent },
+      {
+        id: updated.id,
+        status: updated.status,
+        indigent: updated.indigent,
+        codeAffection: updated.codeAffection,
+        deces: updated.deces,
+      },
       { headers: { 'x-request-id': reqCtx.requestId } },
     );
   });

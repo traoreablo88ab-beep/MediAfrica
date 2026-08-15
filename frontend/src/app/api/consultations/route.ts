@@ -45,6 +45,8 @@ function serializeConsultation(c: ConsultationRow) {
     indigent: c.indigent,
     telephoneContact: c.telephoneContact,
     localisationPrecise: c.localisationPrecise,
+    codeAffection: c.codeAffection,
+    deces: c.deces,
     patient: {
       ...c.patient,
       dateNaissance: c.patient.dateNaissance.toISOString(),

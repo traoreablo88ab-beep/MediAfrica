@@ -32,6 +32,94 @@ function Field({
 const inputClass =
   'w-full rounded-md border border-[#e1e0d9] bg-white px-3 py-2 text-sm text-[#0b0b0b] placeholder:text-[#898781] focus:border-[#2a78d6] focus:outline-none';
 
+// Liste officielle du "Rapport de morbidité et de mortalité" (RMA, section 7) —
+// mêmes libellés que le tableau âge × sexe de /registres/rma. `hasDeces`
+// indique si l'affection a une ligne "Décès (D-C)" dans le RMA officiel ;
+// sinon la case Décès n'est pas affichée pour ce choix.
+const MORBIDITE_AFFECTIONS: { code: string; label: string; hasDeces: boolean }[] = [
+  { code: 'A00', label: 'Choléra', hasDeces: true },
+  { code: 'A09', label: 'Diarrhée présumée infectieuse (hors choléra)', hasDeces: true },
+  { code: 'B05', label: 'Rougeole', hasDeces: true },
+  { code: 'A35', label: 'Tétanos', hasDeces: true },
+  { code: 'A33', label: 'Tétanos néo-natal', hasDeces: true },
+  { code: 'O00-O99', label: 'Fistule obstétricale', hasDeces: true },
+  { code: 'C00-D48', label: "Cancer du col de l'utérus", hasDeces: true },
+  { code: 'C50', label: 'Cancer du sein', hasDeces: true },
+  { code: 'A80', label: 'Paralysie Flasque Aiguë', hasDeces: false },
+  { code: 'A39', label: 'Méningite cérébrospinale', hasDeces: true },
+  { code: 'J22', label: 'Toux<15j, IRA basses (pneumonie, bronchopneumonie)', hasDeces: true },
+  { code: 'J06.9', label: 'IRA hautes (rhinopharyngite, rhinite, trachéite)', hasDeces: false },
+  { code: 'R05', label: 'Toux > 15 jours', hasDeces: true },
+  { code: 'A16', label: 'Tuberculose suspecte', hasDeces: true },
+  { code: 'A15.9', label: 'Tuberculose confirmée', hasDeces: true },
+  { code: '—', label: 'Paludisme suspect', hasDeces: false },
+  { code: '—', label: 'Cas présumés de paludisme simple (diagnostic clinique)', hasDeces: false },
+  { code: '—', label: 'Cas présumés de paludisme grave (diagnostic clinique)', hasDeces: true },
+  { code: 'B54', label: 'Paludisme simple confirmé', hasDeces: false },
+  { code: 'B50.0', label: 'Paludisme grave confirmé', hasDeces: true },
+  { code: 'A01', label: 'Fièvre typhoïde', hasDeces: true },
+  { code: 'H10', label: 'Conjonctivites', hasDeces: false },
+  { code: 'A71.9', label: 'Trachome', hasDeces: false },
+  { code: 'H02.0', label: 'Trichiasis', hasDeces: false },
+  { code: 'H26.9', label: 'Cataracte', hasDeces: false },
+  { code: 'H40', label: 'Glaucome', hasDeces: false },
+  { code: 'H52.7', label: 'Vices de réfraction et basses de vision', hasDeces: false },
+  { code: 'H54.2', label: "Baisse d'Acuité visuelle (BAV)", hasDeces: false },
+  {
+    code: '—',
+    label: 'Traumatismes oculaires (coup, accident domestique/travail)',
+    hasDeces: false,
+  },
+  { code: 'H36.0', label: 'Rétinopathie diabétique', hasDeces: false },
+  { code: 'B65.0', label: 'Bilharziose urinaire', hasDeces: false },
+  { code: 'B82.0', label: 'Vers intestinaux', hasDeces: false },
+  { code: 'R36', label: 'Écoulement urétral et/ou dysurie', hasDeces: false },
+  { code: 'N76.6', label: 'Ulcération génitale', hasDeces: false },
+  { code: 'A65', label: 'Syphilis endémique', hasDeces: false },
+  { code: 'A56.2', label: 'Écoulement vaginal', hasDeces: false },
+  { code: 'R10.2', label: 'Douleurs abdominales basses', hasDeces: false },
+  { code: 'A54.3', label: 'Conjonctivite du nouveau-né', hasDeces: false },
+  { code: 'E45', label: 'Insuffisance pondérale', hasDeces: false },
+  { code: 'E43', label: 'Malnutrition Aiguë Sévère', hasDeces: true },
+  { code: 'R62.8', label: 'Retard de croissance', hasDeces: false },
+  { code: 'A05.9', label: "Intoxication alimentaire d'origine chimique", hasDeces: true },
+  { code: '—', label: "Intoxication alimentaire d'origine microbienne", hasDeces: true },
+  { code: 'O26.9', label: 'Troubles liés à la grossesse', hasDeces: true },
+  { code: 'O90.9', label: "Troubles liés à l'accouchement et au post-partum", hasDeces: true },
+  { code: 'R68.8a', label: 'Traumatisme lié aux accidents de la voie publique', hasDeces: true },
+  {
+    code: 'R68.8b',
+    label: 'Traumatisme non lié aux accidents de la voie publique',
+    hasDeces: true,
+  },
+  { code: 'S00-T98', label: 'Traumatismes : coups et blessures volontaires', hasDeces: true },
+  { code: 'S00-T98', label: 'Traumatismes : accidents domestiques', hasDeces: true },
+  { code: 'K02.9', label: 'Carie dentaire', hasDeces: false },
+  { code: 'K05.1', label: 'Gingivite simple', hasDeces: false },
+  { code: 'A69.1', label: 'Gingivite ulcéro-nécrotique aiguë', hasDeces: false },
+  { code: 'A69.0', label: 'Noma', hasDeces: true },
+  { code: 'K00-K14', label: 'Autres affections de la bouche et des dents', hasDeces: true },
+  { code: 'I10', label: 'HTA', hasDeces: true },
+  { code: 'H65', label: 'Otite aiguë', hasDeces: false },
+  { code: 'H66', label: 'Otite purulente', hasDeces: false },
+  { code: '—', label: 'Sinusite', hasDeces: false },
+  { code: '—', label: 'Angine', hasDeces: false },
+  { code: '—', label: 'Drépanocytose', hasDeces: true },
+  { code: '—', label: 'Anémie', hasDeces: true },
+  { code: '—', label: 'Diabète', hasDeces: true },
+  { code: '—', label: 'Dracunculose', hasDeces: false },
+  { code: 'B56', label: 'SIDA', hasDeces: true },
+  { code: '—', label: 'Troubles mentaux', hasDeces: true },
+  { code: '—', label: 'Eczéma', hasDeces: false },
+  { code: '—', label: 'Intertrigo (mycose des plis)', hasDeces: false },
+  { code: '—', label: 'Teigne', hasDeces: false },
+  { code: '—', label: 'Gale', hasDeces: false },
+  { code: '—', label: 'Pyodermite', hasDeces: false },
+  { code: '—', label: 'Onchocercose', hasDeces: false },
+  { code: '—', label: 'Trypanosomiase humaine africaine', hasDeces: true },
+  { code: '—', label: 'Autres', hasDeces: true },
+];
+
 export default function NewConsultationPage() {
   const params = useParams<{ id: string }>();
   const router = useRouter();
@@ -56,9 +144,14 @@ export default function NewConsultationPage() {
   const [indigent, setIndigent] = useState(false);
   const [telephoneContact, setTelephoneContact] = useState('');
   const [localisationPrecise, setLocalisationPrecise] = useState('');
+  const [codeAffection, setCodeAffection] = useState('');
+  const [deces, setDeces] = useState(false);
 
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
+
+  const selectedAffectionHasDeces =
+    MORBIDITE_AFFECTIONS.find((a) => a.label === codeAffection)?.hasDeces ?? false;
 
   useEffect(() => {
     let cancelled = false;
@@ -98,6 +191,8 @@ export default function NewConsultationPage() {
       indigent,
       ...(telephoneContact ? { telephoneContact } : {}),
       ...(localisationPrecise ? { localisationPrecise } : {}),
+      codeAffection,
+      ...(selectedAffectionHasDeces ? { deces } : {}),
     };
 
     // Already known to be offline — queue immediately rather than letting a
@@ -351,6 +446,40 @@ export default function NewConsultationPage() {
                   onChange={(e) => setTraitementPrescrit(e.target.value)}
                 />
               </Field>
+              <Field label="Code affection (RMA)" required>
+                <select
+                  className={inputClass}
+                  value={codeAffection}
+                  required
+                  onChange={(e) => {
+                    setCodeAffection(e.target.value);
+                    const hasDeces =
+                      MORBIDITE_AFFECTIONS.find((a) => a.label === e.target.value)?.hasDeces ??
+                      false;
+                    if (!hasDeces) setDeces(false);
+                  }}
+                >
+                  <option value="" disabled>
+                    Sélectionner une affection…
+                  </option>
+                  {MORBIDITE_AFFECTIONS.map((a) => (
+                    <option key={a.label} value={a.label}>
+                      {a.code} — {a.label}
+                    </option>
+                  ))}
+                </select>
+              </Field>
+              {codeAffection && selectedAffectionHasDeces && (
+                <label className="flex items-center gap-2 text-sm text-[#0b0b0b]">
+                  <input
+                    type="checkbox"
+                    checked={deces}
+                    onChange={(e) => setDeces(e.target.checked)}
+                    className="h-4 w-4 rounded border-[#e1e0d9]"
+                  />
+                  Décès (issue de cette consultation, imputé à cette affection)
+                </label>
+              )}
               <label className="flex items-center gap-2 text-sm text-[#0b0b0b]">
                 <input
                   type="checkbox"

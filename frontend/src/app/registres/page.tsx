@@ -61,6 +61,12 @@ const REGISTERS: RegisterCard[] = [
     title: 'Registre Planification Familiale',
     description: 'Visites PF du mois, méthodes choisies, clôture et export CSV.',
   },
+  {
+    href: '/registres/hygiene',
+    title: 'Registre Hygiène',
+    description:
+      "Indicateurs mensuels d'hygiène publique et salubrité (eau, latrines, déchets biomédicaux...), saisie manuelle.",
+  },
 ];
 
 export default function RegistresIndexPage() {

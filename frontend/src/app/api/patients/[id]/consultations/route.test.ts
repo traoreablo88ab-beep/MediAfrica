@@ -84,7 +84,10 @@ describe('POST /api/patients/[id]/consultations', () => {
 
   it('unknown patient → 404 PATIENT_NOT_FOUND; no Consultation created', async () => {
     prismaMock.patient.findFirst.mockResolvedValue(null);
-    const res = await POST(makePost({ motif: 'Fièvre' }), ctxWith('missing'));
+    const res = await POST(
+      makePost({ motif: 'Fièvre', codeAffection: 'Autres' }),
+      ctxWith('missing'),
+    );
     expect(res.status).toBe(404);
     expect(prismaMock.consultation.create).not.toHaveBeenCalled();
   });
@@ -100,7 +103,11 @@ describe('POST /api/patients/[id]/consultations', () => {
     } as never);
 
     const res = await POST(
-      makePost({ motif: 'Fièvre + céphalées', providerId: 'someone-else' }),
+      makePost({
+        motif: 'Fièvre + céphalées',
+        providerId: 'someone-else',
+        codeAffection: 'Autres',
+      }),
       ctxWith('pt-1'),
     );
 
@@ -135,6 +142,8 @@ describe('POST /api/patients/[id]/consultations', () => {
         indigent: true,
         telephoneContact: '76 00 00 00',
         localisationPrecise: 'Quartier Sabalibougou, rue 214',
+        codeAffection: 'B05 — Rougeole',
+        deces: true,
       }),
       ctxWith('pt-1'),
     );
@@ -155,6 +164,40 @@ describe('POST /api/patients/[id]/consultations', () => {
     expect(createArg.indigent).toBe(true);
     expect(createArg.telephoneContact).toBe('76 00 00 00');
     expect(createArg.localisationPrecise).toBe('Quartier Sabalibougou, rue 214');
+    expect(createArg.codeAffection).toBe('B05 — Rougeole');
+    expect(createArg.deces).toBe(true);
+  });
+
+  it('missing codeAffection → 400 VALIDATION_FAILED; no Consultation created', async () => {
+    const res = await POST(makePost({ motif: 'Carie dentaire' }), ctxWith('pt-1'));
+    expect(res.status).toBe(400);
+    const body = await res.json();
+    expect(body.error).toBe('VALIDATION_FAILED');
+    expect(prismaMock.consultation.create).not.toHaveBeenCalled();
+  });
+
+  it('codeAffection without deces → deces absent from create data (undefined, not null)', async () => {
+    prismaMock.patient.findFirst.mockResolvedValue({ id: 'pt-1' } as never);
+    prismaMock.consultation.create.mockResolvedValue({
+      id: 'c-1',
+      patientId: 'pt-1',
+      date: new Date('2026-01-12T09:00:00Z'),
+      motif: 'Carie dentaire',
+      status: 'attente',
+    } as never);
+
+    const res = await POST(
+      makePost({ motif: 'Carie dentaire', codeAffection: 'Carie dentaire' }),
+      ctxWith('pt-1'),
+    );
+
+    expect(res.status).toBe(201);
+    const createArg = prismaMock.consultation.create.mock.calls[0]?.[0]?.data as Record<
+      string,
+      unknown
+    >;
+    expect(createArg.codeAffection).toBe('Carie dentaire');
+    expect(createArg.deces).toBeUndefined();
   });
 
   describe('Idempotency-Key (offline-queue replay)', () => {
@@ -168,7 +211,10 @@ describe('POST /api/patients/[id]/consultations', () => {
         status: 'attente',
       } as never);
 
-      const res = await POST(makePost({ motif: 'Fièvre' }), ctxWith('pt-1'));
+      const res = await POST(
+        makePost({ motif: 'Fièvre', codeAffection: 'Autres' }),
+        ctxWith('pt-1'),
+      );
 
       expect(res.status).toBe(201);
       expect(prismaMock.consultation.findUnique).not.toHaveBeenCalled();
@@ -192,7 +238,7 @@ describe('POST /api/patients/[id]/consultations', () => {
       } as never);
 
       const res = await POST(
-        makePost({ motif: 'Fièvre' }, { idempotencyKey: 'idem-key-1' }),
+        makePost({ motif: 'Fièvre', codeAffection: 'Autres' }, { idempotencyKey: 'idem-key-1' }),
         ctxWith('pt-1'),
       );
 
@@ -221,7 +267,7 @@ describe('POST /api/patients/[id]/consultations', () => {
       } as never);
 
       const res = await POST(
-        makePost({ motif: 'Fièvre' }, { idempotencyKey: 'idem-key-1' }),
+        makePost({ motif: 'Fièvre', codeAffection: 'Autres' }, { idempotencyKey: 'idem-key-1' }),
         ctxWith('pt-1'),
       );
 
@@ -244,7 +290,7 @@ describe('POST /api/patients/[id]/consultations', () => {
       } as never);
 
       const res = await POST(
-        makePost({ motif: 'Fièvre' }, { idempotencyKey: 'idem-key-1' }),
+        makePost({ motif: 'Fièvre', codeAffection: 'Autres' }, { idempotencyKey: 'idem-key-1' }),
         ctxWith('pt-1'),
       );
 
