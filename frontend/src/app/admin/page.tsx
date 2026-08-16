@@ -16,11 +16,11 @@ interface Stats {
 }
 
 interface OutboxSummary {
-  items: { status: string }[];
+  count: number;
 }
 
 interface EmailQueueSummary {
-  items: { status: string }[];
+  count: number;
 }
 
 interface RateLimitBucket {
@@ -215,8 +215,8 @@ export default function AdminOverviewPage() {
           api<OutboxSummary>('/api/admin/outbox?status=FAILED&limit=1'),
           api<OutboxSummary>('/api/admin/outbox?status=DEAD&limit=1'),
         ]);
-        setFailedOutbox(failed.items.length);
-        setDeadOutbox(dead.items.length);
+        setFailedOutbox(failed.count);
+        setDeadOutbox(dead.count);
       } catch {
         // Non-critical widget — leave counts blank on failure.
       }
@@ -225,8 +225,8 @@ export default function AdminOverviewPage() {
           api<EmailQueueSummary>('/api/admin/email-queue?status=FAILED&limit=1'),
           api<EmailQueueSummary>('/api/admin/email-queue?status=DEAD&limit=1'),
         ]);
-        setFailedEmails(failedMail.items.length);
-        setDeadEmails(deadMail.items.length);
+        setFailedEmails(failedMail.count);
+        setDeadEmails(deadMail.count);
       } catch {
         // Non-critical widget — leave counts blank on failure.
       }

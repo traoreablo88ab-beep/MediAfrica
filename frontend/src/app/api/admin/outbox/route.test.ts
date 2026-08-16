@@ -157,6 +157,18 @@ describe('/api/admin/outbox [Wave 1]', () => {
     expect(args?.take).toBe(11);
   });
 
+  it('GET count reflects the status filter, not the pagination cursor/limit', async () => {
+    prismaMock.outboxEvent.findMany.mockResolvedValue([
+      seedOutbox({ id: 'ob-1', status: 'DEAD' }),
+    ] as never);
+    prismaMock.outboxEvent.count.mockResolvedValue(7);
+    const res = await GET(makeGet('http://test/api/admin/outbox?status=DEAD&limit=1'));
+    const body = await res.json();
+    expect(body.count).toBe(7);
+    const countArgs = prismaMock.outboxEvent.count.mock.calls[0]?.[0];
+    expect(countArgs?.where).toEqual({ status: 'DEAD' });
+  });
+
   it('GET returns 401/403 when requireAdmin bails', async () => {
     mockRequireAdmin.mockResolvedValueOnce(
       NextResponse.json(

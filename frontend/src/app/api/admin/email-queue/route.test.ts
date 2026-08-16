@@ -113,10 +113,23 @@ describe('/api/admin/email-queue [Wave 1]', () => {
 
   it('GET handles empty result with nextCursor=null', async () => {
     prismaMock.emailJob.findMany.mockResolvedValue([] as never);
+    prismaMock.emailJob.count.mockResolvedValue(0);
     const res = await GET(makeGet('http://test/api/admin/email-queue'));
     expect(res.status).toBe(200);
     const body = await res.json();
-    expect(body).toEqual({ items: [], nextCursor: null });
+    expect(body).toEqual({ items: [], nextCursor: null, count: 0 });
+  });
+
+  it('GET count reflects the status filter, not the pagination cursor/limit', async () => {
+    prismaMock.emailJob.findMany.mockResolvedValue([
+      seedEmailJob({ id: 'ej-1', status: 'DEAD' }),
+    ] as never);
+    prismaMock.emailJob.count.mockResolvedValue(11);
+    const res = await GET(makeGet('http://test/api/admin/email-queue?status=DEAD&limit=1'));
+    const body = await res.json();
+    expect(body.count).toBe(11);
+    const countArgs = prismaMock.emailJob.count.mock.calls[0]?.[0];
+    expect(countArgs?.where).toEqual({ status: 'DEAD' });
   });
 
   it('GET returns nextCursor when more rows exist', async () => {

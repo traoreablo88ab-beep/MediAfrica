@@ -68,21 +68,26 @@ export async function GET(req: NextRequest): Promise<NextResponse> {
     const limit = clampLimit(url.searchParams.get('limit'));
     const cursor = decodeCursor(url.searchParams.get('cursor'));
 
-    const where: Prisma.OutboxEventWhereInput = {
+    // Separate from `where` (below) because count must reflect the
+    // status/kind filters only, not the pagination cursor.
+    const filterWhere: Prisma.OutboxEventWhereInput = {
       ...(status ? { status } : {}),
       ...(kind ? { kind } : {}),
-      ...cursorWhere(cursor),
     };
+    const where: Prisma.OutboxEventWhereInput = { ...filterWhere, ...cursorWhere(cursor) };
 
-    const rows = await prisma.outboxEvent.findMany({
-      where,
-      orderBy: [{ createdAt: 'desc' }, { id: 'desc' }],
-      take: limit + 1,
-    });
+    const [rows, count] = await Promise.all([
+      prisma.outboxEvent.findMany({
+        where,
+        orderBy: [{ createdAt: 'desc' }, { id: 'desc' }],
+        take: limit + 1,
+      }),
+      prisma.outboxEvent.count({ where: filterWhere }),
+    ]);
 
     const page = buildPage(rows, limit);
     return NextResponse.json(
-      { items: page.items.map(serialize), nextCursor: page.nextCursor },
+      { items: page.items.map(serialize), nextCursor: page.nextCursor, count },
       { headers: { 'x-request-id': ctx.requestId } },
     );
   });

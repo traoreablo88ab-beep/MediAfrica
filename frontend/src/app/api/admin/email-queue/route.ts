@@ -80,31 +80,34 @@ export async function GET(req: NextRequest): Promise<NextResponse> {
     const limit = clampLimit(url.searchParams.get('limit'));
     const cursor = decodeCursor(url.searchParams.get('cursor'));
 
-    const where: Prisma.EmailJobWhereInput = {
-      ...(status ? { status } : {}),
-      ...cursorWhere(cursor),
-    };
+    // Separate from `where` (below) because count must reflect the status
+    // filter only, not the pagination cursor.
+    const filterWhere: Prisma.EmailJobWhereInput = status ? { status } : {};
+    const where: Prisma.EmailJobWhereInput = { ...filterWhere, ...cursorWhere(cursor) };
 
     // PII-protective select — `html` is selected only so we can compute the
     // 200-char preview, then dropped from the response. `text` is never
     // selected (never reaches the wire).
-    const rows = await prisma.emailJob.findMany({
-      where,
-      orderBy: [{ createdAt: 'desc' }, { id: 'desc' }],
-      take: limit + 1,
-      select: {
-        id: true,
-        to: true,
-        subject: true,
-        html: true,
-        status: true,
-        attempts: true,
-        lastError: true,
-        scheduledAt: true,
-        sentAt: true,
-        createdAt: true,
-      },
-    });
+    const [rows, count] = await Promise.all([
+      prisma.emailJob.findMany({
+        where,
+        orderBy: [{ createdAt: 'desc' }, { id: 'desc' }],
+        take: limit + 1,
+        select: {
+          id: true,
+          to: true,
+          subject: true,
+          html: true,
+          status: true,
+          attempts: true,
+          lastError: true,
+          scheduledAt: true,
+          sentAt: true,
+          createdAt: true,
+        },
+      }),
+      prisma.emailJob.count({ where: filterWhere }),
+    ]);
 
     const hasMore = rows.length > limit;
     const sliced = hasMore ? rows.slice(0, limit) : rows;
@@ -124,6 +127,9 @@ export async function GET(req: NextRequest): Promise<NextResponse> {
     const nextCursor =
       hasMore && last ? encodeCursor({ createdAt: last.createdAt, id: last.id }) : null;
 
-    return NextResponse.json({ items, nextCursor }, { headers: { 'x-request-id': ctx.requestId } });
+    return NextResponse.json(
+      { items, nextCursor, count },
+      { headers: { 'x-request-id': ctx.requestId } },
+    );
   });
 }
