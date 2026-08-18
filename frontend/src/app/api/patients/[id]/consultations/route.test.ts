@@ -85,7 +85,7 @@ describe('POST /api/patients/[id]/consultations', () => {
   it('unknown patient → 404 PATIENT_NOT_FOUND; no Consultation created', async () => {
     prismaMock.patient.findFirst.mockResolvedValue(null);
     const res = await POST(
-      makePost({ motif: 'Fièvre', codeAffection: 'Autres' }),
+      makePost({ motif: 'Fièvre', codeAffection: 'Autres', echelon: 'CSRéf' }),
       ctxWith('missing'),
     );
     expect(res.status).toBe(404);
@@ -107,6 +107,7 @@ describe('POST /api/patients/[id]/consultations', () => {
         motif: 'Fièvre + céphalées',
         providerId: 'someone-else',
         codeAffection: 'Autres',
+        echelon: 'CSRéf',
       }),
       ctxWith('pt-1'),
     );
@@ -144,6 +145,8 @@ describe('POST /api/patients/[id]/consultations', () => {
         localisationPrecise: 'Quartier Sabalibougou, rue 214',
         codeAffection: 'B05 — Rougeole',
         deces: true,
+        signes: 'Éruption maculopapuleuse, fièvre, toux',
+        echelon: 'CSCom',
       }),
       ctxWith('pt-1'),
     );
@@ -166,10 +169,37 @@ describe('POST /api/patients/[id]/consultations', () => {
     expect(createArg.localisationPrecise).toBe('Quartier Sabalibougou, rue 214');
     expect(createArg.codeAffection).toBe('B05 — Rougeole');
     expect(createArg.deces).toBe(true);
+    expect(createArg.signes).toBe('Éruption maculopapuleuse, fièvre, toux');
+    expect(createArg.echelon).toBe('CSCom');
   });
 
   it('missing codeAffection → 400 VALIDATION_FAILED; no Consultation created', async () => {
-    const res = await POST(makePost({ motif: 'Carie dentaire' }), ctxWith('pt-1'));
+    const res = await POST(
+      makePost({ motif: 'Carie dentaire', echelon: 'CSRéf' }),
+      ctxWith('pt-1'),
+    );
+    expect(res.status).toBe(400);
+    const body = await res.json();
+    expect(body.error).toBe('VALIDATION_FAILED');
+    expect(prismaMock.consultation.create).not.toHaveBeenCalled();
+  });
+
+  it('missing echelon → 400 VALIDATION_FAILED; no Consultation created', async () => {
+    const res = await POST(
+      makePost({ motif: 'Carie dentaire', codeAffection: 'Carie dentaire' }),
+      ctxWith('pt-1'),
+    );
+    expect(res.status).toBe(400);
+    const body = await res.json();
+    expect(body.error).toBe('VALIDATION_FAILED');
+    expect(prismaMock.consultation.create).not.toHaveBeenCalled();
+  });
+
+  it('invalid echelon value → 400 VALIDATION_FAILED', async () => {
+    const res = await POST(
+      makePost({ motif: 'Carie dentaire', codeAffection: 'Carie dentaire', echelon: 'CHR' }),
+      ctxWith('pt-1'),
+    );
     expect(res.status).toBe(400);
     const body = await res.json();
     expect(body.error).toBe('VALIDATION_FAILED');
@@ -187,7 +217,7 @@ describe('POST /api/patients/[id]/consultations', () => {
     } as never);
 
     const res = await POST(
-      makePost({ motif: 'Carie dentaire', codeAffection: 'Carie dentaire' }),
+      makePost({ motif: 'Carie dentaire', codeAffection: 'Carie dentaire', echelon: 'CSRéf' }),
       ctxWith('pt-1'),
     );
 
@@ -212,7 +242,7 @@ describe('POST /api/patients/[id]/consultations', () => {
       } as never);
 
       const res = await POST(
-        makePost({ motif: 'Fièvre', codeAffection: 'Autres' }),
+        makePost({ motif: 'Fièvre', codeAffection: 'Autres', echelon: 'CSRéf' }),
         ctxWith('pt-1'),
       );
 
@@ -238,7 +268,10 @@ describe('POST /api/patients/[id]/consultations', () => {
       } as never);
 
       const res = await POST(
-        makePost({ motif: 'Fièvre', codeAffection: 'Autres' }, { idempotencyKey: 'idem-key-1' }),
+        makePost(
+          { motif: 'Fièvre', codeAffection: 'Autres', echelon: 'CSRéf' },
+          { idempotencyKey: 'idem-key-1' },
+        ),
         ctxWith('pt-1'),
       );
 
@@ -267,7 +300,10 @@ describe('POST /api/patients/[id]/consultations', () => {
       } as never);
 
       const res = await POST(
-        makePost({ motif: 'Fièvre', codeAffection: 'Autres' }, { idempotencyKey: 'idem-key-1' }),
+        makePost(
+          { motif: 'Fièvre', codeAffection: 'Autres', echelon: 'CSRéf' },
+          { idempotencyKey: 'idem-key-1' },
+        ),
         ctxWith('pt-1'),
       );
 
@@ -290,7 +326,10 @@ describe('POST /api/patients/[id]/consultations', () => {
       } as never);
 
       const res = await POST(
-        makePost({ motif: 'Fièvre', codeAffection: 'Autres' }, { idempotencyKey: 'idem-key-1' }),
+        makePost(
+          { motif: 'Fièvre', codeAffection: 'Autres', echelon: 'CSRéf' },
+          { idempotencyKey: 'idem-key-1' },
+        ),
         ctxWith('pt-1'),
       );
 

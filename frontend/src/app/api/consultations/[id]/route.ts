@@ -1,8 +1,9 @@
 // PATCH /api/consultations/[id] — update a consultation's status, indigent
-// flag, and/or its RMA morbidité coding (codeAffection/deces), all toggled
-// inline from the "Registre de consultation" table — so consultations
-// created before the coding UI existed (or left uncoded at creation time)
-// can still be retroactively linked to the Morbidité report. Full clinical
+// flag, echelon (CSRéf/CSCom register assignment), and/or its RMA morbidité
+// coding (codeAffection/deces), all toggled inline from the consultation
+// register tables — so consultations created before the coding UI existed
+// (or left uncoded/miscategorized at creation time) can still be retroactively
+// corrected. Full clinical
 // fields (diagnostic, traitement…) are still written via
 // POST /api/patients/[id]/consultations at creation time.
 // DELETE /api/consultations/[id] — removes a wrongly-created consultation
@@ -24,6 +25,9 @@ const PatchConsultationBody = z
   .object({
     status: z.enum(['attente', 'consultation', 'traite', 'urgent']).optional(),
     indigent: z.boolean().optional(),
+    // Correction of the register (CSRéf/CSCom) picked at creation — never
+    // nullable, a consultation always belongs to one or the other.
+    echelon: z.enum(['CSRéf', 'CSCom']).optional(),
     // null clears the field (e.g. "— Aucun —" selected in the register's
     // dropdown); undefined means the field was not part of this PATCH.
     codeAffection: z.string().trim().min(1).nullable().optional(),
@@ -33,6 +37,7 @@ const PatchConsultationBody = z
     (d) =>
       d.status !== undefined ||
       d.indigent !== undefined ||
+      d.echelon !== undefined ||
       d.codeAffection !== undefined ||
       d.deces !== undefined,
     { message: 'At least one field must be provided' },
@@ -95,6 +100,7 @@ export async function PATCH(
       data: {
         ...(parsed.data.status !== undefined ? { status: parsed.data.status } : {}),
         ...(parsed.data.indigent !== undefined ? { indigent: parsed.data.indigent } : {}),
+        ...(parsed.data.echelon !== undefined ? { echelon: parsed.data.echelon } : {}),
         ...(parsed.data.codeAffection !== undefined
           ? { codeAffection: parsed.data.codeAffection }
           : {}),
@@ -107,6 +113,7 @@ export async function PATCH(
         id: updated.id,
         status: updated.status,
         indigent: updated.indigent,
+        echelon: updated.echelon,
         codeAffection: updated.codeAffection,
         deces: updated.deces,
       },

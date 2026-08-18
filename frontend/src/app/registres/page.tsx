@@ -16,6 +16,12 @@ const REGISTERS: RegisterCard[] = [
     description: 'Consultations mensuelles, clôture et export CSV.',
   },
   {
+    href: '/registres/cscom',
+    title: 'Registre CSCom',
+    description:
+      'Mêmes consultations que le registre de consultation, avec la colonne Signes du registre papier CSCom.',
+  },
+  {
     href: '/registres/maternite/cpn',
     title: 'Registre CPN',
     description: 'Consultations prénatales du mois, clôture et export CSV.',

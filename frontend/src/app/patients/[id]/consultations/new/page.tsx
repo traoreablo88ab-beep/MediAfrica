@@ -127,8 +127,10 @@ export default function NewConsultationPage() {
   const [patientName, setPatientName] = useState<string | null>(null);
 
   const [motif, setMotif] = useState('');
+  const [echelon, setEchelon] = useState('');
   const [typeCas, setTypeCas] = useState('');
   const [status, setStatus] = useState('attente');
+  const [signes, setSignes] = useState('');
   const [diagnostic, setDiagnostic] = useState('');
   const [traitementPrescrit, setTraitementPrescrit] = useState('');
   const [tensionArterielle, setTensionArterielle] = useState('');
@@ -174,8 +176,10 @@ export default function NewConsultationPage() {
     const url = `/api/patients/${params.id}/consultations`;
     const body = {
       motif,
+      echelon,
       ...(typeCas ? { typeCas } : {}),
       status,
+      ...(signes ? { signes } : {}),
       ...(diagnostic ? { diagnostic } : {}),
       ...(traitementPrescrit ? { traitementPrescrit } : {}),
       ...(tensionArterielle ? { tensionArterielle } : {}),
@@ -289,6 +293,20 @@ export default function NewConsultationPage() {
                   />
                 </Field>
               </div>
+              <Field label="Structure (échelon)" required>
+                <select
+                  className={inputClass}
+                  value={echelon}
+                  required
+                  onChange={(e) => setEchelon(e.target.value)}
+                >
+                  <option value="" disabled>
+                    Sélectionner…
+                  </option>
+                  <option value="CSRéf">CSRéf</option>
+                  <option value="CSCom">CSCom</option>
+                </select>
+              </Field>
               <Field label="Type de cas">
                 <select
                   className={inputClass}
@@ -430,6 +448,15 @@ export default function NewConsultationPage() {
           <div className="rounded-lg border border-[#e1e0d9] bg-white p-5">
             <h2 className="mb-4 font-semibold text-[#0b0b0b]">Diagnostic et traitement</h2>
             <div className="grid grid-cols-1 gap-4">
+              <Field label="Signes">
+                <textarea
+                  className={inputClass}
+                  rows={2}
+                  placeholder="Signes cliniques relevés (registre CSCom)"
+                  value={signes}
+                  onChange={(e) => setSignes(e.target.value)}
+                />
+              </Field>
               <Field label="Diagnostic">
                 <textarea
                   className={inputClass}

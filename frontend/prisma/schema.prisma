@@ -405,6 +405,19 @@ model Consultation {
   motif  String
   status String   @default("attente") // attente | consultation | traite | urgent
 
+  // Échelon de la structure ayant réalisé la consultation — CSRéf (2e
+  // échelon) ou CSCom (1er échelon). Choisi obligatoirement à la saisie ;
+  // détermine dans quel registre (/registres/consultation vs /registres/cscom)
+  // la consultation apparaît. Nullable pour les consultations créées avant
+  // l'ajout de ce champ — traitées comme CSRéf par défaut (voir filtrage côté
+  // page, pas ici).
+  echelon String? // CSRéf | CSCom
+
+  // Signes cliniques relevés — colonne propre au registre papier CSCom (1er
+  // échelon), affichée juste avant Diagnostic sur /registres/cscom ; le
+  // registre de consultation standard (CSRéf) ne l'affiche pas, mais le
+  // champ est saisi sur le même formulaire de consultation pour les deux.
+  signes              String?
   diagnostic          String?
   traitementPrescrit  String?
   tensionArterielle   String? // "118/76"

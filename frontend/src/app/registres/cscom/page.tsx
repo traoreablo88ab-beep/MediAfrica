@@ -11,13 +11,21 @@ import { MonthPicker } from '@/components/MonthPicker';
 import { downloadRegisterPdf } from '@/lib/exportPdf';
 import { useToast } from '@/contexts/ToastContext';
 
-const REGISTER_COLUMN_COUNT = 27;
+// Registre CSCom — même modèle de registre que /registres/consultation (même
+// table Consultation, même clôture mensuelle "consultation"), filtré aux
+// consultations taguées echelon="CSCom" à la saisie (voir Field "Structure
+// (échelon)" sur le formulaire de nouvelle consultation) — celles taguées
+// "CSRéf" (ou non taguées, legacy) vivent sur /registres/consultation. Ajoute
+// aussi la colonne "Signes" du registre papier CSCom (1er échelon), affichée
+// juste avant Diagnostic. Toute autre colonne/logique est dupliquée à
+// l'identique depuis registres/consultation/page.tsx.
+const REGISTER_COLUMN_COUNT = 28;
 
 // 73 affections officielles du RMA (section 7, rapport de morbidité et de
 // mortalité) — même liste que MORBIDITE_AFFECTIONS sur le formulaire de
-// nouvelle consultation (frontend/src/app/patients/[id]/consultations/new/page.tsx),
-// dupliquée ici pour permettre de coder — ou recoder — n'importe quelle
-// consultation déjà enregistrée directement depuis le registre.
+// nouvelle consultation et sur /registres/consultation, dupliquée ici pour
+// permettre de coder — ou recoder — n'importe quelle consultation déjà
+// enregistrée directement depuis le registre.
 const MORBIDITE_AFFECTIONS: { code: string; label: string; hasDeces: boolean }[] = [
   { code: 'A00', label: 'Choléra', hasDeces: true },
   { code: 'A09', label: 'Diarrhée présumée infectieuse (hors choléra)', hasDeces: true },
@@ -113,6 +121,7 @@ interface ConsultationRow {
   motif: string;
   status: string;
   echelon: string | null;
+  signes: string | null;
   diagnostic: string | null;
   traitementPrescrit: string | null;
   tensionArterielle: string | null;
@@ -211,6 +220,7 @@ function buildRegisterRows(rows: ConsultationRow[]): { headers: string[]; lines:
     'Motif',
     'NC',
     'AC',
+    'Signes',
     'Diagnostic',
     'TDR',
     'GE',
@@ -239,6 +249,7 @@ function buildRegisterRows(rows: ConsultationRow[]): { headers: string[]; lines:
     c.motif,
     c.typeCas === 'NC' ? 'X' : '',
     c.typeCas === 'AC' ? 'X' : '',
+    c.signes ?? '',
     c.diagnostic ?? '',
     c.tdr ?? '',
     c.ge ?? '',
@@ -268,7 +279,7 @@ function downloadCsv(month: string, rows: ConsultationRow[]): void {
   const url = URL.createObjectURL(blob);
   const a = document.createElement('a');
   a.href = url;
-  a.download = `registre-consultation-${month}.csv`;
+  a.download = `registre-cscom-${month}.csv`;
   a.click();
   URL.revokeObjectURL(url);
 }
@@ -276,12 +287,12 @@ function downloadCsv(month: string, rows: ConsultationRow[]): void {
 function downloadPdf(clinicName: string, month: string, rows: ConsultationRow[]): void {
   const { headers, lines } = buildRegisterRows(rows);
   downloadRegisterPdf({
-    title: 'Registre de consultation',
+    title: 'Registre CSCom',
     clinicName,
     month,
     headers,
     rows: lines,
-    fileName: `registre-consultation-${month}.pdf`,
+    fileName: `registre-cscom-${month}.pdf`,
   });
 }
 
@@ -295,7 +306,7 @@ function formatDateTime(iso: string): string {
   });
 }
 
-export default function RegistreConsultationPage() {
+export default function RegistreCSComPage() {
   const clinicName = useClinicName();
   const { toast } = useToast();
   const [month, setMonth] = useState(currentMonth());
@@ -312,6 +323,8 @@ export default function RegistreConsultationPage() {
     setLoading(true);
     setError(null);
     try {
+      // Même clôture que /registres/consultation ("consultation") — c'est le
+      // même registre sous-jacent, seule la mise en forme des colonnes diffère.
       const closureRes = await api<ClosureStatus>(
         `/api/registres/consultation/closure?month=${selectedMonth}`,
       );
@@ -330,11 +343,11 @@ export default function RegistreConsultationPage() {
         cursor = page.nextCursor;
       } while (cursor);
 
-      // This register is CSRéf-only — CSCom-tagged consultations live on
-      // /registres/cscom. Legacy rows (echelon never set) default to CSRéf.
-      const csref = all.filter((c) => c.echelon !== 'CSCom');
-      csref.sort((a, b) => a.date.localeCompare(b.date));
-      setItems(csref);
+      // This register only shows explicitly CSCom-tagged consultations —
+      // CSRéf (or untagged, legacy) rows live on /registres/consultation.
+      const cscom = all.filter((c) => c.echelon === 'CSCom');
+      cscom.sort((a, b) => a.date.localeCompare(b.date));
+      setItems(cscom);
     } catch (err) {
       setError(friendlyError(err, 'Une erreur est survenue. Réessayez.'));
     } finally {
@@ -385,14 +398,14 @@ export default function RegistreConsultationPage() {
     }
   }
 
-  // This register only shows echelon !== 'CSCom' rows — switching to CSCom
-  // moves the consultation to /registres/cscom, so it's removed from this
-  // list rather than updated in place (mirrored on the CSCom page).
+  // This register only shows echelon === 'CSCom' rows — switching to CSRéf
+  // moves the consultation to /registres/consultation, so it's removed from
+  // this list rather than updated in place (mirrored on the CSRéf page).
   async function updateEchelon(id: string, newValue: string) {
     const current = items.find((c) => c.id === id);
-    if (!current || (current.echelon ?? 'CSRéf') === newValue) return;
+    if (!current || current.echelon === newValue) return;
     const previousEchelon = current.echelon;
-    const leavesRegister = newValue === 'CSCom';
+    const leavesRegister = newValue !== 'CSCom';
 
     if (leavesRegister) {
       setItems((prev) => prev.filter((c) => c.id !== id));
@@ -499,7 +512,7 @@ export default function RegistreConsultationPage() {
       <div className="animate-fade-in-up mx-auto max-w-7xl px-6 py-6">
         <div className="mb-6 flex flex-col gap-4 print:hidden sm:flex-row sm:items-center sm:justify-between">
           <div>
-            <h1 className="text-2xl font-bold text-[#0b0b0b]">Registre de consultation</h1>
+            <h1 className="text-2xl font-bold text-[#0b0b0b]">Registre CSCom</h1>
             <p className="mt-1 text-sm text-[#52514e]">{clinicName}</p>
             <Link
               href="/registres/rma"
@@ -670,6 +683,12 @@ export default function RegistreConsultationPage() {
                 >
                   Échelon
                 </th>
+                <th
+                  rowSpan={2}
+                  className="border-l border-[#e1e0d9] px-3 py-2 align-bottom font-medium"
+                >
+                  Signes
+                </th>
                 <th rowSpan={2} className="px-3 py-2 align-bottom font-medium">
                   Diagnostic
                 </th>
@@ -764,7 +783,7 @@ export default function RegistreConsultationPage() {
                   <td className="border-l border-[#e1e0d9] px-2 py-2 text-[#52514e]">
                     <select
                       aria-label={`Échelon (${c.patient.nom} ${c.patient.prenom})`}
-                      value={c.echelon ?? 'CSRéf'}
+                      value={c.echelon ?? 'CSCom'}
                       disabled={closure?.closed || savingEchelonIds.has(c.id)}
                       onChange={(e) => updateEchelon(c.id, e.target.value)}
                       className="w-24 rounded border border-transparent bg-transparent py-0.5 text-xs hover:border-[#e1e0d9] focus:border-[#2a78d6] focus:outline-none disabled:opacity-50"
@@ -772,6 +791,9 @@ export default function RegistreConsultationPage() {
                       <option value="CSRéf">CSRéf</option>
                       <option value="CSCom">CSCom</option>
                     </select>
+                  </td>
+                  <td className="border-l border-[#e1e0d9] px-3 py-2 text-[#52514e]">
+                    {c.signes ?? '—'}
                   </td>
                   <td className="px-3 py-2 text-[#52514e]">{c.diagnostic ?? '—'}</td>
                   <td className="px-3 py-2 text-[#52514e]">{c.tdr ?? '—'}</td>

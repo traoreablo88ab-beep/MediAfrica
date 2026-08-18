@@ -29,6 +29,8 @@ function serializeConsultation(c: ConsultationRow) {
     date: c.date.toISOString(),
     motif: c.motif,
     status: c.status,
+    echelon: c.echelon,
+    signes: c.signes,
     diagnostic: c.diagnostic,
     traitementPrescrit: c.traitementPrescrit,
     tensionArterielle: c.tensionArterielle,

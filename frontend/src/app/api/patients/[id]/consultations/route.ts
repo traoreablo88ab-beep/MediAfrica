@@ -32,6 +32,10 @@ function fingerprintBody(input: { patientId: string; motif: string }): string {
 const CreateConsultationBody = z.object({
   motif: z.string().trim().min(1),
   status: z.enum(['attente', 'consultation', 'traite', 'urgent']).optional(),
+  // Required — determines which register (consultation/CSRéf vs cscom) this
+  // consultation appears in (see buildRegisterRows filters on both pages).
+  echelon: z.enum(['CSRéf', 'CSCom']),
+  signes: z.string().trim().optional(),
   diagnostic: z.string().trim().optional(),
   traitementPrescrit: z.string().trim().optional(),
   tensionArterielle: z.string().trim().optional(),
@@ -155,6 +159,8 @@ export async function POST(
         providerId: auth.user.sub,
         motif: d.motif,
         ...(d.status ? { status: d.status } : {}),
+        echelon: d.echelon,
+        ...(d.signes ? { signes: d.signes } : {}),
         ...(d.diagnostic ? { diagnostic: d.diagnostic } : {}),
         ...(d.traitementPrescrit ? { traitementPrescrit: d.traitementPrescrit } : {}),
         ...(d.tensionArterielle ? { tensionArterielle: d.tensionArterielle } : {}),

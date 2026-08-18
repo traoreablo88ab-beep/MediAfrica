@@ -30,6 +30,8 @@ function consultationRow(overrides: Partial<Record<string, unknown>> = {}) {
     date: new Date('2026-01-12T07:45:00Z'),
     motif: 'Paludisme simple',
     status: 'traite',
+    echelon: null,
+    signes: null,
     diagnostic: null,
     traitementPrescrit: null,
     tensionArterielle: null,
@@ -142,6 +144,24 @@ describe('GET /api/consultations', () => {
     const body = await res.json();
     expect(body.items[0].codeAffection).toBe('B05 — Rougeole');
     expect(body.items[0].deces).toBe(true);
+  });
+
+  it('serializes echelon', async () => {
+    prismaMock.consultation.findMany.mockResolvedValue([
+      consultationRow({ echelon: 'CSCom' }),
+    ] as never);
+    const res = await GET(makeGet('http://test/api/consultations'));
+    const body = await res.json();
+    expect(body.items[0].echelon).toBe('CSCom');
+  });
+
+  it('serializes signes', async () => {
+    prismaMock.consultation.findMany.mockResolvedValue([
+      consultationRow({ signes: 'Fièvre, toux sèche, fatigue' }),
+    ] as never);
+    const res = await GET(makeGet('http://test/api/consultations'));
+    const body = await res.json();
+    expect(body.items[0].signes).toBe('Fièvre, toux sèche, fatigue');
   });
 
   it('providerName is null when the consultation has no provider', async () => {

@@ -54,6 +54,7 @@ function consultationRow(overrides: Partial<Record<string, unknown>> = {}) {
     date: new Date('2026-01-12T07:45:00Z'),
     motif: 'Paludisme simple',
     status: 'attente',
+    echelon: null,
     diagnostic: null,
     traitementPrescrit: null,
     tensionArterielle: null,
@@ -99,7 +100,7 @@ describe('PATCH /api/consultations/[id]', () => {
     expect(prismaMock.consultation.update).not.toHaveBeenCalled();
   });
 
-  it('empty body (neither status, indigent, codeAffection, nor deces) → 400 VALIDATION_FAILED', async () => {
+  it('empty body (neither status, indigent, echelon, codeAffection, nor deces) → 400 VALIDATION_FAILED', async () => {
     const res = await PATCH(makePatch({}), ctxWith('c-1'));
     expect(res.status).toBe(400);
     const body = await res.json();
@@ -137,6 +138,7 @@ describe('PATCH /api/consultations/[id]', () => {
       id: 'c-1',
       status: 'traite',
       indigent: null,
+      echelon: null,
       codeAffection: null,
       deces: null,
     });
@@ -155,12 +157,39 @@ describe('PATCH /api/consultations/[id]', () => {
       id: 'c-1',
       status: 'attente',
       indigent: true,
+      echelon: null,
       codeAffection: null,
       deces: null,
     });
     const updateArg = prismaMock.consultation.update.mock.calls[0]?.[0];
     expect(updateArg?.where).toEqual({ id: 'c-1' });
     expect(updateArg?.data).toEqual({ indigent: true });
+  });
+
+  it('happy path: updates echelon (CSRéf → CSCom correction), returns 200', async () => {
+    prismaMock.consultation.findFirst.mockResolvedValue(consultationRow() as never);
+    prismaMock.consultation.update.mockResolvedValue(
+      consultationRow({ echelon: 'CSCom' }) as never,
+    );
+    const res = await PATCH(makePatch({ echelon: 'CSCom' }), ctxWith('c-1'));
+    expect(res.status).toBe(200);
+    const body = await res.json();
+    expect(body).toEqual({
+      id: 'c-1',
+      status: 'attente',
+      indigent: null,
+      echelon: 'CSCom',
+      codeAffection: null,
+      deces: null,
+    });
+    const updateArg = prismaMock.consultation.update.mock.calls[0]?.[0];
+    expect(updateArg?.data).toEqual({ echelon: 'CSCom' });
+  });
+
+  it('invalid echelon value → 400 VALIDATION_FAILED', async () => {
+    const res = await PATCH(makePatch({ echelon: 'CHR' }), ctxWith('c-1'));
+    expect(res.status).toBe(400);
+    expect(prismaMock.consultation.update).not.toHaveBeenCalled();
   });
 
   it('happy path: sets codeAffection + deces together, returns 200', async () => {
@@ -178,6 +207,7 @@ describe('PATCH /api/consultations/[id]', () => {
       id: 'c-1',
       status: 'attente',
       indigent: null,
+      echelon: null,
       codeAffection: 'B05 — Rougeole',
       deces: true,
     });
