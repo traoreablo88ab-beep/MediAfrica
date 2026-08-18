@@ -62,6 +62,7 @@ interface ConsultationRow {
   ge: string | null;
   codeAffection: string | null;
   deces: boolean | null;
+  echelon: string | null;
   patient: { dateNaissance: string; sexe: string };
 }
 
@@ -878,6 +879,12 @@ export default function RmaPage() {
   const clinicName = useClinicName();
   const [month, setMonth] = useState(currentMonth());
   const [consultations, setConsultations] = useState<ConsultationRow[]>([]);
+  // ACTIVITES CURATIVES / Morbidité / Paludisme / MDO are the only sections
+  // below sourced from Consultation (which carries echelon) — maternité,
+  // malnutrition, PF et vaccination n'ont pas cette notion et restent
+  // inchangées quel que soit le choix ici. Legacy untagged consultations
+  // default to CSRéf, same convention as /registres/consultation et /cscom.
+  const [echelonFilter, setEchelonFilter] = useState<'CSRéf' | 'CSCom'>('CSRéf');
   const [cpn, setCpn] = useState<MaterniteRow[]>([]);
   const [accouchements, setAccouchements] = useState<MaterniteRow[]>([]);
   const [cpon, setCpon] = useState<MaterniteRow[]>([]);
@@ -944,7 +951,11 @@ export default function RmaPage() {
     void load(month);
   }, [month, load]);
 
-  const mdoCases = consultations.filter((c) => c.mdo);
+  const filteredConsultations = consultations.filter(
+    (c) => (c.echelon ?? 'CSRéf') === echelonFilter,
+  );
+
+  const mdoCases = filteredConsultations.filter((c) => c.mdo);
   const mdoByMaladie = new Map<string, number>();
   for (const c of mdoCases) {
     const key = c.mdoMaladie?.trim() || 'Non précisé';
@@ -955,7 +966,7 @@ export default function RmaPage() {
   const curativeCounts = CURATIVE_ROWS.map((row) => {
     const byBracket = new Map<AgeBracket, number>(AGE_BRACKETS.map((b) => [b, 0]));
     if (row.filter) {
-      for (const c of consultations) {
+      for (const c of filteredConsultations) {
         if (!row.filter(c)) continue;
         const bracket = ageBracketAt(c.patient.dateNaissance, c.date);
         byBracket.set(bracket, (byBracket.get(bracket) ?? 0) + 1);
@@ -965,7 +976,7 @@ export default function RmaPage() {
     return { ...row, byBracket, total };
   });
 
-  const morbiditeCounts = buildMorbiditeCounts(consultations);
+  const morbiditeCounts = buildMorbiditeCounts(filteredConsultations);
 
   const { monthStart, nextMonthStart } = monthStartAndNext(month);
   const urenamCounts = buildNutritionCounts(
@@ -1248,13 +1259,13 @@ export default function RmaPage() {
   const paludismeLines: RmaLine[] = [
     {
       label: 'Cas suspects testés (TDR ou GE)',
-      value: consultations.filter(
+      value: filteredConsultations.filter(
         (c) => (c.tdr && c.tdr !== 'Non fait') || (c.ge && c.ge !== 'Non fait'),
       ).length,
     },
     {
       label: 'Cas confirmés (TDR ou GE positif)',
-      value: consultations.filter((c) => c.tdr === 'Positif' || c.ge === 'Positif').length,
+      value: filteredConsultations.filter((c) => c.tdr === 'Positif' || c.ge === 'Positif').length,
     },
   ];
 
@@ -1266,17 +1277,31 @@ export default function RmaPage() {
 
       <div className="animate-fade-in-up mx-auto max-w-6xl px-6 py-6">
         <div className="mb-1 print:hidden">
-          <Link href="/registres/consultation" className="text-sm text-[#2a78d6] hover:underline">
+          <Link
+            href={echelonFilter === 'CSCom' ? '/registres/cscom' : '/registres/consultation'}
+            className="text-sm text-[#2a78d6] hover:underline"
+          >
             ← Retour aux registres
           </Link>
         </div>
 
         <div className="mb-6 flex flex-col gap-4 print:hidden sm:flex-row sm:items-center sm:justify-between">
           <div>
-            <h1 className="text-xl font-bold text-[#0b0b0b] sm:text-2xl">Aide à la saisie RMA</h1>
+            <h1 className="text-xl font-bold text-[#0b0b0b] sm:text-2xl">
+              Aide à la saisie RMA — {echelonFilter}
+            </h1>
             <p className="mt-1 text-sm text-[#52514e]">{clinicName}</p>
           </div>
           <div className="flex flex-col gap-3 sm:flex-row sm:items-center">
+            <select
+              aria-label="Échelon"
+              value={echelonFilter}
+              onChange={(e) => setEchelonFilter(e.target.value as 'CSRéf' | 'CSCom')}
+              className="rounded-md border border-[#e1e0d9] bg-white px-3 py-2 text-sm text-[#0b0b0b] focus:border-[#2a78d6] focus:outline-none"
+            >
+              <option value="CSRéf">CSRéf</option>
+              <option value="CSCom">CSCom</option>
+            </select>
             <div className="flex items-center gap-1">
               <button
                 type="button"
@@ -1307,6 +1332,16 @@ export default function RmaPage() {
         </div>
 
         <p className="mb-6 rounded-xl border border-[#e1e0d9] bg-white p-4 text-xs leading-relaxed text-[#52514e] print:hidden">
+          Le sélecteur Échelon ci-dessus filtre les seules sections tirées des consultations —{' '}
+          <strong>ACTIVITES CURATIVES</strong>, <strong>Morbidité et mortalité</strong>,{' '}
+          <strong>Paludisme (aperçu)</strong> et <strong>MDO</strong> — sur le tag CSRéf/CSCom
+          choisi à la saisie de chaque consultation (voir /registres/consultation et
+          /registres/cscom) ; les consultations enregistrées avant l'ajout de ce champ comptent
+          comme CSRéf par défaut. Les autres sections (grossesse/accouchement, malnutrition,
+          planification familiale, vaccination) ne portent pas cette distinction dans MediAfrica et
+          restent identiques quel que soit l'échelon choisi.
+          <br />
+          <br />
           Ces tableaux reprennent l'intitulé exact des lignes « ACTIVITES CURATIVES », « GROSSESSE,
           ACCOUCHEMENT ET SUITES DE COUCHE », « PRISE EN CHARGE DE LA MALNUTRITION » et «
           PLANIFICATION FAMILIALE » du RMA 2ème échelon / CSRéf (janvier 2019, pages 5-9 et 16), et
@@ -1399,7 +1434,7 @@ export default function RmaPage() {
             title="Morbidité et mortalité"
             ageBrackets={AGE_BRACKETS}
             counts={morbiditeCounts}
-            note="Toute consultation du mois est comptée ici : sous sa maladie si un code d'affection RMA lui a été assigné (depuis le formulaire de consultation ou directement depuis le registre), sinon sous « Autres — Cas »."
+            note={`Toute consultation ${echelonFilter} du mois est comptée ici : sous sa maladie si un code d'affection RMA lui a été assigné (depuis le formulaire de consultation ou directement depuis le registre), sinon sous « Autres — Cas ».`}
           />
 
           <div className="overflow-hidden rounded-xl border border-[#e1e0d9] bg-white shadow-[0_1px_2px_rgba(11,11,11,0.04)]">
