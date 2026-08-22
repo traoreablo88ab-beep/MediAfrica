@@ -53,4 +53,14 @@ export default tseslint.config(
       '@typescript-eslint/no-require-imports': 'off',
     },
   },
+  {
+    // Service worker — runs in its own browser context (self/caches/clients),
+    // not the DOM globals frontend/**/*.{ts,tsx} gets above.
+    files: ['frontend/public/sw.js'],
+    languageOptions: {
+      globals: {
+        ...globals.serviceworker,
+      },
+    },
+  },
 );

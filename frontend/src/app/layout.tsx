@@ -3,6 +3,7 @@ import { Inter, Source_Serif_4 } from 'next/font/google';
 import './globals.css';
 import { ToastProvider } from '@/contexts/ToastContext';
 import { AuthProvider } from '@/contexts/AuthContext';
+import { ServiceWorkerRegister } from '@/components/ServiceWorkerRegister';
 import { siteUrl } from '@/lib/siteUrl';
 
 const inter = Inter({
@@ -74,6 +75,7 @@ export default function RootLayout({
           type="application/ld+json"
           dangerouslySetInnerHTML={{ __html: JSON.stringify(organizationJsonLd) }}
         />
+        <ServiceWorkerRegister />
         <ToastProvider>
           <AuthProvider>{children}</AuthProvider>
         </ToastProvider>

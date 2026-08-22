@@ -88,6 +88,22 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     }
     clearCsrfToken();
     invalidateCachePrefix('/api/');
+    // The offline-app-shell service worker (public/sw.js) caches API GET
+    // responses in the browser's shared Cache Storage — unlike this
+    // in-memory useApi cache, that storage isn't session-scoped, so on a
+    // shared clinic device it would otherwise leak the previous staff
+    // member's patient data to whoever logs in next before their first
+    // online fetch overwrites each entry. Wipe it on every logout.
+    if (typeof caches !== 'undefined') {
+      try {
+        const names = await caches.keys();
+        await Promise.all(
+          names.filter((name) => name.startsWith('mediafrica-')).map((name) => caches.delete(name)),
+        );
+      } catch {
+        // Non-fatal — Cache API unsupported or blocked (private browsing).
+      }
+    }
     setUser(null);
     setLoggingOut(false);
   }, []);
