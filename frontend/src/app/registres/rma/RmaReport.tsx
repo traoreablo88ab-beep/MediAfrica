@@ -1,5 +1,11 @@
 'use client';
 
+// Composant partagé par les deux "dossiers" RMA — registres/rma/csref/page.tsx
+// (defaultEchelon="CSRéf") et registres/rma/cscom/page.tsx (defaultEchelon=
+// "CSCom") — même contenu, seul l'échelon initialement sélectionné diffère ;
+// le sélecteur Échelon en haut de page reste modifiable depuis n'importe
+// laquelle des deux routes.
+//
 // Aide à la saisie du RMA (Rapport Mensuel d'Activités, modèle 2ème échelon
 // / CSRéf, version janvier 2019, Ministère de la Santé du Mali) — reproduit
 // ligne par ligne les tableaux "ACTIVITES CURATIVES" et "GROSSESSE,
@@ -875,7 +881,7 @@ function AgeSexTable({
   );
 }
 
-export default function RmaPage() {
+export function RmaReport({ defaultEchelon }: { defaultEchelon: 'CSRéf' | 'CSCom' }) {
   const clinicName = useClinicName();
   const [month, setMonth] = useState(currentMonth());
   const [consultations, setConsultations] = useState<ConsultationRow[]>([]);
@@ -884,7 +890,7 @@ export default function RmaPage() {
   // malnutrition, PF et vaccination n'ont pas cette notion et restent
   // inchangées quel que soit le choix ici. Legacy untagged consultations
   // default to CSRéf, same convention as /registres/consultation et /cscom.
-  const [echelonFilter, setEchelonFilter] = useState<'CSRéf' | 'CSCom'>('CSRéf');
+  const [echelonFilter, setEchelonFilter] = useState<'CSRéf' | 'CSCom'>(defaultEchelon);
   const [cpn, setCpn] = useState<MaterniteRow[]>([]);
   const [accouchements, setAccouchements] = useState<MaterniteRow[]>([]);
   const [cpon, setCpon] = useState<MaterniteRow[]>([]);

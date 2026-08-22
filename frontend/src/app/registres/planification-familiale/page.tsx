@@ -235,7 +235,7 @@ export default function RegistrePlanificationFamilialePage() {
             </h1>
             <p className="mt-1 text-sm text-[#52514e]">{clinicName}</p>
             <Link
-              href="/registres/rma"
+              href="/registres/rma/csref"
               className="mt-1 inline-block text-xs text-[#2a78d6] hover:underline"
             >
               Aide à la saisie RMA →

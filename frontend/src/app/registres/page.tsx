@@ -77,6 +77,11 @@ const CSREF_REGISTERS: RegisterCard[] = [
     description: 'Consultations mensuelles (échelon CSRéf), clôture et export CSV.',
   },
   ...SHARED_REGISTERS,
+  {
+    href: '/registres/rma/csref',
+    title: 'RMA CSRéf',
+    description: "Aide à la saisie du RMA (Rapport Mensuel d'Activités) pour l'échelon CSRéf.",
+  },
 ];
 
 const CSCOM_REGISTERS: RegisterCard[] = [
@@ -87,6 +92,11 @@ const CSCOM_REGISTERS: RegisterCard[] = [
       'Consultations mensuelles (échelon CSCom), avec la colonne Signes du registre papier CSCom.',
   },
   ...SHARED_REGISTERS,
+  {
+    href: '/registres/rma/cscom',
+    title: 'RMA CSCom',
+    description: "Aide à la saisie du RMA (Rapport Mensuel d'Activités) pour l'échelon CSCom.",
+  },
 ];
 
 function RegisterGrid({ registers }: { registers: RegisterCard[] }) {

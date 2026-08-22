@@ -251,7 +251,7 @@ export default function RegistreNutritionUrenamPage() {
             <h1 className="text-2xl font-bold text-[#0b0b0b]">{REGISTER_LABEL}</h1>
             <p className="mt-1 text-sm text-[#52514e]">{clinicName}</p>
             <Link
-              href="/registres/rma"
+              href="/registres/rma/csref"
               className="mt-1 inline-block text-xs text-[#2a78d6] hover:underline"
             >
               Aide à la saisie RMA →
