@@ -1,3 +1,4 @@
+import { createHash } from 'node:crypto';
 import { prismaMock } from '@/test-utils/prisma-mock';
 import { mockNextCookies, __cookieStore } from '@/test-utils/mock-cookies';
 import { describe, it, expect, vi, beforeEach } from 'vitest';
@@ -22,12 +23,18 @@ function ctxWith(id: string): { params: Promise<{ id: string }> } {
   return { params: Promise.resolve({ id }) };
 }
 
-function makePost(body: unknown, opts: { csrf?: 'match' | 'missing' } = {}): NextRequest {
+function makePost(
+  body: unknown,
+  opts: { csrf?: 'match' | 'missing'; idempotencyKey?: string } = {},
+): NextRequest {
   const csrf = opts.csrf ?? 'match';
   const headers: Record<string, string> = { 'content-type': 'application/json' };
   if (csrf === 'match') {
     headers['x-csrf-token'] = 'csrf-tok';
     headers['cookie'] = 'app-csrf=csrf-tok';
+  }
+  if (opts.idempotencyKey) {
+    headers['idempotency-key'] = opts.idempotencyKey;
   }
   return new NextRequest('http://test/api/patients/pt-1/maternite', {
     method: 'POST',
@@ -230,5 +237,107 @@ describe('POST /api/patients/[id]/maternite', () => {
     expect(createArg.etatPerinee).toBe('Normal');
     expect(createArg.allaitement).toBe('Exclusif');
     expect(createArg.vaccinationBcgFait).toBe(true);
+  });
+
+  describe('Idempotency-Key (offline-queue replay)', () => {
+    it('no header → unchanged behavior, no idempotency fields on create', async () => {
+      prismaMock.patient.findFirst.mockResolvedValue({ id: 'pt-1' } as never);
+      prismaMock.maternite.create.mockResolvedValue({
+        id: 'm-1',
+        patientId: 'pt-1',
+        date: new Date('2026-01-12T09:00:00Z'),
+        type: 'CPN',
+      } as never);
+
+      const res = await POST(makePost({ type: 'CPN' }), ctxWith('pt-1'));
+
+      expect(res.status).toBe(201);
+      expect(prismaMock.maternite.findUnique).not.toHaveBeenCalled();
+      const createArg = prismaMock.maternite.create.mock.calls[0]?.[0]?.data as Record<
+        string,
+        unknown
+      >;
+      expect(createArg.idempotencyKey).toBeUndefined();
+      expect(createArg.idempotencyBodyHash).toBeUndefined();
+    });
+
+    it('header + no existing row → creates and stores key/hash', async () => {
+      prismaMock.patient.findFirst.mockResolvedValue({ id: 'pt-1' } as never);
+      prismaMock.maternite.findUnique.mockResolvedValue(null);
+      prismaMock.maternite.create.mockResolvedValue({
+        id: 'm-1',
+        patientId: 'pt-1',
+        date: new Date('2026-01-12T09:00:00Z'),
+        type: 'CPN',
+      } as never);
+
+      const res = await POST(
+        makePost({ type: 'CPN' }, { idempotencyKey: 'idem-key-1' }),
+        ctxWith('pt-1'),
+      );
+
+      expect(res.status).toBe(201);
+      const createArg = prismaMock.maternite.create.mock.calls[0]?.[0]?.data as Record<
+        string,
+        unknown
+      >;
+      expect(createArg.idempotencyKey).toBe('idem-key-1');
+      expect(typeof createArg.idempotencyBodyHash).toBe('string');
+    });
+
+    it('header + matching replay → 200, no duplicate row created', async () => {
+      prismaMock.patient.findFirst.mockResolvedValue({ id: 'pt-1' } as never);
+      const bodyHash = createHash('sha256')
+        .update(
+          JSON.stringify({
+            patientId: 'pt-1',
+            type: 'CPN',
+            cpnNumeroVisite: null,
+            dateHeureEntree: null,
+            cponNumeroVisite: null,
+          }),
+        )
+        .digest('hex');
+      prismaMock.maternite.findUnique.mockResolvedValue({
+        id: 'm-existing',
+        patientId: 'pt-1',
+        date: new Date('2026-01-12T09:00:00Z'),
+        type: 'CPN',
+        idempotencyBodyHash: bodyHash,
+        patient: { organizationId: 'org-1' },
+      } as never);
+
+      const res = await POST(
+        makePost({ type: 'CPN' }, { idempotencyKey: 'idem-key-1' }),
+        ctxWith('pt-1'),
+      );
+
+      expect(res.status).toBe(200);
+      const body = await res.json();
+      expect(body.id).toBe('m-existing');
+      expect(prismaMock.maternite.create).not.toHaveBeenCalled();
+    });
+
+    it('header + mismatched body → 422 IDEMPOTENCY_KEY_BODY_MISMATCH', async () => {
+      prismaMock.patient.findFirst.mockResolvedValue({ id: 'pt-1' } as never);
+      prismaMock.maternite.findUnique.mockResolvedValue({
+        id: 'm-existing',
+        patientId: 'pt-1',
+        date: new Date('2026-01-12T09:00:00Z'),
+        type: 'ACCOUCHEMENT',
+        idempotencyBodyHash: 'deadbeef',
+        patient: { organizationId: 'org-1' },
+      } as never);
+
+      const res = await POST(
+        makePost({ type: 'CPN' }, { idempotencyKey: 'idem-key-1' }),
+        ctxWith('pt-1'),
+      );
+
+      expect(res.status).toBe(422);
+      const body = await res.json();
+      expect(body.error).toBe('IDEMPOTENCY_KEY_BODY_MISMATCH');
+      expect(prismaMock.maternite.create).not.toHaveBeenCalled();
+    });
   });
 });

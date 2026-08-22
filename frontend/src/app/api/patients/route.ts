@@ -3,9 +3,17 @@
 // list can show Motif/Heure/Statut without a second round-trip.
 // POST /api/patients — create a bare Patient record (dossier number
 // generated server-side inside the same transaction).
+//
+// Optional `Idempotency-Key` header on POST — same pattern as
+// frontend/src/app/api/patients/[id]/consultations/route.ts, used by the
+// offline-queue sync path (frontend/src/lib/offlineQueue.ts). Checked BEFORE
+// the DUPLICATE_PATIENT lookup: an exact replay of an already-synced create
+// must short-circuit to the original row, not re-run the duplicate-name/
+// phone heuristic (which stays as-is for genuinely new submissions).
 export const runtime = 'nodejs';
 
 import 'server-only';
+import { createHash } from 'node:crypto';
 import { NextResponse, type NextRequest } from 'next/server';
 import { z } from 'zod';
 import type { Consultation, Patient, Prisma } from '@prisma/client';
@@ -19,6 +27,17 @@ import { generateDossierNumber } from '@/lib/server/patients/dossier-number';
 import { makeRequestContext, withRequestContext } from '@/lib/server/observability/request-context';
 
 const Q_MAX = 200;
+const IDEM_KEY_MAX_LEN = 200;
+
+function fingerprintBody(input: {
+  nom: string;
+  prenom: string;
+  dateNaissance: string;
+  telephonePrincipal: string;
+}): string {
+  const canonical = JSON.stringify(input);
+  return createHash('sha256').update(canonical).digest('hex');
+}
 
 type PatientWithLatestConsultation = Patient & { consultations: Consultation[] };
 
@@ -156,6 +175,49 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
 
     const d = parsed.data;
 
+    const idemKey = req.headers.get('idempotency-key');
+    if (idemKey && idemKey.length > IDEM_KEY_MAX_LEN) {
+      return NextResponse.json(
+        {
+          error: 'IDEMPOTENCY_KEY_INVALID',
+          message: `Idempotency-Key exceeds ${IDEM_KEY_MAX_LEN} characters`,
+        },
+        { status: 400, headers: { 'x-request-id': ctx.requestId } },
+      );
+    }
+    const bodyHash = fingerprintBody({
+      nom: d.nom,
+      prenom: d.prenom,
+      dateNaissance: d.dateNaissance.toISOString(),
+      telephonePrincipal: d.telephonePrincipal,
+    });
+    if (idemKey) {
+      const existing = await prisma.patient.findUnique({ where: { idempotencyKey: idemKey } });
+      if (existing) {
+        const sameTenant = existing.organizationId === auth.orgMember.organizationId;
+        if (!sameTenant || existing.idempotencyBodyHash !== bodyHash) {
+          return NextResponse.json(
+            {
+              error: 'IDEMPOTENCY_KEY_BODY_MISMATCH',
+              message: 'Idempotency-Key already used for a different request.',
+            },
+            { status: 422, headers: { 'x-request-id': ctx.requestId } },
+          );
+        }
+        return NextResponse.json(
+          {
+            id: existing.id,
+            dossierNumber: existing.dossierNumber,
+            nom: existing.nom,
+            prenom: existing.prenom,
+            dateNaissance: existing.dateNaissance.toISOString(),
+            sexe: existing.sexe,
+          },
+          { status: 200, headers: { 'x-request-id': ctx.requestId } },
+        );
+      }
+    }
+
     // Same name + birthdate, or same primary phone, likely means this
     // patient already has a dossier — surface it instead of silently
     // creating a duplicate record. The client can resubmit with force:true
@@ -215,6 +277,7 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
             ? { antecedentsChirurgicaux: d.antecedentsChirurgicaux }
             : {}),
           ...(d.antecedentsFamiliaux ? { antecedentsFamiliaux: d.antecedentsFamiliaux } : {}),
+          ...(idemKey ? { idempotencyKey: idemKey, idempotencyBodyHash: bodyHash } : {}),
         },
       });
     });

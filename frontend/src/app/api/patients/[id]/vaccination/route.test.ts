@@ -1,3 +1,4 @@
+import { createHash } from 'node:crypto';
 import { prismaMock } from '@/test-utils/prisma-mock';
 import { mockNextCookies, __cookieStore } from '@/test-utils/mock-cookies';
 import { describe, it, expect, vi, beforeEach } from 'vitest';
@@ -22,12 +23,18 @@ function ctxWith(id: string): { params: Promise<{ id: string }> } {
   return { params: Promise.resolve({ id }) };
 }
 
-function makePost(body: unknown, opts: { csrf?: 'match' | 'missing' } = {}): NextRequest {
+function makePost(
+  body: unknown,
+  opts: { csrf?: 'match' | 'missing'; idempotencyKey?: string } = {},
+): NextRequest {
   const csrf = opts.csrf ?? 'match';
   const headers: Record<string, string> = { 'content-type': 'application/json' };
   if (csrf === 'match') {
     headers['x-csrf-token'] = 'csrf-tok';
     headers['cookie'] = 'app-csrf=csrf-tok';
+  }
+  if (opts.idempotencyKey) {
+    headers['idempotency-key'] = opts.idempotencyKey;
   }
   return new NextRequest('http://test/api/patients/pt-1/vaccination', {
     method: 'POST',
@@ -173,5 +180,99 @@ describe('POST /api/patients/[id]/vaccination', () => {
     expect(createArg.methodePfAdoptee).toBe('Injectable');
     expect(createArg.conseilsAme).toBe('O');
     expect(createArg.pratiqueAme).toBe('NA');
+  });
+
+  describe('Idempotency-Key (offline-queue replay)', () => {
+    it('no header → unchanged behavior, no idempotency fields on create', async () => {
+      prismaMock.patient.findFirst.mockResolvedValue({ id: 'pt-1' } as never);
+      prismaMock.vaccination.create.mockResolvedValue({
+        id: 'v-1',
+        patientId: 'pt-1',
+        date: new Date('2026-01-12T09:00:00Z'),
+        antigene: 'BCG',
+      } as never);
+
+      const res = await POST(makePost({ antigene: 'BCG' }), ctxWith('pt-1'));
+
+      expect(res.status).toBe(201);
+      expect(prismaMock.vaccination.findUnique).not.toHaveBeenCalled();
+      const createArg = prismaMock.vaccination.create.mock.calls[0]?.[0]?.data as Record<
+        string,
+        unknown
+      >;
+      expect(createArg.idempotencyKey).toBeUndefined();
+      expect(createArg.idempotencyBodyHash).toBeUndefined();
+    });
+
+    it('header + no existing row → creates and stores key/hash', async () => {
+      prismaMock.patient.findFirst.mockResolvedValue({ id: 'pt-1' } as never);
+      prismaMock.vaccination.findUnique.mockResolvedValue(null);
+      prismaMock.vaccination.create.mockResolvedValue({
+        id: 'v-1',
+        patientId: 'pt-1',
+        date: new Date('2026-01-12T09:00:00Z'),
+        antigene: 'BCG',
+      } as never);
+
+      const res = await POST(
+        makePost({ antigene: 'BCG' }, { idempotencyKey: 'idem-key-1' }),
+        ctxWith('pt-1'),
+      );
+
+      expect(res.status).toBe(201);
+      const createArg = prismaMock.vaccination.create.mock.calls[0]?.[0]?.data as Record<
+        string,
+        unknown
+      >;
+      expect(createArg.idempotencyKey).toBe('idem-key-1');
+      expect(typeof createArg.idempotencyBodyHash).toBe('string');
+    });
+
+    it('header + matching replay → 200, no duplicate row created', async () => {
+      prismaMock.patient.findFirst.mockResolvedValue({ id: 'pt-1' } as never);
+      const bodyHash = createHash('sha256')
+        .update(JSON.stringify({ patientId: 'pt-1', antigene: 'BCG', numeroDose: null }))
+        .digest('hex');
+      prismaMock.vaccination.findUnique.mockResolvedValue({
+        id: 'v-existing',
+        patientId: 'pt-1',
+        date: new Date('2026-01-12T09:00:00Z'),
+        antigene: 'BCG',
+        idempotencyBodyHash: bodyHash,
+        patient: { organizationId: 'org-1' },
+      } as never);
+
+      const res = await POST(
+        makePost({ antigene: 'BCG' }, { idempotencyKey: 'idem-key-1' }),
+        ctxWith('pt-1'),
+      );
+
+      expect(res.status).toBe(200);
+      const body = await res.json();
+      expect(body.id).toBe('v-existing');
+      expect(prismaMock.vaccination.create).not.toHaveBeenCalled();
+    });
+
+    it('header + mismatched body → 422 IDEMPOTENCY_KEY_BODY_MISMATCH', async () => {
+      prismaMock.patient.findFirst.mockResolvedValue({ id: 'pt-1' } as never);
+      prismaMock.vaccination.findUnique.mockResolvedValue({
+        id: 'v-existing',
+        patientId: 'pt-1',
+        date: new Date('2026-01-12T09:00:00Z'),
+        antigene: 'Penta1',
+        idempotencyBodyHash: 'deadbeef',
+        patient: { organizationId: 'org-1' },
+      } as never);
+
+      const res = await POST(
+        makePost({ antigene: 'BCG' }, { idempotencyKey: 'idem-key-1' }),
+        ctxWith('pt-1'),
+      );
+
+      expect(res.status).toBe(422);
+      const body = await res.json();
+      expect(body.error).toBe('IDEMPOTENCY_KEY_BODY_MISMATCH');
+      expect(prismaMock.vaccination.create).not.toHaveBeenCalled();
+    });
   });
 });

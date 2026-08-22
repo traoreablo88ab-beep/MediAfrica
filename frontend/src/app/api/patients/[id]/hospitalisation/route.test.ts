@@ -1,3 +1,4 @@
+import { createHash } from 'node:crypto';
 import { prismaMock } from '@/test-utils/prisma-mock';
 import { mockNextCookies, __cookieStore } from '@/test-utils/mock-cookies';
 import { describe, it, expect, vi, beforeEach } from 'vitest';
@@ -22,12 +23,18 @@ function ctxWith(id: string): { params: Promise<{ id: string }> } {
   return { params: Promise.resolve({ id }) };
 }
 
-function makePost(body: unknown, opts: { csrf?: 'match' | 'missing' } = {}): NextRequest {
+function makePost(
+  body: unknown,
+  opts: { csrf?: 'match' | 'missing'; idempotencyKey?: string } = {},
+): NextRequest {
   const csrf = opts.csrf ?? 'match';
   const headers: Record<string, string> = { 'content-type': 'application/json' };
   if (csrf === 'match') {
     headers['x-csrf-token'] = 'csrf-tok';
     headers['cookie'] = 'app-csrf=csrf-tok';
+  }
+  if (opts.idempotencyKey) {
+    headers['idempotency-key'] = opts.idempotencyKey;
   }
   return new NextRequest('http://test/api/patients/pt-1/hospitalisation', {
     method: 'POST',
@@ -229,5 +236,105 @@ describe('POST /api/patients/[id]/hospitalisation', () => {
       ctxWith('pt-1'),
     );
     expect(res.status).toBe(400);
+  });
+
+  describe('Idempotency-Key (offline-queue replay)', () => {
+    it('no header → unchanged behavior, no idempotency fields on create', async () => {
+      prismaMock.patient.findFirst.mockResolvedValue({ id: 'pt-1' } as never);
+      prismaMock.hospitalisation.create.mockResolvedValue({
+        id: 'h-1',
+        patientId: 'pt-1',
+        dateHeureEntree: new Date('2026-01-12T09:00:00Z'),
+        motifAdmission: 'Paludisme grave',
+      } as never);
+
+      const res = await POST(makePost({ motifAdmission: 'Paludisme grave' }), ctxWith('pt-1'));
+
+      expect(res.status).toBe(201);
+      expect(prismaMock.hospitalisation.findUnique).not.toHaveBeenCalled();
+      const createArg = prismaMock.hospitalisation.create.mock.calls[0]?.[0]?.data as Record<
+        string,
+        unknown
+      >;
+      expect(createArg.idempotencyKey).toBeUndefined();
+      expect(createArg.idempotencyBodyHash).toBeUndefined();
+    });
+
+    it('header + no existing row → creates and stores key/hash', async () => {
+      prismaMock.patient.findFirst.mockResolvedValue({ id: 'pt-1' } as never);
+      prismaMock.hospitalisation.findUnique.mockResolvedValue(null);
+      prismaMock.hospitalisation.create.mockResolvedValue({
+        id: 'h-1',
+        patientId: 'pt-1',
+        dateHeureEntree: new Date('2026-01-12T09:00:00Z'),
+        motifAdmission: 'Paludisme grave',
+      } as never);
+
+      const res = await POST(
+        makePost({ motifAdmission: 'Paludisme grave' }, { idempotencyKey: 'idem-key-1' }),
+        ctxWith('pt-1'),
+      );
+
+      expect(res.status).toBe(201);
+      const createArg = prismaMock.hospitalisation.create.mock.calls[0]?.[0]?.data as Record<
+        string,
+        unknown
+      >;
+      expect(createArg.idempotencyKey).toBe('idem-key-1');
+      expect(typeof createArg.idempotencyBodyHash).toBe('string');
+    });
+
+    it('header + matching replay → 200, no duplicate row created', async () => {
+      prismaMock.patient.findFirst.mockResolvedValue({ id: 'pt-1' } as never);
+      const bodyHash = createHash('sha256')
+        .update(
+          JSON.stringify({
+            patientId: 'pt-1',
+            motifAdmission: 'Paludisme grave',
+            dateHeureEntree: null,
+          }),
+        )
+        .digest('hex');
+      prismaMock.hospitalisation.findUnique.mockResolvedValue({
+        id: 'h-existing',
+        patientId: 'pt-1',
+        dateHeureEntree: new Date('2026-01-12T09:00:00Z'),
+        motifAdmission: 'Paludisme grave',
+        idempotencyBodyHash: bodyHash,
+        patient: { organizationId: 'org-1' },
+      } as never);
+
+      const res = await POST(
+        makePost({ motifAdmission: 'Paludisme grave' }, { idempotencyKey: 'idem-key-1' }),
+        ctxWith('pt-1'),
+      );
+
+      expect(res.status).toBe(200);
+      const body = await res.json();
+      expect(body.id).toBe('h-existing');
+      expect(prismaMock.hospitalisation.create).not.toHaveBeenCalled();
+    });
+
+    it('header + mismatched body → 422 IDEMPOTENCY_KEY_BODY_MISMATCH', async () => {
+      prismaMock.patient.findFirst.mockResolvedValue({ id: 'pt-1' } as never);
+      prismaMock.hospitalisation.findUnique.mockResolvedValue({
+        id: 'h-existing',
+        patientId: 'pt-1',
+        dateHeureEntree: new Date('2026-01-12T09:00:00Z'),
+        motifAdmission: 'Accouchement dystocique',
+        idempotencyBodyHash: 'deadbeef',
+        patient: { organizationId: 'org-1' },
+      } as never);
+
+      const res = await POST(
+        makePost({ motifAdmission: 'Paludisme grave' }, { idempotencyKey: 'idem-key-1' }),
+        ctxWith('pt-1'),
+      );
+
+      expect(res.status).toBe(422);
+      const body = await res.json();
+      expect(body.error).toBe('IDEMPOTENCY_KEY_BODY_MISMATCH');
+      expect(prismaMock.hospitalisation.create).not.toHaveBeenCalled();
+    });
   });
 });

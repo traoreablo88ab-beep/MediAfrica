@@ -5,9 +5,14 @@
 // immutable — PATCH /api/hospitalisations/[id] fills in the discharge
 // fields later. A single hospitalisation register + monthly closure covers
 // every service (see /api/registres/hospitalisation/{close,closure}).
+//
+// Optional `Idempotency-Key` header — same pattern as
+// frontend/src/app/api/patients/[id]/consultations/route.ts, used by the
+// offline-queue sync path (frontend/src/lib/offlineQueue.ts).
 export const runtime = 'nodejs';
 
 import 'server-only';
+import { createHash } from 'node:crypto';
 import { NextResponse, type NextRequest } from 'next/server';
 import { z } from 'zod';
 import { verifyCsrf } from '@/lib/server/auth';
@@ -18,6 +23,16 @@ import { isMonthClosed } from '@/lib/server/registers/closure';
 import { makeRequestContext, withRequestContext } from '@/lib/server/observability/request-context';
 
 const REGISTER_TYPE = 'hospitalisation';
+const IDEM_KEY_MAX_LEN = 200;
+
+function fingerprintBody(input: {
+  patientId: string;
+  motifAdmission: string;
+  dateHeureEntree: string | null;
+}): string {
+  const canonical = JSON.stringify(input);
+  return createHash('sha256').update(canonical).digest('hex');
+}
 
 const CreateHospitalisationBody = z.object({
   dateHeureEntree: z.coerce.date().optional(),
@@ -116,6 +131,49 @@ export async function POST(
       );
     }
 
+    const idemKey = req.headers.get('idempotency-key');
+    if (idemKey && idemKey.length > IDEM_KEY_MAX_LEN) {
+      return NextResponse.json(
+        {
+          error: 'IDEMPOTENCY_KEY_INVALID',
+          message: `Idempotency-Key exceeds ${IDEM_KEY_MAX_LEN} characters`,
+        },
+        { status: 400, headers: { 'x-request-id': reqCtx.requestId } },
+      );
+    }
+    const bodyHash = fingerprintBody({
+      patientId,
+      motifAdmission: d.motifAdmission,
+      dateHeureEntree: d.dateHeureEntree ? d.dateHeureEntree.toISOString() : null,
+    });
+    if (idemKey) {
+      const existing = await prisma.hospitalisation.findUnique({
+        where: { idempotencyKey: idemKey },
+        include: { patient: { select: { organizationId: true } } },
+      });
+      if (existing) {
+        const sameTenant = existing.patient.organizationId === auth.orgMember.organizationId;
+        if (!sameTenant || existing.idempotencyBodyHash !== bodyHash) {
+          return NextResponse.json(
+            {
+              error: 'IDEMPOTENCY_KEY_BODY_MISMATCH',
+              message: 'Idempotency-Key already used for a different request.',
+            },
+            { status: 422, headers: { 'x-request-id': reqCtx.requestId } },
+          );
+        }
+        return NextResponse.json(
+          {
+            id: existing.id,
+            patientId: existing.patientId,
+            dateHeureEntree: existing.dateHeureEntree.toISOString(),
+            motifAdmission: existing.motifAdmission,
+          },
+          { status: 200, headers: { 'x-request-id': reqCtx.requestId } },
+        );
+      }
+    }
+
     const hospitalisation = await prisma.hospitalisation.create({
       data: {
         patientId,
@@ -135,6 +193,7 @@ export async function POST(
         ...(d.traitementRecu ? { traitementRecu: d.traitementRecu } : {}),
         ...(d.praticienResponsable ? { praticienResponsable: d.praticienResponsable } : {}),
         ...(d.observations ? { observations: d.observations } : {}),
+        ...(idemKey ? { idempotencyKey: idemKey, idempotencyBodyHash: bodyHash } : {}),
       },
     });
 

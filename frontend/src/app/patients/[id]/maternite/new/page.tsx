@@ -5,6 +5,7 @@ import { useParams, useRouter } from 'next/navigation';
 import Link from 'next/link';
 import { api, ApiError } from '@/lib/api';
 import { friendlyError } from '@/lib/errorMessages';
+import { queueMutation } from '@/lib/offlineQueue';
 import { AppHeader } from '@/components/AppHeader';
 import { useToast } from '@/contexts/ToastContext';
 
@@ -166,139 +167,157 @@ export default function NewMaternitePage() {
     e.preventDefault();
     setSubmitting(true);
     setError(null);
+
+    const body = {
+      type,
+      ...(gestite ? { gestite: Number(gestite) } : {}),
+      ...(parite ? { parite: Number(parite) } : {}),
+      ...(dpa ? { dpa } : {}),
+      ...(ddr ? { ddr } : {}),
+      ...(statutMatrimonial ? { statutMatrimonial } : {}),
+      ...(profession ? { profession } : {}),
+      ...(observations ? { observations } : {}),
+      ...(type !== 'CPON'
+        ? {
+            indigent,
+            ...(telephoneContact ? { telephoneContact } : {}),
+            ...(localisationPrecise ? { localisationPrecise } : {}),
+          }
+        : {}),
+
+      ...(type === 'CPN'
+        ? {
+            ...(cpnNumeroVisite ? { cpnNumeroVisite: Number(cpnNumeroVisite) } : {}),
+            ...(ageGestationnelSemaines
+              ? { ageGestationnelSemaines: Number(ageGestationnelSemaines) }
+              : {}),
+            ...(poidsKg ? { poidsKg: Number(poidsKg) } : {}),
+            ...(tailleCm ? { tailleCm: Number(tailleCm) } : {}),
+            ...(perimetreBrachialCm ? { perimetreBrachialCm: Number(perimetreBrachialCm) } : {}),
+            ...(temperatureC ? { temperatureC: Number(temperatureC) } : {}),
+            ...(tensionArterielle ? { tensionArterielle } : {}),
+            ...(hauteurUterineCm ? { hauteurUterineCm: Number(hauteurUterineCm) } : {}),
+            ...(bruitsCoeurFoetal ? { bruitsCoeurFoetal } : {}),
+            ...(mouvementsFoetaux ? { mouvementsFoetaux } : {}),
+            oedemes,
+            ...(nombreAvortements ? { nombreAvortements: Number(nombreAvortements) } : {}),
+            ...(nombreEnfantsVivants ? { nombreEnfantsVivants: Number(nombreEnfantsVivants) } : {}),
+            ...(groupeSanguin ? { groupeSanguin } : {}),
+            ...(testEmmel ? { testEmmel } : {}),
+            ...(bw ? { bw } : {}),
+            ...(tauxHb ? { tauxHb: Number(tauxHb) } : {}),
+            ...(tpiDose ? { tpiDose: Number(tpiDose) } : {}),
+            moustiquaireImpregnee,
+            ...(vatDose ? { vatDose: Number(vatDose) } : {}),
+            ferAcideFolique,
+            ...(ferAcideFoliqueDoseNumero
+              ? { ferAcideFoliqueDoseNumero: Number(ferAcideFoliqueDoseNumero) }
+              : {}),
+            albendazoleMebendazole,
+            ...(albuminurie ? { albuminurie } : {}),
+            ...(glycosurie ? { glycosurie } : {}),
+            ...(vih ? { vih } : {}),
+            ...(planAccouchement ? { planAccouchement } : {}),
+            ...(risqueGrossesse ? { risqueGrossesse } : {}),
+            ...(maladieDetectee ? { maladieDetectee } : {}),
+            ...(prochainRdv ? { prochainRdv } : {}),
+          }
+        : {}),
+
+      ...(type === 'ACCOUCHEMENT'
+        ? {
+            ...(dateHeureEntree ? { dateHeureEntree } : {}),
+            ...(enfantPrecedent ? { enfantPrecedent } : {}),
+            ...(intervalleGrossessesMois
+              ? { intervalleGrossessesMois: Number(intervalleGrossessesMois) }
+              : {}),
+            ...(lieuAccouchement ? { lieuAccouchement } : {}),
+            ...(natureAccouchement ? { natureAccouchement } : {}),
+            ...(presentation ? { presentation } : {}),
+            ...(modeAccouchement ? { modeAccouchement } : {}),
+            gatpa,
+            ...(avortementType ? { avortementType } : {}),
+            ...(methodeEvacuationAvortement ? { methodeEvacuationAvortement } : {}),
+            albendazoleMebendazole,
+            ...(dureeTravailHeures ? { dureeTravailHeures: Number(dureeTravailHeures) } : {}),
+            ...(assistePar ? { assistePar } : {}),
+            vitamineA,
+            ...(issueGrossesse ? { issueGrossesse } : {}),
+            ...(sexeNouveauNe ? { sexeNouveauNe } : {}),
+            misAuSein,
+            smk,
+            tetracyclinePommade,
+            chlorhexidineDigluconate,
+            ...(poidsNaissanceG ? { poidsNaissanceG: Number(poidsNaissanceG) } : {}),
+            ...(tailleNaissanceCm ? { tailleNaissanceCm: Number(tailleNaissanceCm) } : {}),
+            ...(apgar1min ? { apgar1min: Number(apgar1min) } : {}),
+            ...(apgar5min ? { apgar5min: Number(apgar5min) } : {}),
+            ...(perimetreCranienCm ? { perimetreCranienCm: Number(perimetreCranienCm) } : {}),
+            reanimationNouveauNe,
+            ...(decesNouveauNeDelai ? { decesNouveauNeDelai } : {}),
+            ...(causesDeces ? { causesDeces } : {}),
+            ...(decesMaternelMoment ? { decesMaternelMoment } : {}),
+            ...(causesDecesMaternel ? { causesDecesMaternel } : {}),
+            ...(praticienQualification ? { praticienQualification } : {}),
+            ...(complicationsAccouchement ? { complicationsAccouchement } : {}),
+            ...(complicationsNouveauNe ? { complicationsNouveauNe } : {}),
+            episiotomie,
+            placentaComplet,
+          }
+        : {}),
+
+      ...(type === 'CPON'
+        ? {
+            ...(cponNumeroVisite ? { cponNumeroVisite: Number(cponNumeroVisite) } : {}),
+            ...(cponTypeCas ? { cponTypeCas } : {}),
+            ...(dateAccouchementCpon ? { dateAccouchementCpon } : {}),
+            ...(joursPostPartum ? { joursPostPartum: Number(joursPostPartum) } : {}),
+            ...(poidsKg ? { poidsKg: Number(poidsKg) } : {}),
+            ...(tensionArterielle ? { tensionArterielle } : {}),
+            ...(temperatureC ? { temperatureC: Number(temperatureC) } : {}),
+            ...(etatSeins ? { etatSeins } : {}),
+            ...(etatConjonctives ? { etatConjonctives } : {}),
+            ...(involutionUterine ? { involutionUterine } : {}),
+            ...(etatLochies ? { etatLochies } : {}),
+            ...(etatPerinee ? { etatPerinee } : {}),
+            ...(etatCol ? { etatCol } : {}),
+            albendazoleMebendazole,
+            ...(maladieDetectee ? { maladieDetectee } : {}),
+            ...(allaitement ? { allaitement } : {}),
+            ...(planificationFamiliale ? { planificationFamiliale } : {}),
+            ...(etatNouveauNeCpon ? { etatNouveauNeCpon } : {}),
+            vaccinationBcgFait,
+          }
+        : {}),
+    };
+
+    const url = `/api/patients/${params.id}/maternite`;
+
+    // Already known to be offline — queue immediately rather than letting a
+    // doomed request time out first.
+    if (typeof navigator !== 'undefined' && !navigator.onLine) {
+      await queueMutation({ url, body, resourceLabel: 'Fiche de maternité' });
+      toast('Enregistré hors-ligne — sera synchronisé automatiquement.');
+      router.push(`/patients/${params.id}`);
+      setSubmitting(false);
+      return;
+    }
+
     try {
-      await api(`/api/patients/${params.id}/maternite`, {
-        method: 'POST',
-        body: {
-          type,
-          ...(gestite ? { gestite: Number(gestite) } : {}),
-          ...(parite ? { parite: Number(parite) } : {}),
-          ...(dpa ? { dpa } : {}),
-          ...(ddr ? { ddr } : {}),
-          ...(statutMatrimonial ? { statutMatrimonial } : {}),
-          ...(profession ? { profession } : {}),
-          ...(observations ? { observations } : {}),
-          ...(type !== 'CPON'
-            ? {
-                indigent,
-                ...(telephoneContact ? { telephoneContact } : {}),
-                ...(localisationPrecise ? { localisationPrecise } : {}),
-              }
-            : {}),
-
-          ...(type === 'CPN'
-            ? {
-                ...(cpnNumeroVisite ? { cpnNumeroVisite: Number(cpnNumeroVisite) } : {}),
-                ...(ageGestationnelSemaines
-                  ? { ageGestationnelSemaines: Number(ageGestationnelSemaines) }
-                  : {}),
-                ...(poidsKg ? { poidsKg: Number(poidsKg) } : {}),
-                ...(tailleCm ? { tailleCm: Number(tailleCm) } : {}),
-                ...(perimetreBrachialCm
-                  ? { perimetreBrachialCm: Number(perimetreBrachialCm) }
-                  : {}),
-                ...(temperatureC ? { temperatureC: Number(temperatureC) } : {}),
-                ...(tensionArterielle ? { tensionArterielle } : {}),
-                ...(hauteurUterineCm ? { hauteurUterineCm: Number(hauteurUterineCm) } : {}),
-                ...(bruitsCoeurFoetal ? { bruitsCoeurFoetal } : {}),
-                ...(mouvementsFoetaux ? { mouvementsFoetaux } : {}),
-                oedemes,
-                ...(nombreAvortements ? { nombreAvortements: Number(nombreAvortements) } : {}),
-                ...(nombreEnfantsVivants
-                  ? { nombreEnfantsVivants: Number(nombreEnfantsVivants) }
-                  : {}),
-                ...(groupeSanguin ? { groupeSanguin } : {}),
-                ...(testEmmel ? { testEmmel } : {}),
-                ...(bw ? { bw } : {}),
-                ...(tauxHb ? { tauxHb: Number(tauxHb) } : {}),
-                ...(tpiDose ? { tpiDose: Number(tpiDose) } : {}),
-                moustiquaireImpregnee,
-                ...(vatDose ? { vatDose: Number(vatDose) } : {}),
-                ferAcideFolique,
-                ...(ferAcideFoliqueDoseNumero
-                  ? { ferAcideFoliqueDoseNumero: Number(ferAcideFoliqueDoseNumero) }
-                  : {}),
-                albendazoleMebendazole,
-                ...(albuminurie ? { albuminurie } : {}),
-                ...(glycosurie ? { glycosurie } : {}),
-                ...(vih ? { vih } : {}),
-                ...(planAccouchement ? { planAccouchement } : {}),
-                ...(risqueGrossesse ? { risqueGrossesse } : {}),
-                ...(maladieDetectee ? { maladieDetectee } : {}),
-                ...(prochainRdv ? { prochainRdv } : {}),
-              }
-            : {}),
-
-          ...(type === 'ACCOUCHEMENT'
-            ? {
-                ...(dateHeureEntree ? { dateHeureEntree } : {}),
-                ...(enfantPrecedent ? { enfantPrecedent } : {}),
-                ...(intervalleGrossessesMois
-                  ? { intervalleGrossessesMois: Number(intervalleGrossessesMois) }
-                  : {}),
-                ...(lieuAccouchement ? { lieuAccouchement } : {}),
-                ...(natureAccouchement ? { natureAccouchement } : {}),
-                ...(presentation ? { presentation } : {}),
-                ...(modeAccouchement ? { modeAccouchement } : {}),
-                gatpa,
-                ...(avortementType ? { avortementType } : {}),
-                ...(methodeEvacuationAvortement ? { methodeEvacuationAvortement } : {}),
-                albendazoleMebendazole,
-                ...(dureeTravailHeures ? { dureeTravailHeures: Number(dureeTravailHeures) } : {}),
-                ...(assistePar ? { assistePar } : {}),
-                vitamineA,
-                ...(issueGrossesse ? { issueGrossesse } : {}),
-                ...(sexeNouveauNe ? { sexeNouveauNe } : {}),
-                misAuSein,
-                smk,
-                tetracyclinePommade,
-                chlorhexidineDigluconate,
-                ...(poidsNaissanceG ? { poidsNaissanceG: Number(poidsNaissanceG) } : {}),
-                ...(tailleNaissanceCm ? { tailleNaissanceCm: Number(tailleNaissanceCm) } : {}),
-                ...(apgar1min ? { apgar1min: Number(apgar1min) } : {}),
-                ...(apgar5min ? { apgar5min: Number(apgar5min) } : {}),
-                ...(perimetreCranienCm ? { perimetreCranienCm: Number(perimetreCranienCm) } : {}),
-                reanimationNouveauNe,
-                ...(decesNouveauNeDelai ? { decesNouveauNeDelai } : {}),
-                ...(causesDeces ? { causesDeces } : {}),
-                ...(decesMaternelMoment ? { decesMaternelMoment } : {}),
-                ...(causesDecesMaternel ? { causesDecesMaternel } : {}),
-                ...(praticienQualification ? { praticienQualification } : {}),
-                ...(complicationsAccouchement ? { complicationsAccouchement } : {}),
-                ...(complicationsNouveauNe ? { complicationsNouveauNe } : {}),
-                episiotomie,
-                placentaComplet,
-              }
-            : {}),
-
-          ...(type === 'CPON'
-            ? {
-                ...(cponNumeroVisite ? { cponNumeroVisite: Number(cponNumeroVisite) } : {}),
-                ...(cponTypeCas ? { cponTypeCas } : {}),
-                ...(dateAccouchementCpon ? { dateAccouchementCpon } : {}),
-                ...(joursPostPartum ? { joursPostPartum: Number(joursPostPartum) } : {}),
-                ...(poidsKg ? { poidsKg: Number(poidsKg) } : {}),
-                ...(tensionArterielle ? { tensionArterielle } : {}),
-                ...(temperatureC ? { temperatureC: Number(temperatureC) } : {}),
-                ...(etatSeins ? { etatSeins } : {}),
-                ...(etatConjonctives ? { etatConjonctives } : {}),
-                ...(involutionUterine ? { involutionUterine } : {}),
-                ...(etatLochies ? { etatLochies } : {}),
-                ...(etatPerinee ? { etatPerinee } : {}),
-                ...(etatCol ? { etatCol } : {}),
-                albendazoleMebendazole,
-                ...(maladieDetectee ? { maladieDetectee } : {}),
-                ...(allaitement ? { allaitement } : {}),
-                ...(planificationFamiliale ? { planificationFamiliale } : {}),
-                ...(etatNouveauNeCpon ? { etatNouveauNeCpon } : {}),
-                vaccinationBcgFait,
-              }
-            : {}),
-        },
-      });
+      await api(url, { method: 'POST', body });
       toast('Fiche de maternité enregistrée avec succès.');
       router.push(`/patients/${params.id}`);
     } catch (err) {
+      // status === 0 is api.ts's own signal for a network-layer failure
+      // (request never reached the server) — treat it as a dropped
+      // connection mid-submit, not a validation/business rejection.
+      if (err instanceof ApiError && err.status === 0) {
+        await queueMutation({ url, body, resourceLabel: 'Fiche de maternité' });
+        toast('Enregistré hors-ligne — sera synchronisé automatiquement.');
+        router.push(`/patients/${params.id}`);
+        setSubmitting(false);
+        return;
+      }
       setError(
         err instanceof ApiError && err.code === 'REGISTER_CLOSED'
           ? 'Le registre de ce type est déjà clôturé pour ce mois — impossible d’ajouter une fiche.'

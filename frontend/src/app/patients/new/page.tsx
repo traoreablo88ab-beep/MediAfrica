@@ -5,6 +5,7 @@ import { useRouter } from 'next/navigation';
 import Link from 'next/link';
 import { api, ApiError } from '@/lib/api';
 import { friendlyError } from '@/lib/errorMessages';
+import { queueMutation } from '@/lib/offlineQueue';
 import { AppHeader } from '@/components/AppHeader';
 import { useToast } from '@/contexts/ToastContext';
 
@@ -62,37 +63,63 @@ export default function NewPatientPage() {
   async function submitPatient(force: boolean) {
     setSubmitting(true);
     setError(null);
-    try {
-      // Only the age is asked (common in this context — exact birthdates are
-      // often unknown). Approximated as Jan 1st of the birth year, since the
-      // Patient model still needs a dateNaissance to compute age elsewhere.
-      const birthYear = new Date().getFullYear() - Number(age);
-      const dateNaissance = `${birthYear}-01-01`;
 
-      const created = await api<{ id: string }>('/api/patients', {
-        method: 'POST',
-        body: {
-          nom,
-          prenom,
-          dateNaissance,
-          sexe,
-          telephonePrincipal,
-          ...(telephoneSecondaire ? { telephoneSecondaire } : {}),
-          communeResidence,
-          ...(quartierVillage ? { quartierVillage } : {}),
-          ...(contactUrgence ? { contactUrgenceNom: contactUrgence } : {}),
-          ...(numeroRamed ? { numeroRamed } : {}),
-          ...(numeroAmo ? { numeroAmo } : {}),
-          ...(groupeSanguin !== 'Inconnu' ? { groupeSanguin } : {}),
-          ...(allergiesConnues ? { allergiesConnues } : {}),
-          ...(antecedentsPersonnels ? { antecedentsPersonnels } : {}),
-          ...(antecedentsFamiliaux ? { antecedentsFamiliaux } : {}),
-          ...(force ? { force: true } : {}),
-        },
-      });
+    // Only the age is asked (common in this context — exact birthdates are
+    // often unknown). Approximated as Jan 1st of the birth year, since the
+    // Patient model still needs a dateNaissance to compute age elsewhere.
+    const birthYear = new Date().getFullYear() - Number(age);
+    const dateNaissance = `${birthYear}-01-01`;
+
+    const url = '/api/patients';
+    const body = {
+      nom,
+      prenom,
+      dateNaissance,
+      sexe,
+      telephonePrincipal,
+      ...(telephoneSecondaire ? { telephoneSecondaire } : {}),
+      communeResidence,
+      ...(quartierVillage ? { quartierVillage } : {}),
+      ...(contactUrgence ? { contactUrgenceNom: contactUrgence } : {}),
+      ...(numeroRamed ? { numeroRamed } : {}),
+      ...(numeroAmo ? { numeroAmo } : {}),
+      ...(groupeSanguin !== 'Inconnu' ? { groupeSanguin } : {}),
+      ...(allergiesConnues ? { allergiesConnues } : {}),
+      ...(antecedentsPersonnels ? { antecedentsPersonnels } : {}),
+      ...(antecedentsFamiliaux ? { antecedentsFamiliaux } : {}),
+      ...(force ? { force: true } : {}),
+    };
+
+    // Already known to be offline — queue immediately rather than letting a
+    // doomed request time out first. Unlike the other register forms, there
+    // is no server-assigned patient id yet to redirect to, and the
+    // DUPLICATE_PATIENT check can't run client-side — a genuine duplicate
+    // created twice offline surfaces later as a "failed" item in the
+    // offline-queue badge for staff to review at sync time.
+    if (typeof navigator !== 'undefined' && !navigator.onLine) {
+      await queueMutation({ url, body, resourceLabel: 'Patient' });
+      toast('Enregistré hors-ligne — sera synchronisé automatiquement.');
+      router.push('/patients');
+      setSubmitting(false);
+      return;
+    }
+
+    try {
+      const created = await api<{ id: string }>(url, { method: 'POST', body });
       toast('Patient créé avec succès.');
       router.push(`/patients/${created.id}`);
     } catch (err) {
+      // status === 0 is api.ts's own signal for a network-layer failure
+      // (request never reached the server) — treat it as a dropped
+      // connection mid-submit, not a validation/business rejection. Checked
+      // before DUPLICATE_PATIENT since a network failure has no `.code`.
+      if (err instanceof ApiError && err.status === 0) {
+        await queueMutation({ url, body, resourceLabel: 'Patient' });
+        toast('Enregistré hors-ligne — sera synchronisé automatiquement.');
+        router.push('/patients');
+        setSubmitting(false);
+        return;
+      }
       if (err instanceof ApiError && err.code === 'DUPLICATE_PATIENT') {
         setDuplicateWarning({
           message: typeof err.body.message === 'string' ? err.body.message : friendlyError(err),

@@ -5,9 +5,17 @@
 // with REGISTER_CLOSED once the current month's register for that specific
 // type (maternite-cpn | maternite-accouchement | maternite-cpon) has been
 // closed (frontend/src/lib/server/registers/closure.ts).
+//
+// Optional `Idempotency-Key` header — same pattern as
+// frontend/src/app/api/patients/[id]/consultations/route.ts, used by the
+// offline-queue sync path (frontend/src/lib/offlineQueue.ts). The fingerprint
+// includes the type-specific visit number/date fields (not just patientId+type)
+// since two legitimate same-day same-type fiches (e.g. different
+// cpnNumeroVisite) must not collide on the same idempotency key.
 export const runtime = 'nodejs';
 
 import 'server-only';
+import { createHash } from 'node:crypto';
 import { NextResponse, type NextRequest } from 'next/server';
 import { z } from 'zod';
 import { verifyCsrf } from '@/lib/server/auth';
@@ -16,6 +24,19 @@ import { requireActiveSubscription } from '@/lib/server/subscriptions/access-gua
 import { prisma } from '@/lib/server/prisma';
 import { isMonthClosed } from '@/lib/server/registers/closure';
 import { makeRequestContext, withRequestContext } from '@/lib/server/observability/request-context';
+
+const IDEM_KEY_MAX_LEN = 200;
+
+function fingerprintBody(input: {
+  patientId: string;
+  type: string;
+  cpnNumeroVisite: number | null;
+  dateHeureEntree: string | null;
+  cponNumeroVisite: number | null;
+}): string {
+  const canonical = JSON.stringify(input);
+  return createHash('sha256').update(canonical).digest('hex');
+}
 
 const REGISTER_TYPE_BY_MATERNITE_TYPE: Record<string, string> = {
   CPN: 'maternite-cpn',
@@ -180,6 +201,51 @@ export async function POST(
       );
     }
 
+    const idemKey = req.headers.get('idempotency-key');
+    if (idemKey && idemKey.length > IDEM_KEY_MAX_LEN) {
+      return NextResponse.json(
+        {
+          error: 'IDEMPOTENCY_KEY_INVALID',
+          message: `Idempotency-Key exceeds ${IDEM_KEY_MAX_LEN} characters`,
+        },
+        { status: 400, headers: { 'x-request-id': reqCtx.requestId } },
+      );
+    }
+    const bodyHash = fingerprintBody({
+      patientId,
+      type: d.type,
+      cpnNumeroVisite: d.cpnNumeroVisite ?? null,
+      dateHeureEntree: d.dateHeureEntree ? d.dateHeureEntree.toISOString() : null,
+      cponNumeroVisite: d.cponNumeroVisite ?? null,
+    });
+    if (idemKey) {
+      const existing = await prisma.maternite.findUnique({
+        where: { idempotencyKey: idemKey },
+        include: { patient: { select: { organizationId: true } } },
+      });
+      if (existing) {
+        const sameTenant = existing.patient.organizationId === auth.orgMember.organizationId;
+        if (!sameTenant || existing.idempotencyBodyHash !== bodyHash) {
+          return NextResponse.json(
+            {
+              error: 'IDEMPOTENCY_KEY_BODY_MISMATCH',
+              message: 'Idempotency-Key already used for a different request.',
+            },
+            { status: 422, headers: { 'x-request-id': reqCtx.requestId } },
+          );
+        }
+        return NextResponse.json(
+          {
+            id: existing.id,
+            patientId: existing.patientId,
+            date: existing.date.toISOString(),
+            type: existing.type,
+          },
+          { status: 200, headers: { 'x-request-id': reqCtx.requestId } },
+        );
+      }
+    }
+
     const maternite = await prisma.maternite.create({
       data: {
         patientId,
@@ -302,6 +368,7 @@ export async function POST(
         ...(d.planificationFamiliale ? { planificationFamiliale: d.planificationFamiliale } : {}),
         ...(d.etatNouveauNeCpon ? { etatNouveauNeCpon: d.etatNouveauNeCpon } : {}),
         ...(d.vaccinationBcgFait !== undefined ? { vaccinationBcgFait: d.vaccinationBcgFait } : {}),
+        ...(idemKey ? { idempotencyKey: idemKey, idempotencyBodyHash: bodyHash } : {}),
       },
     });
 

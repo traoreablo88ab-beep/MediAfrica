@@ -5,6 +5,7 @@ import { useParams, useRouter } from 'next/navigation';
 import Link from 'next/link';
 import { api, ApiError } from '@/lib/api';
 import { friendlyError } from '@/lib/errorMessages';
+import { queueMutation } from '@/lib/offlineQueue';
 import { AppHeader } from '@/components/AppHeader';
 import { useToast } from '@/contexts/ToastContext';
 
@@ -138,11 +139,33 @@ export default function NewVaccinationPage() {
       ...(observations ? { observations } : {}),
     };
 
+    const url = `/api/patients/${params.id}/vaccination`;
+
+    // Already known to be offline — queue immediately rather than letting a
+    // doomed request time out first.
+    if (typeof navigator !== 'undefined' && !navigator.onLine) {
+      await queueMutation({ url, body, resourceLabel: 'Vaccination' });
+      toast('Enregistré hors-ligne — sera synchronisé automatiquement.');
+      router.push(`/patients/${params.id}`);
+      setSubmitting(false);
+      return;
+    }
+
     try {
-      await api(`/api/patients/${params.id}/vaccination`, { method: 'POST', body });
+      await api(url, { method: 'POST', body });
       toast('Vaccination enregistrée avec succès.');
       router.push(`/patients/${params.id}`);
     } catch (err) {
+      // status === 0 is api.ts's own signal for a network-layer failure
+      // (request never reached the server) — treat it as a dropped
+      // connection mid-submit, not a validation/business rejection.
+      if (err instanceof ApiError && err.status === 0) {
+        await queueMutation({ url, body, resourceLabel: 'Vaccination' });
+        toast('Enregistré hors-ligne — sera synchronisé automatiquement.');
+        router.push(`/patients/${params.id}`);
+        setSubmitting(false);
+        return;
+      }
       setError(
         err instanceof ApiError && err.code === 'REGISTER_CLOSED'
           ? 'Le registre de vaccination de ce mois est déjà clôturé — impossible d’ajouter une dose.'

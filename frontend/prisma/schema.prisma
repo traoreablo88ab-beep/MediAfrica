@@ -378,6 +378,10 @@ model Patient {
   antecedentsChirurgicaux String?
   antecedentsFamiliaux    String?
 
+  // Offline-queue replay safety — same pattern as Consultation.idempotencyKey.
+  idempotencyKey      String? @unique
+  idempotencyBodyHash String?
+
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
@@ -577,6 +581,10 @@ model Maternite {
   etatNouveauNeCpon      String? // Bien portant | Malade | Décédé
   vaccinationBcgFait     Boolean?
 
+  // Offline-queue replay safety — same pattern as Consultation.idempotencyKey.
+  idempotencyKey      String? @unique
+  idempotencyBodyHash String?
+
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
@@ -653,6 +661,10 @@ model Nutrition {
 
   visites    NutritionVisiteSuivi[] // URENI: quotidien, URENAS: hebdomadaire, URENAM: existant
   evenements NutritionEvenement[] // URENAS uniquement : VAD + référence/transfert
+
+  // Offline-queue replay safety — same pattern as Consultation.idempotencyKey.
+  idempotencyKey      String? @unique
+  idempotencyBodyHash String?
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
@@ -756,6 +768,10 @@ model Vaccination {
   prochainRdv  DateTime?
   observations String?
 
+  // Offline-queue replay safety — same pattern as Consultation.idempotencyKey.
+  idempotencyKey      String? @unique
+  idempotencyBodyHash String?
+
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
@@ -805,6 +821,10 @@ model Hospitalisation {
   structureReference   String?
   praticienResponsable String?
   observations         String?
+
+  // Offline-queue replay safety — same pattern as Consultation.idempotencyKey.
+  idempotencyKey      String? @unique
+  idempotencyBodyHash String?
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
@@ -856,6 +876,10 @@ model PlanificationFamiliale {
 
   prochainRdv  DateTime?
   observations String?
+
+  // Offline-queue replay safety — same pattern as Consultation.idempotencyKey.
+  idempotencyKey      String? @unique
+  idempotencyBodyHash String?
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt

@@ -5,9 +5,14 @@
 // as Nutrition/Maternite. Refuses with REGISTER_CLOSED once the current
 // month's vaccination register has been closed
 // (frontend/src/lib/server/registers/closure.ts).
+//
+// Optional `Idempotency-Key` header — same pattern as
+// frontend/src/app/api/patients/[id]/consultations/route.ts, used by the
+// offline-queue sync path (frontend/src/lib/offlineQueue.ts).
 export const runtime = 'nodejs';
 
 import 'server-only';
+import { createHash } from 'node:crypto';
 import { NextResponse, type NextRequest } from 'next/server';
 import { z } from 'zod';
 import { verifyCsrf } from '@/lib/server/auth';
@@ -18,6 +23,16 @@ import { isMonthClosed } from '@/lib/server/registers/closure';
 import { makeRequestContext, withRequestContext } from '@/lib/server/observability/request-context';
 
 const REGISTER_TYPE = 'vaccination';
+const IDEM_KEY_MAX_LEN = 200;
+
+function fingerprintBody(input: {
+  patientId: string;
+  antigene: string;
+  numeroDose: number | null;
+}): string {
+  const canonical = JSON.stringify(input);
+  return createHash('sha256').update(canonical).digest('hex');
+}
 
 const CreateVaccinationBody = z.object({
   antigene: z.string().trim().min(1),
@@ -94,6 +109,49 @@ export async function POST(
 
     const d = parsed.data;
 
+    const idemKey = req.headers.get('idempotency-key');
+    if (idemKey && idemKey.length > IDEM_KEY_MAX_LEN) {
+      return NextResponse.json(
+        {
+          error: 'IDEMPOTENCY_KEY_INVALID',
+          message: `Idempotency-Key exceeds ${IDEM_KEY_MAX_LEN} characters`,
+        },
+        { status: 400, headers: { 'x-request-id': reqCtx.requestId } },
+      );
+    }
+    const bodyHash = fingerprintBody({
+      patientId,
+      antigene: d.antigene,
+      numeroDose: d.numeroDose ?? null,
+    });
+    if (idemKey) {
+      const existing = await prisma.vaccination.findUnique({
+        where: { idempotencyKey: idemKey },
+        include: { patient: { select: { organizationId: true } } },
+      });
+      if (existing) {
+        const sameTenant = existing.patient.organizationId === auth.orgMember.organizationId;
+        if (!sameTenant || existing.idempotencyBodyHash !== bodyHash) {
+          return NextResponse.json(
+            {
+              error: 'IDEMPOTENCY_KEY_BODY_MISMATCH',
+              message: 'Idempotency-Key already used for a different request.',
+            },
+            { status: 422, headers: { 'x-request-id': reqCtx.requestId } },
+          );
+        }
+        return NextResponse.json(
+          {
+            id: existing.id,
+            patientId: existing.patientId,
+            date: existing.date.toISOString(),
+            antigene: existing.antigene,
+          },
+          { status: 200, headers: { 'x-request-id': reqCtx.requestId } },
+        );
+      }
+    }
+
     const vaccination = await prisma.vaccination.create({
       data: {
         patientId,
@@ -118,6 +176,7 @@ export async function POST(
         ...(d.pratiqueAme ? { pratiqueAme: d.pratiqueAme } : {}),
         ...(d.prochainRdv !== undefined ? { prochainRdv: d.prochainRdv } : {}),
         ...(d.observations ? { observations: d.observations } : {}),
+        ...(idemKey ? { idempotencyKey: idemKey, idempotencyBodyHash: bodyHash } : {}),
       },
     });
 

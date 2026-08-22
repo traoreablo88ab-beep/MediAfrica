@@ -1,3 +1,4 @@
+import { createHash } from 'node:crypto';
 import { prismaMock } from '@/test-utils/prisma-mock';
 import { mockNextCookies, __cookieStore } from '@/test-utils/mock-cookies';
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
@@ -22,12 +23,18 @@ function makeGet(url: string): NextRequest {
   return new NextRequest(url, { method: 'GET' });
 }
 
-function makePost(body: unknown, opts: { csrf?: 'match' | 'missing' } = {}): NextRequest {
+function makePost(
+  body: unknown,
+  opts: { csrf?: 'match' | 'missing'; idempotencyKey?: string } = {},
+): NextRequest {
   const csrf = opts.csrf ?? 'match';
   const headers: Record<string, string> = { 'content-type': 'application/json' };
   if (csrf === 'match') {
     headers['x-csrf-token'] = 'csrf-tok';
     headers['cookie'] = 'app-csrf=csrf-tok';
+  }
+  if (opts.idempotencyKey) {
+    headers['idempotency-key'] = opts.idempotencyKey;
   }
   return new NextRequest('http://test/api/patients', {
     method: 'POST',
@@ -248,5 +255,80 @@ describe('POST /api/patients', () => {
 
     expect(res.status).toBe(201);
     expect(prismaMock.patient.findFirst).not.toHaveBeenCalled();
+  });
+
+  describe('Idempotency-Key (offline-queue replay)', () => {
+    it('no header → unchanged behavior, no idempotency fields on create', async () => {
+      prismaMock.patient.count.mockResolvedValue(0 as never);
+      prismaMock.patient.create.mockResolvedValue(patientRow() as never);
+
+      const res = await POST(makePost(validBody));
+
+      expect(res.status).toBe(201);
+      expect(prismaMock.patient.findUnique).not.toHaveBeenCalled();
+      const createArg = prismaMock.patient.create.mock.calls[0]?.[0]?.data as Record<
+        string,
+        unknown
+      >;
+      expect(createArg.idempotencyKey).toBeUndefined();
+      expect(createArg.idempotencyBodyHash).toBeUndefined();
+    });
+
+    it('header + no existing row → creates and stores key/hash', async () => {
+      prismaMock.patient.findUnique.mockResolvedValue(null);
+      prismaMock.patient.count.mockResolvedValue(0 as never);
+      prismaMock.patient.create.mockResolvedValue(patientRow() as never);
+
+      const res = await POST(makePost(validBody, { idempotencyKey: 'idem-key-1' }));
+
+      expect(res.status).toBe(201);
+      const createArg = prismaMock.patient.create.mock.calls[0]?.[0]?.data as Record<
+        string,
+        unknown
+      >;
+      expect(createArg.idempotencyKey).toBe('idem-key-1');
+      expect(typeof createArg.idempotencyBodyHash).toBe('string');
+    });
+
+    it('header + matching replay → 200, no duplicate row created, skips the DUPLICATE_PATIENT check', async () => {
+      const bodyHash = createHash('sha256')
+        .update(
+          JSON.stringify({
+            nom: validBody.nom,
+            prenom: validBody.prenom,
+            dateNaissance: new Date(validBody.dateNaissance).toISOString(),
+            telephonePrincipal: validBody.telephonePrincipal,
+          }),
+        )
+        .digest('hex');
+      prismaMock.patient.findUnique.mockResolvedValue(
+        patientRow({ idempotencyBodyHash: bodyHash, organizationId: 'org-1' }) as never,
+      );
+
+      const res = await POST(makePost(validBody, { idempotencyKey: 'idem-key-1' }));
+
+      expect(res.status).toBe(200);
+      const body = await res.json();
+      expect(body.id).toBe('pt-1');
+      expect(prismaMock.patient.findFirst).not.toHaveBeenCalled();
+      expect(prismaMock.patient.create).not.toHaveBeenCalled();
+    });
+
+    it('header + mismatched body → 422 IDEMPOTENCY_KEY_BODY_MISMATCH', async () => {
+      prismaMock.patient.findUnique.mockResolvedValue(
+        patientRow({
+          nom: 'Autre',
+          idempotencyBodyHash: 'deadbeef',
+          organizationId: 'org-1',
+        }) as never,
+      );
+
+      const res = await POST(makePost(validBody, { idempotencyKey: 'idem-key-1' }));
+
+      expect(res.status).toBe(422);
+      const body = await res.json();
+      expect(body.error).toBe('IDEMPOTENCY_KEY_BODY_MISMATCH');
+      expect(prismaMock.patient.create).not.toHaveBeenCalled();
+    });
   });
 });
