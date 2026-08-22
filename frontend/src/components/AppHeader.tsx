@@ -13,7 +13,7 @@
 
 import { useEffect, useRef, useState, type ComponentType } from 'react';
 import Link from 'next/link';
-import { useRouter } from 'next/navigation';
+import { usePathname, useRouter } from 'next/navigation';
 import { useAuth } from '@/contexts/AuthContext';
 import { api } from '@/lib/api';
 import { useOfflineQueue } from '@/lib/offlineQueue';
@@ -25,6 +25,7 @@ interface SubscriptionInfo {
 }
 
 const DAY_MS = 24 * 60 * 60 * 1000;
+const ECHELON_STORAGE_KEY = 'mediafrica-echelon';
 
 function daysRemaining(iso: string): number {
   return Math.ceil((new Date(iso).getTime() - Date.now()) / DAY_MS);
@@ -232,14 +233,32 @@ function initials(label: string): string {
   return (first + last).toUpperCase() || '?';
 }
 
-function StatusPill() {
+// Staff pick their échelon explicitly (persisted per-browser — see
+// ECHELON_STORAGE_KEY) rather than it being inferred from the current page,
+// since most pages here (dashboard, patients, the shared registers) carry
+// no échelon distinction at all and can't drive an automatic guess.
+function StatusPill({
+  echelon,
+  onChange,
+}: {
+  echelon: 'CSRéf' | 'CSCom';
+  onChange: (value: 'CSRéf' | 'CSCom') => void;
+}) {
   return (
-    <span className="inline-flex items-center gap-1.5 rounded-full border border-[#e1e0d9] bg-[#2a78d6]/5 px-2.5 py-0.5 text-xs font-medium text-[#52514e]">
-      <span className="relative flex h-1.5 w-1.5">
+    <span className="inline-flex items-center gap-1.5 rounded-full border border-[#e1e0d9] bg-[#2a78d6]/5 px-2 py-0.5 text-xs font-medium text-[#52514e]">
+      <span className="relative flex h-1.5 w-1.5 shrink-0">
         <span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-[#0ca30c] opacity-75" />
         <span className="relative inline-flex h-1.5 w-1.5 rounded-full bg-[#0ca30c]" />
       </span>
-      CSRéf
+      <select
+        aria-label="Échelon"
+        value={echelon}
+        onChange={(e) => onChange(e.target.value as 'CSRéf' | 'CSCom')}
+        className="cursor-pointer rounded bg-transparent text-xs font-medium text-[#52514e] focus:outline-none"
+      >
+        <option value="CSRéf">CSRéf</option>
+        <option value="CSCom">CSCom</option>
+      </select>
     </span>
   );
 }
@@ -391,7 +410,39 @@ function NavLink({
 export function AppHeader({ active }: { active?: AppNavTab }) {
   const { user, logout } = useAuth();
   const router = useRouter();
+  const pathname = usePathname();
+  const [echelon, setEchelon] = useState<'CSRéf' | 'CSCom'>('CSRéf');
   const displayName = user?.name ?? user?.email ?? '';
+
+  // Staff's explicit CSRéf/CSCom choice, persisted per-browser. First visit
+  // (no stored preference yet) falls back to guessing from the current page
+  // so someone landing straight on a CSCom page/link isn't shown the wrong
+  // default — after that, the stored choice always wins until changed again.
+  useEffect(() => {
+    let stored: string | null = null;
+    try {
+      stored = localStorage.getItem(ECHELON_STORAGE_KEY);
+    } catch {
+      // Private browsing / storage disabled — fall through to the guess below.
+    }
+    if (stored === 'CSRéf' || stored === 'CSCom') {
+      setEchelon(stored);
+    } else if (
+      pathname.startsWith('/registres/cscom') ||
+      pathname.startsWith('/registres/rma/cscom')
+    ) {
+      setEchelon('CSCom');
+    }
+  }, []);
+
+  function onEchelonChange(value: 'CSRéf' | 'CSCom') {
+    setEchelon(value);
+    try {
+      localStorage.setItem(ECHELON_STORAGE_KEY, value);
+    } catch {
+      // Private browsing / storage disabled — the choice just won't persist.
+    }
+  }
   const [mobileOpen, setMobileOpen] = useState(false);
   const panelRef = useRef<HTMLDivElement>(null);
   const [subscriptionInfo, setSubscriptionInfo] = useState<SubscriptionInfo | null>(null);
@@ -464,7 +515,7 @@ export function AppHeader({ active }: { active?: AppNavTab }) {
           <Wordmark className="text-[#0b0b0b]" />
         </div>
         <div className="flex flex-wrap items-center gap-2 px-5 py-3">
-          <StatusPill />
+          <StatusPill echelon={echelon} onChange={onEchelonChange} />
           <SubscriptionBadge info={subscriptionInfo} />
           <SyncBadge />
         </div>
@@ -531,7 +582,7 @@ export function AppHeader({ active }: { active?: AppNavTab }) {
             <Logo />
             <Wordmark className="text-[#0b0b0b]" />
             <span className="hidden items-center gap-2 sm:inline-flex">
-              <StatusPill />
+              <StatusPill echelon={echelon} onChange={onEchelonChange} />
               <SubscriptionBadge info={subscriptionInfo} />
               <SyncBadge />
             </span>
@@ -568,7 +619,7 @@ export function AppHeader({ active }: { active?: AppNavTab }) {
         {mobileOpen && (
           <nav className="flex flex-col gap-1 border-t border-[#e1e0d9] px-4 py-3 md:hidden">
             <div className="mb-2 flex items-center gap-2 px-1 sm:hidden">
-              <StatusPill />
+              <StatusPill echelon={echelon} onChange={onEchelonChange} />
               <SubscriptionBadge info={subscriptionInfo} />
               <SyncBadge />
             </div>
