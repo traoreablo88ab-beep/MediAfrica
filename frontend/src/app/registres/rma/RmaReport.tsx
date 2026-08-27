@@ -781,15 +781,21 @@ function buildMorbiditeCounts(rows: ConsultationRow[]): AgeSexCountRow[] {
   return out;
 }
 
-// "Prise en charge du Paludisme" (RMA, tableau à 2 colonnes d'âge — voir
-// isUnder5At). `predicate: null` → ligne non calculable (aucun champ
+// "Prise en charge du Paludisme" (RMA) — 3 colonnes : "0-4 ans" et "5 ans et
+// plus" (mutuellement exclusives, voir isUnder5At), plus "Y compris les FE"
+// (femmes enceintes) — une catégorie de surveillance à part, pas une
+// sous-tranche d'âge (une FE compte à la fois dans sa tranche d'âge ET dans
+// cette colonne). MediAfrica ne trace pas le statut de grossesse sur la
+// consultation, donc cette colonne reste toujours "—" (non calculable),
+// même convention que RmaLine.value === null.
+// `predicate: null` → ligne non calculable pour 0-4/5+ aussi (aucun champ
 // MediAfrica correspondant, ex. traitement CTA administré, hospitalisation
-// liée, rupture de stock, personnel formé) → "—", même convention que
-// RmaLine.value === null.
+// liée, rupture de stock, personnel formé) → "—".
 interface PaludismeAgeRow {
   label: string;
   v0a4: number | null;
   v5plus: number | null;
+  vFE: number | null;
 }
 
 function paludismeAgeRow(
@@ -797,7 +803,7 @@ function paludismeAgeRow(
   rows: ConsultationRow[],
   predicate: ((c: ConsultationRow) => boolean) | null,
 ): PaludismeAgeRow {
-  if (!predicate) return { label, v0a4: null, v5plus: null };
+  if (!predicate) return { label, v0a4: null, v5plus: null, vFE: null };
   let v0a4 = 0;
   let v5plus = 0;
   for (const c of rows) {
@@ -805,7 +811,7 @@ function paludismeAgeRow(
     if (isUnder5At(c.patient.dateNaissance, c.date)) v0a4 += 1;
     else v5plus += 1;
   }
-  return { label, v0a4, v5plus };
+  return { label, v0a4, v5plus, vFE: null };
 }
 
 // Tout codeAffection signalant une suspicion de paludisme (testé ou codé
@@ -1738,7 +1744,10 @@ export function RmaReport({ defaultEchelon }: { defaultEchelon: 'CSRéf' | 'CSCo
                     <th className="px-4 py-2 text-left font-medium text-[#52514e]"></th>
                     <th className="px-4 py-2 text-right font-medium text-[#52514e]">0-4 ans</th>
                     <th className="px-4 py-2 text-right font-medium text-[#52514e]">
-                      5 ans et plus, y compris les FE
+                      5 ans et plus
+                    </th>
+                    <th className="px-4 py-2 text-right font-medium text-[#52514e]">
+                      Y compris les FE
                     </th>
                   </tr>
                 </thead>
@@ -1756,6 +1765,9 @@ export function RmaReport({ defaultEchelon }: { defaultEchelon: 'CSRéf' | 'CSCo
                       </td>
                       <td className="px-4 py-2 text-right font-semibold text-[#0b0b0b]">
                         {row.v5plus ?? '—'}
+                      </td>
+                      <td className="px-4 py-2 text-right font-semibold text-[#0b0b0b]">
+                        {row.vFE ?? '—'}
                       </td>
                     </tr>
                   ))}
@@ -1779,13 +1791,16 @@ export function RmaReport({ defaultEchelon }: { defaultEchelon: 'CSRéf' | 'CSCo
             </dl>
             <p className="border-t border-[#e1e0d9] px-4 py-3 text-xs leading-relaxed text-[#898781]">
               Reprend le tableau « Prise en charge du Paludisme » du RMA (page 14 du 2ème échelon /
-              CSRéf, pages 19-20 du 1er échelon / CSCom). Les lignes traitement CTA/Artésunate,
-              hospitalisation liée au paludisme, et le bloc « Informations générales » (rupture de
-              stock CTA, personnel formé, ASC) n'ont pas de champ correspondant dans MediAfrica —
-              affichées « — », à compléter à la main. « Cas suspects... dans la formation sanitaire
-              » est une approximation (toute consultation testée TDR/GE ou codée paludisme). « Cas
-              de décès toutes causes confondues » ne compte que les décès vus en consultation — pas
-              ceux en hospitalisation ou maternité. Les lignes MILD/TPI-SP viennent des fiches CPN
+              CSRéf, pages 19-20 du 1er échelon / CSCom). La colonne « Y compris les FE » (femmes
+              enceintes) est toujours « — » : MediAfrica ne trace pas le statut de grossesse sur la
+              consultation ; une FE compte dans sa tranche d'âge (0-4/5 ans et plus) mais pas dans
+              cette colonne. Les lignes traitement CTA/Artésunate, hospitalisation liée au
+              paludisme, et le bloc « Informations générales » (rupture de stock CTA, personnel
+              formé, ASC) n'ont pas non plus de champ correspondant dans MediAfrica — affichées « —
+              », à compléter à la main. « Cas suspects... dans la formation sanitaire » est une
+              approximation (toute consultation testée TDR/GE ou codée paludisme). « Cas de décès
+              toutes causes confondues » ne compte que les décès vus en consultation — pas ceux en
+              hospitalisation ou maternité. Les lignes MILD/TPI-SP viennent des fiches CPN
               (Maternite), pas de la consultation — elles ne suivent donc pas le filtre Échelon
               ci-dessus.
             </p>
