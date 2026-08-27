@@ -59,6 +59,18 @@ function ageBracketAt(dateNaissanceIso: string, atIso: string): AgeBracket {
   return '60 ans et plus';
 }
 
+// Tranches propres au tableau "Prise en charge du Paludisme" (RMA, page 14
+// du 2ème échelon / pages 19-20 du 1er échelon) — seulement 2 colonnes,
+// "0-4 ans" et "5 ans et plus, y compris les femmes enceintes" (pas de
+// répartition par sexe ni les 6 tranches de AGE_BRACKETS).
+function isUnder5At(dateNaissanceIso: string, atIso: string): boolean {
+  const dob = new Date(dateNaissanceIso);
+  const at = new Date(atIso);
+  let months = (at.getFullYear() - dob.getFullYear()) * 12 + (at.getMonth() - dob.getMonth());
+  if (at.getDate() < dob.getDate()) months -= 1;
+  return Math.max(months, 0) < 60;
+}
+
 interface ConsultationRow {
   date: string;
   typeCas: string | null;
@@ -81,6 +93,8 @@ interface MaterniteRow {
   reanimationNouveauNe: boolean | null;
   assistePar: string | null;
   poidsNaissanceG: number | null;
+  tpiDose: number | null;
+  moustiquaireImpregnee: boolean | null;
 }
 
 interface NutritionSummaryRow {
@@ -767,6 +781,44 @@ function buildMorbiditeCounts(rows: ConsultationRow[]): AgeSexCountRow[] {
   return out;
 }
 
+// "Prise en charge du Paludisme" (RMA, tableau à 2 colonnes d'âge — voir
+// isUnder5At). `predicate: null` → ligne non calculable (aucun champ
+// MediAfrica correspondant, ex. traitement CTA administré, hospitalisation
+// liée, rupture de stock, personnel formé) → "—", même convention que
+// RmaLine.value === null.
+interface PaludismeAgeRow {
+  label: string;
+  v0a4: number | null;
+  v5plus: number | null;
+}
+
+function paludismeAgeRow(
+  label: string,
+  rows: ConsultationRow[],
+  predicate: ((c: ConsultationRow) => boolean) | null,
+): PaludismeAgeRow {
+  if (!predicate) return { label, v0a4: null, v5plus: null };
+  let v0a4 = 0;
+  let v5plus = 0;
+  for (const c of rows) {
+    if (!predicate(c)) continue;
+    if (isUnder5At(c.patient.dateNaissance, c.date)) v0a4 += 1;
+    else v5plus += 1;
+  }
+  return { label, v0a4, v5plus };
+}
+
+// Tout codeAffection signalant une suspicion de paludisme (testé ou codé
+// cliniquement) — sert à approximer "Cas suspects de paludisme dans la
+// formation sanitaire", qui n'a pas de champ dédié dans MediAfrica.
+const PALUDISME_SUSPECT_CODES = new Set([
+  'Paludisme suspect',
+  'Cas présumés de paludisme simple (diagnostic clinique)',
+  'Cas présumés de paludisme grave (diagnostic clinique)',
+  'Paludisme simple confirmé',
+  'Paludisme grave confirmé',
+]);
+
 function AgeSexTable({
   title,
   ageBrackets,
@@ -885,11 +937,13 @@ export function RmaReport({ defaultEchelon }: { defaultEchelon: 'CSRéf' | 'CSCo
   const clinicName = useClinicName();
   const [month, setMonth] = useState(currentMonth());
   const [consultations, setConsultations] = useState<ConsultationRow[]>([]);
-  // ACTIVITES CURATIVES / Morbidité / Paludisme / MDO are the only sections
-  // below sourced from Consultation (which carries echelon) — maternité,
-  // malnutrition, PF et vaccination n'ont pas cette notion et restent
-  // inchangées quel que soit le choix ici. Legacy untagged consultations
-  // default to CSRéf, same convention as /registres/consultation et /cscom.
+  // ACTIVITES CURATIVES / Morbidité / Tuberculose / Paludisme / MDO are the
+  // only sections below sourced from Consultation (which carries echelon) —
+  // maternité, malnutrition, PF et vaccination n'ont pas cette notion et
+  // restent inchangées quel que soit le choix ici (le tableau Paludisme
+  // emprunte aussi 5 lignes MILD/TPI-SP aux fiches CPN, donc pas filtrées
+  // non plus). Legacy untagged consultations default to CSRéf, same
+  // convention as /registres/consultation et /cscom.
   const [echelonFilter, setEchelonFilter] = useState<'CSRéf' | 'CSCom'>(defaultEchelon);
   const [cpn, setCpn] = useState<MaterniteRow[]>([]);
   const [accouchements, setAccouchements] = useState<MaterniteRow[]>([]);
@@ -1262,16 +1316,108 @@ export function RmaReport({ defaultEchelon }: { defaultEchelon: 'CSRéf' | 'CSCo
     },
   ];
 
-  const paludismeLines: RmaLine[] = [
+  // Tuberculose n'a pas de tableau dédié dans le RMA officiel — seulement 2
+  // lignes ("Tuberculose suspecte", "Tuberculose confirmée", chacune avec
+  // Cas + Décès) noyées dans les ~150 lignes du tableau Morbidité. Extraites
+  // ici pour leur donner une section visible propre — même donnée, pas de
+  // recalcul, pas de double comptage.
+  const tuberculoseCounts = morbiditeCounts.filter((r) => r.label.startsWith('Tuberculose'));
+
+  const paludismeAgeRows: PaludismeAgeRow[] = [
+    paludismeAgeRow(
+      'Cas suspects de paludisme dans la formation sanitaire',
+      filteredConsultations,
+      (c) => c.tdr !== null || c.ge !== null || PALUDISME_SUSPECT_CODES.has(c.codeAffection ?? ''),
+    ),
+    paludismeAgeRow(
+      'Cas suspects testés par TDR',
+      filteredConsultations,
+      (c) => c.tdr !== null && c.tdr !== 'Non fait',
+    ),
+    paludismeAgeRow(
+      'Cas suspects testés par GE/FM',
+      filteredConsultations,
+      (c) => c.ge !== null && c.ge !== 'Non fait',
+    ),
+    paludismeAgeRow(
+      'Cas simples confirmés par TDR',
+      filteredConsultations,
+      (c) => c.codeAffection === 'Paludisme simple confirmé' && c.tdr === 'Positif',
+    ),
+    paludismeAgeRow(
+      'Cas simples confirmés par GE/FM',
+      filteredConsultations,
+      (c) => c.codeAffection === 'Paludisme simple confirmé' && c.ge === 'Positif',
+    ),
+    paludismeAgeRow(
+      'Cas graves confirmés par TDR',
+      filteredConsultations,
+      (c) => c.codeAffection === 'Paludisme grave confirmé' && c.tdr === 'Positif',
+    ),
+    paludismeAgeRow(
+      'Cas graves confirmés par GE/FM',
+      filteredConsultations,
+      (c) => c.codeAffection === 'Paludisme grave confirmé' && c.ge === 'Positif',
+    ),
+    paludismeAgeRow('Cas simples confirmés traités avec les CTA', filteredConsultations, null),
+    paludismeAgeRow(
+      'Cas graves confirmés traités (Artésunate, Arthéméter ou quinine injectable)',
+      filteredConsultations,
+      null,
+    ),
+    paludismeAgeRow(
+      'Cas graves confirmés ayant pris les CTA en traitement de relais',
+      filteredConsultations,
+      null,
+    ),
+    paludismeAgeRow("Cas d'hospitalisation toutes causes confondues", filteredConsultations, null),
+    paludismeAgeRow(
+      "Cas d'hospitalisation pour paludisme grave confirmé",
+      filteredConsultations,
+      null,
+    ),
+    paludismeAgeRow(
+      'Cas de décès toutes causes confondues (vus en consultation)',
+      filteredConsultations,
+      (c) => c.deces === true,
+    ),
+    paludismeAgeRow(
+      'Cas de décès pour paludisme grave confirmé',
+      filteredConsultations,
+      (c) => c.codeAffection === 'Paludisme grave confirmé' && c.deces === true,
+    ),
+    paludismeAgeRow('Cas de décès pour paludisme grave hospitalisés', filteredConsultations, null),
+    paludismeAgeRow(
+      'Cas présumés de paludisme simple par diagnostic clinique',
+      filteredConsultations,
+      (c) => c.codeAffection === 'Cas présumés de paludisme simple (diagnostic clinique)',
+    ),
+    paludismeAgeRow(
+      'Cas présumés de paludisme grave par diagnostic clinique',
+      filteredConsultations,
+      (c) => c.codeAffection === 'Cas présumés de paludisme grave (diagnostic clinique)',
+    ),
+  ];
+
+  // MILD/TPI-SP sont saisis sur les fiches CPN (Maternite), pas sur la
+  // consultation — donc pas de filtrage par échelon (voir note d'avertissement).
+  const paludismeCpnLines: RmaLine[] = [
     {
-      label: 'Cas suspects testés (TDR ou GE)',
-      value: filteredConsultations.filter(
-        (c) => (c.tdr && c.tdr !== 'Non fait') || (c.ge && c.ge !== 'Non fait'),
-      ).length,
+      label: 'Femmes enceintes vues en CPN ayant reçu une MILD',
+      value: cpn.filter((m) => m.moustiquaireImpregnee === true).length,
+    },
+    { label: "Enfants de moins d'1 an ayant reçu une MILD au cours du PEV", value: null },
+    {
+      label: 'Femmes enceintes ayant reçu 1 dose de TPI/SP durant la CPN',
+      value: cpn.filter((m) => m.tpiDose === 1).length,
     },
     {
-      label: 'Cas confirmés (TDR ou GE positif)',
-      value: filteredConsultations.filter((c) => c.tdr === 'Positif' || c.ge === 'Positif').length,
+      label: 'Femmes enceintes ayant reçu 2 doses de TPI/SP durant la CPN',
+      value: cpn.filter((m) => m.tpiDose === 2).length,
+    },
+    {
+      label: 'Femmes enceintes ayant reçu 3 doses de TPI/SP et plus durant la CPN',
+      value: cpn.filter((m) => (m.tpiDose ?? 0) >= 3).length,
     },
   ];
 
@@ -1340,8 +1486,9 @@ export function RmaReport({ defaultEchelon }: { defaultEchelon: 'CSRéf' | 'CSCo
         <p className="mb-6 rounded-xl border border-[#e1e0d9] bg-white p-4 text-xs leading-relaxed text-[#52514e] print:hidden">
           Le sélecteur Échelon ci-dessus filtre les seules sections tirées des consultations —{' '}
           <strong>ACTIVITES CURATIVES</strong>, <strong>Morbidité et mortalité</strong>,{' '}
-          <strong>Paludisme (aperçu)</strong> et <strong>MDO</strong> — sur le tag CSRéf/CSCom
-          choisi à la saisie de chaque consultation (voir /registres/consultation et
+          <strong>Tuberculose</strong>, <strong>Prise en charge du Paludisme</strong> (à l'exception
+          des lignes MILD/TPI-SP, tirées des fiches CPN) et <strong>MDO</strong> — sur le tag
+          CSRéf/CSCom choisi à la saisie de chaque consultation (voir /registres/consultation et
           /registres/cscom) ; les consultations enregistrées avant l'ajout de ce champ comptent
           comme CSRéf par défaut. Les autres sections (grossesse/accouchement, malnutrition,
           planification familiale, vaccination) ne portent pas cette distinction dans MediAfrica et
@@ -1371,8 +1518,8 @@ export function RmaReport({ defaultEchelon }: { defaultEchelon: 'CSRéf' | 'CSCo
           couvre toutes les consultations du mois : chacune compte sous sa maladie si un code
           d'affection RMA lui a été assigné, sinon sous « Autres ». Les autres sections du RMA
           (RH/matériel/financier, urgences obstétricales, chirurgie, fistule, laboratoire,
-          lèpre/dracunculose/paludisme détaillé, pharmacie) restent hors périmètre de cette page —
-          la section Hygiène est disponible séparément sur{' '}
+          lèpre/dracunculose, pharmacie) restent hors périmètre de cette page — la section Hygiène
+          est disponible séparément sur{' '}
           <Link href="/registres/hygiene" className="text-[#2a78d6] hover:underline">
             /registres/hygiene
           </Link>
@@ -1441,6 +1588,13 @@ export function RmaReport({ defaultEchelon }: { defaultEchelon: 'CSRéf' | 'CSCo
             ageBrackets={AGE_BRACKETS}
             counts={morbiditeCounts}
             note={`Toute consultation ${echelonFilter} du mois est comptée ici : sous sa maladie si un code d'affection RMA lui a été assigné (depuis le formulaire de consultation ou directement depuis le registre), sinon sous « Autres — Cas ».`}
+          />
+
+          <AgeSexTable
+            title="Tuberculose"
+            ageBrackets={AGE_BRACKETS}
+            counts={tuberculoseCounts}
+            note="Les 2 lignes « Tuberculose » du tableau Morbidité ci-dessus, isolées ici pour plus de lisibilité — même donnée, pas de double comptage."
           />
 
           <div className="overflow-hidden rounded-xl border border-[#e1e0d9] bg-white shadow-[0_1px_2px_rgba(11,11,11,0.04)]">
@@ -1575,14 +1729,45 @@ export function RmaReport({ defaultEchelon }: { defaultEchelon: 'CSRéf' | 'CSCo
 
           <div className="overflow-hidden rounded-xl border border-[#e1e0d9] bg-white shadow-[0_1px_2px_rgba(11,11,11,0.04)]">
             <h2 className="border-b border-[#e1e0d9] bg-[#f9f9f7] px-4 py-2 text-sm font-semibold text-[#0b0b0b]">
-              Paludisme (aperçu)
+              Prise en charge du Paludisme
             </h2>
-            <dl>
-              {paludismeLines.map((line, i) => (
+            <div className="overflow-x-auto">
+              <table className="w-full text-sm">
+                <thead>
+                  <tr className="border-b border-[#e1e0d9] bg-[#f9f9f7]">
+                    <th className="px-4 py-2 text-left font-medium text-[#52514e]"></th>
+                    <th className="px-4 py-2 text-right font-medium text-[#52514e]">0-4 ans</th>
+                    <th className="px-4 py-2 text-right font-medium text-[#52514e]">
+                      5 ans et plus, y compris les FE
+                    </th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {paludismeAgeRows.map((row, i) => (
+                    <tr
+                      key={row.label}
+                      className={
+                        i !== paludismeAgeRows.length - 1 ? 'border-b border-[#e1e0d9]' : ''
+                      }
+                    >
+                      <td className="px-4 py-2 text-[#52514e]">{row.label}</td>
+                      <td className="px-4 py-2 text-right font-semibold text-[#0b0b0b]">
+                        {row.v0a4 ?? '—'}
+                      </td>
+                      <td className="px-4 py-2 text-right font-semibold text-[#0b0b0b]">
+                        {row.v5plus ?? '—'}
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+            <dl className="border-t border-[#e1e0d9]">
+              {paludismeCpnLines.map((line, i) => (
                 <div
                   key={line.label}
                   className={`flex items-center justify-between gap-4 px-4 py-3 text-sm ${
-                    i !== paludismeLines.length - 1 ? 'border-b border-[#e1e0d9]' : ''
+                    i !== paludismeCpnLines.length - 1 ? 'border-b border-[#e1e0d9]' : ''
                   }`}
                 >
                   <dt className="text-[#52514e]">{line.label}</dt>
@@ -1592,6 +1777,18 @@ export function RmaReport({ defaultEchelon }: { defaultEchelon: 'CSRéf' | 'CSCo
                 </div>
               ))}
             </dl>
+            <p className="border-t border-[#e1e0d9] px-4 py-3 text-xs leading-relaxed text-[#898781]">
+              Reprend le tableau « Prise en charge du Paludisme » du RMA (page 14 du 2ème échelon /
+              CSRéf, pages 19-20 du 1er échelon / CSCom). Les lignes traitement CTA/Artésunate,
+              hospitalisation liée au paludisme, et le bloc « Informations générales » (rupture de
+              stock CTA, personnel formé, ASC) n'ont pas de champ correspondant dans MediAfrica —
+              affichées « — », à compléter à la main. « Cas suspects... dans la formation sanitaire
+              » est une approximation (toute consultation testée TDR/GE ou codée paludisme). « Cas
+              de décès toutes causes confondues » ne compte que les décès vus en consultation — pas
+              ceux en hospitalisation ou maternité. Les lignes MILD/TPI-SP viennent des fiches CPN
+              (Maternite), pas de la consultation — elles ne suivent donc pas le filtre Échelon
+              ci-dessus.
+            </p>
           </div>
 
           <div className="overflow-hidden rounded-xl border border-[#e1e0d9] bg-white shadow-[0_1px_2px_rgba(11,11,11,0.04)]">
