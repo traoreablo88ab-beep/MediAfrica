@@ -1524,10 +1524,14 @@ export function RmaReport({ defaultEchelon }: { defaultEchelon: 'CSRéf' | 'CSCo
           couvre toutes les consultations du mois : chacune compte sous sa maladie si un code
           d'affection RMA lui a été assigné, sinon sous « Autres ». Les autres sections du RMA
           (RH/matériel/financier, urgences obstétricales, chirurgie, fistule, laboratoire,
-          lèpre/dracunculose, pharmacie) restent hors périmètre de cette page — la section Hygiène
-          est disponible séparément sur{' '}
+          dracunculose, pharmacie) restent hors périmètre de cette page — les sections Hygiène et
+          Lèpre sont disponibles séparément (saisie manuelle mensuelle, sans lien patient) sur{' '}
           <Link href="/registres/hygiene" className="text-[#2a78d6] hover:underline">
             /registres/hygiene
+          </Link>{' '}
+          et{' '}
+          <Link href="/registres/lepre" className="text-[#2a78d6] hover:underline">
+            /registres/lepre
           </Link>
           .
         </p>

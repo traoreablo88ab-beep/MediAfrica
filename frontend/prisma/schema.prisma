@@ -48,6 +48,7 @@ model User {
   planificationsFamilialesProvided PlanificationFamiliale[]
   registerClosures                 RegisterClosure[]
   hygieneRapportsUpdated           HygieneRapport[]
+  lepreRapportsUpdated             LepreRapport[]
   reportsFiled                     Report[]
 
   // Multi-tenancy: MediAfrica is a multi-tenant SaaS — each User belongs to
@@ -129,6 +130,7 @@ model Organization {
   patients         Patient[]
   registerClosures RegisterClosure[]
   hygieneRapports  HygieneRapport[]
+  lepreRapports    LepreRapport[]
   clinicSettings   ClinicSettings?
   subscription     Subscription?
   orders           Order[]
@@ -999,6 +1001,57 @@ model HygieneRapport {
   nbAteliersConfectionDalles            Int?
   nbSeancesSensibilisationRealisees     Int?
   nbSeancesSensibilisationPlanifiees    Int?
+
+  updatedById String?
+  updatedBy   User?    @relation(fields: [updatedById], references: [id], onDelete: SetNull)
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  @@unique([organizationId, month])
+}
+
+model LepreRapport {
+  id             String       @id @default(cuid())
+  organizationId String
+  organization   Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  month          String // "2026-01"
+
+  // Malades en traitement au début de la période
+  nbMaladesTraitementDebutPeriode   Int?
+  nbMaladesTraitementDebutPeriodePB Int?
+  nbMaladesTraitementDebutPeriodeMB Int?
+
+  // Nouveaux cas pris en charge (ouverture d'une fiche)
+  nbNouveauxCasPrisEnCharge       Int?
+  nbNouveauxCasPB                 Int?
+  nbNouveauxCasMB                 Int?
+  nbNouveauxCasEnfantsMoins15Ans  Int?
+  nbMutilationNouveauxCasPB       Int?
+  nbMutilationNouveauxCasMB       Int?
+  nbAutresCasRecusPB              Int?
+  nbAutresCasRecusMB              Int?
+
+  // Traitements arrêtés (fermeture d'une fiche)
+  nbTraitementsArretes            Int?
+  nbGuerisonPB                    Int?
+  nbGuerisonMB                    Int?
+  nbDecesPB                       Int?
+  nbDecesMB                       Int?
+  nbTransfertAutreFormationPB     Int?
+  nbTransfertAutreFormationMB     Int?
+  nbPerdusDeVuePB                 Int?
+  nbPerdusDeVueMB                 Int?
+
+  // Malades à la fin de la période
+  nbMaladesFinPeriode   Int?
+  nbMaladesFinPeriodePB Int?
+  nbMaladesFinPeriodeMB Int?
+
+  // Infirmités et ruptures de stock
+  nbNouvellesInfirmitesDurantTraitement Int?
+  nbNouveauCasInfirmiteDegre2           Int?
+  nbJoursRuptureMedicamentsPB           Int?
+  nbJoursRuptureMedicamentsMB           Int?
 
   updatedById String?
   updatedBy   User?    @relation(fields: [updatedById], references: [id], onDelete: SetNull)

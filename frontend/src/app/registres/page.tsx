@@ -68,6 +68,12 @@ const SHARED_REGISTERS: RegisterCard[] = [
     description:
       "Indicateurs mensuels d'hygiène publique et salubrité (eau, latrines, déchets biomédicaux...), saisie manuelle.",
   },
+  {
+    href: '/registres/lepre',
+    title: 'Registre Lèpre',
+    description:
+      'Cohorte mensuelle de malades PB/MB (nouveaux cas, guérisons, décès, infirmités...), saisie manuelle.',
+  },
 ];
 
 const CSREF_REGISTERS: RegisterCard[] = [
