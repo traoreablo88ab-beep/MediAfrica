@@ -250,46 +250,71 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
       }
     }
 
-    const patient = await prisma.$transaction(async (tx) => {
-      const dossierNumber = await generateDossierNumber(tx);
-      return tx.patient.create({
-        data: {
-          organizationId: auth.orgMember.organizationId,
-          dossierNumber,
-          nom: d.nom,
-          prenom: d.prenom,
-          dateNaissance: d.dateNaissance,
-          sexe: d.sexe,
-          telephonePrincipal: d.telephonePrincipal,
-          communeResidence: d.communeResidence,
-          ...(d.telephoneSecondaire ? { telephoneSecondaire: d.telephoneSecondaire } : {}),
-          ...(d.quartierVillage ? { quartierVillage: d.quartierVillage } : {}),
-          ...(d.contactUrgenceNom ? { contactUrgenceNom: d.contactUrgenceNom } : {}),
-          ...(d.contactUrgenceTelephone
-            ? { contactUrgenceTelephone: d.contactUrgenceTelephone }
-            : {}),
-          ...(d.numeroRamed ? { numeroRamed: d.numeroRamed } : {}),
-          ...(d.numeroAmo ? { numeroAmo: d.numeroAmo } : {}),
-          ...(d.groupeSanguin ? { groupeSanguin: d.groupeSanguin } : {}),
-          ...(d.allergiesConnues ? { allergiesConnues: d.allergiesConnues } : {}),
-          ...(d.antecedentsPersonnels ? { antecedentsPersonnels: d.antecedentsPersonnels } : {}),
-          ...(d.antecedentsChirurgicaux
-            ? { antecedentsChirurgicaux: d.antecedentsChirurgicaux }
-            : {}),
-          ...(d.antecedentsFamiliaux ? { antecedentsFamiliaux: d.antecedentsFamiliaux } : {}),
-          ...(idemKey ? { idempotencyKey: idemKey, idempotencyBodyHash: bodyHash } : {}),
-        },
-      });
-    });
+    // generateDossierNumber derives the next number from the current max —
+    // still a read-then-write race under two truly concurrent creates for
+    // the same year (same gap the old count-based version had, just harder
+    // to hit). Retry the whole transaction a few times on that specific
+    // collision rather than surfacing a raw 500; each retry re-reads the
+    // max, which is enough since patient creation isn't high-frequency
+    // enough to starve this.
+    const DOSSIER_NUMBER_MAX_ATTEMPTS = 5;
+    let patient: Patient | undefined;
+    for (let attempt = 1; attempt <= DOSSIER_NUMBER_MAX_ATTEMPTS; attempt++) {
+      try {
+        patient = await prisma.$transaction(async (tx) => {
+          const dossierNumber = await generateDossierNumber(tx);
+          return tx.patient.create({
+            data: {
+              organizationId: auth.orgMember.organizationId,
+              dossierNumber,
+              nom: d.nom,
+              prenom: d.prenom,
+              dateNaissance: d.dateNaissance,
+              sexe: d.sexe,
+              telephonePrincipal: d.telephonePrincipal,
+              communeResidence: d.communeResidence,
+              ...(d.telephoneSecondaire ? { telephoneSecondaire: d.telephoneSecondaire } : {}),
+              ...(d.quartierVillage ? { quartierVillage: d.quartierVillage } : {}),
+              ...(d.contactUrgenceNom ? { contactUrgenceNom: d.contactUrgenceNom } : {}),
+              ...(d.contactUrgenceTelephone
+                ? { contactUrgenceTelephone: d.contactUrgenceTelephone }
+                : {}),
+              ...(d.numeroRamed ? { numeroRamed: d.numeroRamed } : {}),
+              ...(d.numeroAmo ? { numeroAmo: d.numeroAmo } : {}),
+              ...(d.groupeSanguin ? { groupeSanguin: d.groupeSanguin } : {}),
+              ...(d.allergiesConnues ? { allergiesConnues: d.allergiesConnues } : {}),
+              ...(d.antecedentsPersonnels
+                ? { antecedentsPersonnels: d.antecedentsPersonnels }
+                : {}),
+              ...(d.antecedentsChirurgicaux
+                ? { antecedentsChirurgicaux: d.antecedentsChirurgicaux }
+                : {}),
+              ...(d.antecedentsFamiliaux ? { antecedentsFamiliaux: d.antecedentsFamiliaux } : {}),
+              ...(idemKey ? { idempotencyKey: idemKey, idempotencyBodyHash: bodyHash } : {}),
+            },
+          });
+        });
+        break;
+      } catch (err) {
+        const isDossierNumberCollision =
+          typeof err === 'object' &&
+          err !== null &&
+          (err as { code?: string }).code === 'P2002' &&
+          ((err as { meta?: { target?: unknown } }).meta?.target as string[] | undefined)?.includes(
+            'dossierNumber',
+          );
+        if (!isDossierNumberCollision || attempt === DOSSIER_NUMBER_MAX_ATTEMPTS) throw err;
+      }
+    }
 
     return NextResponse.json(
       {
-        id: patient.id,
-        dossierNumber: patient.dossierNumber,
-        nom: patient.nom,
-        prenom: patient.prenom,
-        dateNaissance: patient.dateNaissance.toISOString(),
-        sexe: patient.sexe,
+        id: patient!.id,
+        dossierNumber: patient!.dossierNumber,
+        nom: patient!.nom,
+        prenom: patient!.prenom,
+        dateNaissance: patient!.dateNaissance.toISOString(),
+        sexe: patient!.sexe,
       },
       { status: 201, headers: { 'x-request-id': ctx.requestId } },
     );

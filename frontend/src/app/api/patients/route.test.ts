@@ -207,7 +207,13 @@ describe('POST /api/patients', () => {
   });
 
   it('happy path: generates dossierNumber inside the transaction, creates the patient, returns 201', async () => {
-    prismaMock.patient.count.mockResolvedValue(186 as never);
+    // First findFirst call is the duplicate-name/phone check (no duplicate);
+    // second is generateDossierNumber's max-lookup, inside the transaction
+    // (both hit the same mock — $transaction's mockImplementation above
+    // invokes the callback with prismaMock itself as `tx`).
+    prismaMock.patient.findFirst
+      .mockResolvedValueOnce(null)
+      .mockResolvedValueOnce({ dossierNumber: 'P-20260186' } as never);
     prismaMock.patient.create.mockResolvedValue(patientRow() as never);
 
     const res = await POST(makePost(validBody));
@@ -222,7 +228,6 @@ describe('POST /api/patients', () => {
   });
 
   it('passes through numeroRamed and numeroAmo', async () => {
-    prismaMock.patient.count.mockResolvedValue(0 as never);
     prismaMock.patient.create.mockResolvedValue(patientRow() as never);
 
     await POST(makePost({ ...validBody, numeroRamed: 'RM-1234', numeroAmo: 'AMO-5678' }));
@@ -248,18 +253,22 @@ describe('POST /api/patients', () => {
   });
 
   it('force:true skips the duplicate check', async () => {
-    prismaMock.patient.count.mockResolvedValue(0 as never);
     prismaMock.patient.create.mockResolvedValue(patientRow() as never);
 
     const res = await POST(makePost({ ...validBody, force: true }));
 
     expect(res.status).toBe(201);
-    expect(prismaMock.patient.findFirst).not.toHaveBeenCalled();
+    // Only the dossier-number lookup (inside the transaction) runs — the
+    // duplicate-name/phone check (a separate findFirst with an OR clause)
+    // is the one force:true skips.
+    expect(prismaMock.patient.findFirst).toHaveBeenCalledTimes(1);
+    expect(prismaMock.patient.findFirst.mock.calls[0]?.[0]).toMatchObject({
+      where: { dossierNumber: { startsWith: 'P-2026' } },
+    });
   });
 
   describe('Idempotency-Key (offline-queue replay)', () => {
     it('no header → unchanged behavior, no idempotency fields on create', async () => {
-      prismaMock.patient.count.mockResolvedValue(0 as never);
       prismaMock.patient.create.mockResolvedValue(patientRow() as never);
 
       const res = await POST(makePost(validBody));
@@ -276,7 +285,6 @@ describe('POST /api/patients', () => {
 
     it('header + no existing row → creates and stores key/hash', async () => {
       prismaMock.patient.findUnique.mockResolvedValue(null);
-      prismaMock.patient.count.mockResolvedValue(0 as never);
       prismaMock.patient.create.mockResolvedValue(patientRow() as never);
 
       const res = await POST(makePost(validBody, { idempotencyKey: 'idem-key-1' }));
