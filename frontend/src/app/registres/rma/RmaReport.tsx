@@ -128,6 +128,14 @@ interface VaccinationSummaryRow {
   patient: { sexe: string; dateNaissance: string };
 }
 
+interface HospitalisationRow {
+  dateHeureEntree: string;
+  motifAdmission: string;
+  diagnosticPrincipal: string | null;
+  issue: string | null;
+  patient: { dateNaissance: string; sexe: string };
+}
+
 interface ApiPage<T> {
   items: T[];
   nextCursor: string | null;
@@ -858,6 +866,37 @@ function mentionsAny(text: string | null, keywords: string[]): boolean {
   return keywords.some((k) => lower.includes(k));
 }
 
+// Le registre Hospitalisation n'a ni codeAffection structuré ni TDR/GE — les
+// 3 lignes "Cas d'hospitalisation..." du tableau Paludisme s'appuient donc
+// sur une recherche de mots-clés dans motifAdmission/diagnosticPrincipal
+// (texte libre), même limite que CTA_KEYWORDS ci-dessus. Impossible de
+// distinguer "grave confirmé" d'un simple paludisme mentionné en motif —
+// approximation documentée dans le disclaimer de la carte.
+const PALUDISME_MOTIF_KEYWORDS = ['paludisme', 'palu'];
+
+function hospitalisationMentionsPaludisme(h: HospitalisationRow): boolean {
+  return (
+    mentionsAny(h.motifAdmission, PALUDISME_MOTIF_KEYWORDS) ||
+    mentionsAny(h.diagnosticPrincipal, PALUDISME_MOTIF_KEYWORDS)
+  );
+}
+
+function paludismeHospitalisationRow(
+  label: string,
+  rows: HospitalisationRow[],
+  predicate: ((h: HospitalisationRow) => boolean) | null,
+): PaludismeAgeRow {
+  if (!predicate) return { label, v0a4: null, v5plus: null, vFE: null };
+  let v0a4 = 0;
+  let v5plus = 0;
+  for (const h of rows) {
+    if (!predicate(h)) continue;
+    if (isUnder5At(h.patient.dateNaissance, h.dateHeureEntree)) v0a4 += 1;
+    else v5plus += 1;
+  }
+  return { label, v0a4, v5plus, vFE: null };
+}
+
 function AgeSexTable({
   title,
   ageBrackets,
@@ -1362,6 +1401,7 @@ export function RmaReport({ defaultEchelon }: { defaultEchelon: 'CSRéf' | 'CSCo
   const [ureni, setUreni] = useState<NutritionSummaryRow[]>([]);
   const [pf, setPf] = useState<PfSummaryRow[]>([]);
   const [vaccinations, setVaccinations] = useState<VaccinationSummaryRow[]>([]);
+  const [hospitalisations, setHospitalisations] = useState<HospitalisationRow[]>([]);
   const [lepreRapport, setLepreRapport] = useState<LepreRapportData | null>(null);
   const [hygieneRapport, setHygieneRapport] = useState<HygieneRapportData | null>(null);
   const [loading, setLoading] = useState(true);
@@ -1382,6 +1422,7 @@ export function RmaReport({ defaultEchelon }: { defaultEchelon: 'CSRéf' | 'CSCo
         ureniRows,
         pfRows,
         vaccinationRows,
+        hospitalisationRows,
         lepreRow,
         hygieneRow,
       ] = await Promise.all([
@@ -1403,6 +1444,7 @@ export function RmaReport({ defaultEchelon }: { defaultEchelon: 'CSRéf' | 'CSCo
         }),
         fetchAllPages<PfSummaryRow>('/api/planification-familiale', dateFrom, dateTo),
         fetchAllPages<VaccinationSummaryRow>('/api/vaccination', dateFrom, dateTo),
+        fetchAllPages<HospitalisationRow>('/api/hospitalisation', dateFrom, dateTo),
         api<LepreRapportData>(`/api/registres/lepre?month=${selectedMonth}`),
         api<HygieneRapportData>(`/api/registres/hygiene?month=${selectedMonth}`),
       ]);
@@ -1415,6 +1457,7 @@ export function RmaReport({ defaultEchelon }: { defaultEchelon: 'CSRéf' | 'CSCo
       setUreni(ureniRows);
       setPf(pfRows);
       setVaccinations(vaccinationRows);
+      setHospitalisations(hospitalisationRows);
       setLepreRapport(lepreRow);
       setHygieneRapport(hygieneRow);
     } catch (err) {
@@ -1798,11 +1841,15 @@ export function RmaReport({ defaultEchelon }: { defaultEchelon: 'CSRéf' | 'CSCo
         mentionsAny(c.traitementPrescrit, PALUDISME_GRAVE_TREATMENT_KEYWORDS) &&
         mentionsAny(c.traitementPrescrit, CTA_KEYWORDS),
     ),
-    paludismeAgeRow("Cas d'hospitalisation toutes causes confondues", filteredConsultations, null),
-    paludismeAgeRow(
+    paludismeHospitalisationRow(
+      "Cas d'hospitalisation toutes causes confondues",
+      hospitalisations,
+      () => true,
+    ),
+    paludismeHospitalisationRow(
       "Cas d'hospitalisation pour paludisme grave confirmé",
-      filteredConsultations,
-      null,
+      hospitalisations,
+      hospitalisationMentionsPaludisme,
     ),
     paludismeAgeRow(
       'Cas de décès toutes causes confondues (vus en consultation)',
@@ -1814,7 +1861,11 @@ export function RmaReport({ defaultEchelon }: { defaultEchelon: 'CSRéf' | 'CSCo
       filteredConsultations,
       (c) => c.codeAffection === 'Paludisme grave confirmé' && c.deces === true,
     ),
-    paludismeAgeRow('Cas de décès pour paludisme grave hospitalisés', filteredConsultations, null),
+    paludismeHospitalisationRow(
+      'Cas de décès pour paludisme grave hospitalisés',
+      hospitalisations,
+      (h) => h.issue === 'Décédé' && hospitalisationMentionsPaludisme(h),
+    ),
     paludismeAgeRow(
       'Cas présumés de paludisme simple par diagnostic clinique',
       filteredConsultations,
@@ -2263,15 +2314,20 @@ export function RmaReport({ defaultEchelon }: { defaultEchelon: 'CSRéf' | 'CSCo
               cette colonne. Les 3 lignes de traitement (CTA, Artésunate/Arthéméter/quinine
               injectable, relais CTA) sont une approximation : recherche de mots-clés dans le champ
               texte libre « Traitement prescrit » de la consultation, pas un champ structuré — un
-              traitement réellement donné mais formulé autrement peut ne pas être détecté. Les
-              lignes d'hospitalisation liée au paludisme et le bloc « Informations générales »
-              (rupture de stock CTA, personnel formé, ASC) n'ont, eux, aucun champ correspondant
-              dans MediAfrica — affichés « — », à compléter à la main. « Cas suspects... dans la
-              formation sanitaire » est une approximation (toute consultation testée TDR/GE ou codée
-              paludisme). « Cas de décès toutes causes confondues » ne compte que les décès vus en
-              consultation — pas ceux en hospitalisation ou maternité. Les lignes MILD/TPI-SP
-              viennent des fiches CPN (Maternite), pas de la consultation — elles ne suivent donc
-              pas le filtre Échelon ci-dessus.
+              traitement réellement donné mais formulé autrement peut ne pas être détecté. Les 3
+              lignes d'hospitalisation viennent du registre Hospitalisation (motif d'admission +
+              diagnostic principal) : « toutes causes confondues » compte toute hospitalisation du
+              mois, les 2 autres cherchent une mention « paludisme »/« palu » dans ces champs texte
+              libre — Hospitalisation n'ayant ni TDR/GE ni distinction simple/grave, « confirmé »
+              n'est pas vérifiable, seule la mention de paludisme l'est. Ces 3 lignes ne suivent pas
+              le filtre Échelon (Hospitalisation ne porte pas ce tag). Le bloc « Informations
+              générales » (rupture de stock CTA, personnel formé, ASC) n'a, lui, aucun champ
+              correspondant dans MediAfrica — affiché « — », à compléter à la main. « Cas
+              suspects... dans la formation sanitaire » est une approximation (toute consultation
+              testée TDR/GE ou codée paludisme). « Cas de décès toutes causes confondues » ne compte
+              que les décès vus en consultation — pas ceux en hospitalisation ou maternité. Les
+              lignes MILD/TPI-SP viennent des fiches CPN (Maternite), pas de la consultation — elles
+              ne suivent donc pas non plus le filtre Échelon ci-dessus.
             </p>
           </div>
 
