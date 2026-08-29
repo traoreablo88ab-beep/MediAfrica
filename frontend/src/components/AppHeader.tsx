@@ -31,13 +31,20 @@ function daysRemaining(iso: string): number {
   return Math.ceil((new Date(iso).getTime() - Date.now()) / DAY_MS);
 }
 
-export type AppNavTab = 'dashboard' | 'patients' | 'consultations' | 'registres' | 'commentaires';
+export type AppNavTab =
+  | 'dashboard'
+  | 'patients'
+  | 'consultations'
+  | 'registres'
+  | 'rapports'
+  | 'commentaires';
 
 const TABS: Array<{ key: AppNavTab; label: string; href: string }> = [
   { key: 'dashboard', label: 'Tableau de bord', href: '/dashboard' },
   { key: 'patients', label: 'Patients', href: '/patients' },
   { key: 'consultations', label: 'Consultations', href: '/consultations' },
   { key: 'registres', label: 'Registres', href: '/registres' },
+  { key: 'rapports', label: 'Rapports', href: '/rapports' },
   { key: 'commentaires', label: 'Commentaires', href: '/commentaires' },
 ];
 
@@ -200,6 +207,20 @@ function CsrefAdminIcon({ className }: IconProps) {
   );
 }
 
+function RapportsIcon({ className }: IconProps) {
+  return (
+    <svg viewBox="0 0 24 24" fill="none" className={className} aria-hidden="true">
+      <path
+        d="M4 20V10.5M10.5 20V6M17 20v-6.5"
+        stroke="currentColor"
+        strokeWidth="1.8"
+        strokeLinecap="round"
+      />
+      <path d="M3.5 20.5h17" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" />
+    </svg>
+  );
+}
+
 function BillingIcon({ className }: IconProps) {
   return (
     <svg viewBox="0 0 24 24" fill="none" className={className} aria-hidden="true">
@@ -223,6 +244,7 @@ const TAB_ICONS: Record<AppNavTab, ComponentType<IconProps>> = {
   patients: PatientsIcon,
   consultations: ConsultationsIcon,
   registres: RegistresIcon,
+  rapports: RapportsIcon,
   commentaires: CommentairesIcon,
 };
 
