@@ -939,6 +939,118 @@ function AgeSexTable({
   );
 }
 
+// RMA section 5 — "Prise en charge Lèpre" (juste avant Dracunculose et
+// Paludisme dans le RMA officiel, page 13). Comme cette section n'a pas de
+// champ correspondant dans MediAfrica (aucune consultation n'en dérive), la
+// donnée vient du registre à saisie manuelle mensuelle /registres/lepre
+// (LepreRapport, un enregistrement par organisation+mois — pas de notion
+// d'échelon, donc pas filtré par le sélecteur Échelon ci-dessus). Mêmes 27
+// clés et mêmes groupes que frontend/src/app/registres/lepre/page.tsx
+// (LEPRE_GROUPS), dupliqués ici pour l'affichage dans ce rapport.
+interface LepreRapportData {
+  month: string;
+  nbMaladesTraitementDebutPeriode: number | null;
+  nbMaladesTraitementDebutPeriodePB: number | null;
+  nbMaladesTraitementDebutPeriodeMB: number | null;
+  nbNouveauxCasPrisEnCharge: number | null;
+  nbNouveauxCasPB: number | null;
+  nbNouveauxCasMB: number | null;
+  nbNouveauxCasEnfantsMoins15Ans: number | null;
+  nbMutilationNouveauxCasPB: number | null;
+  nbMutilationNouveauxCasMB: number | null;
+  nbAutresCasRecusPB: number | null;
+  nbAutresCasRecusMB: number | null;
+  nbTraitementsArretes: number | null;
+  nbGuerisonPB: number | null;
+  nbGuerisonMB: number | null;
+  nbDecesPB: number | null;
+  nbDecesMB: number | null;
+  nbTransfertAutreFormationPB: number | null;
+  nbTransfertAutreFormationMB: number | null;
+  nbPerdusDeVuePB: number | null;
+  nbPerdusDeVueMB: number | null;
+  nbMaladesFinPeriode: number | null;
+  nbMaladesFinPeriodePB: number | null;
+  nbMaladesFinPeriodeMB: number | null;
+  nbNouvellesInfirmitesDurantTraitement: number | null;
+  nbNouveauCasInfirmiteDegre2: number | null;
+  nbJoursRuptureMedicamentsPB: number | null;
+  nbJoursRuptureMedicamentsMB: number | null;
+}
+
+const LEPRE_RMA_GROUPS: {
+  title: string;
+  fields: { key: keyof LepreRapportData; label: string }[];
+}[] = [
+  {
+    title: 'Malades en traitement au début de la période',
+    fields: [
+      { key: 'nbMaladesTraitementDebutPeriode', label: 'Nombre de malades en traitement' },
+      { key: 'nbMaladesTraitementDebutPeriodePB', label: 'Dont lèpre Pauci Bacillaire (PB)' },
+      { key: 'nbMaladesTraitementDebutPeriodeMB', label: 'Dont lèpre Multi Bacillaire (MB)' },
+    ],
+  },
+  {
+    title: "Nouveaux cas pris en charge (ouverture d'une fiche)",
+    fields: [
+      { key: 'nbNouveauxCasPrisEnCharge', label: 'Nombre de malades pris en charge' },
+      { key: 'nbNouveauxCasPB', label: 'Nouveau cas lèpre PB' },
+      { key: 'nbNouveauxCasMB', label: 'Nouveau cas lèpre MB' },
+      {
+        key: 'nbNouveauxCasEnfantsMoins15Ans',
+        label: 'Nouveau cas lèpre PB et MB chez les enfants de moins de 15 ans',
+      },
+      { key: 'nbMutilationNouveauxCasPB', label: 'Dont mutilation chez nouveau cas PB' },
+      { key: 'nbMutilationNouveauxCasMB', label: 'Dont mutilation chez nouveau cas MB' },
+      { key: 'nbAutresCasRecusPB', label: 'Autres cas (ancien cas, transfert) PB reçus' },
+      { key: 'nbAutresCasRecusMB', label: 'Autres cas (ancien cas, transfert) MB reçus' },
+    ],
+  },
+  {
+    title: "Traitements arrêtés (fermeture d'une fiche)",
+    fields: [
+      { key: 'nbTraitementsArretes', label: 'Nombre de traitements arrêtés' },
+      { key: 'nbGuerisonPB', label: 'Guérison PB' },
+      { key: 'nbGuerisonMB', label: 'Guérison MB' },
+      { key: 'nbDecesPB', label: 'Décès PB' },
+      { key: 'nbDecesMB', label: 'Décès MB' },
+      {
+        key: 'nbTransfertAutreFormationPB',
+        label: 'Transfert vers une autre formation sanitaire PB',
+      },
+      {
+        key: 'nbTransfertAutreFormationMB',
+        label: 'Transfert vers une autre formation sanitaire MB',
+      },
+      { key: 'nbPerdusDeVuePB', label: 'Perdus de vue PB' },
+      { key: 'nbPerdusDeVueMB', label: 'Perdus de vue MB' },
+    ],
+  },
+  {
+    title: 'Malades à la fin de la période',
+    fields: [
+      { key: 'nbMaladesFinPeriode', label: 'Nombre de malades' },
+      { key: 'nbMaladesFinPeriodePB', label: 'Dont lèpre Pauci Bacillaire (PB)' },
+      { key: 'nbMaladesFinPeriodeMB', label: 'Dont lèpre Multi Bacillaire (MB)' },
+    ],
+  },
+  {
+    title: 'Infirmités et ruptures de stock',
+    fields: [
+      {
+        key: 'nbNouvellesInfirmitesDurantTraitement',
+        label: 'Malades ayant développé de nouvelles infirmités durant le traitement',
+      },
+      {
+        key: 'nbNouveauCasInfirmiteDegre2',
+        label: 'Nouveau cas de lèpre avec infirmité de degré 2',
+      },
+      { key: 'nbJoursRuptureMedicamentsPB', label: 'Jours de rupture des médicaments PB' },
+      { key: 'nbJoursRuptureMedicamentsMB', label: 'Jours de rupture des médicaments MB' },
+    ],
+  },
+];
+
 export function RmaReport({ defaultEchelon }: { defaultEchelon: 'CSRéf' | 'CSCom' }) {
   const clinicName = useClinicName();
   const [month, setMonth] = useState(currentMonth());
@@ -959,6 +1071,7 @@ export function RmaReport({ defaultEchelon }: { defaultEchelon: 'CSRéf' | 'CSCo
   const [ureni, setUreni] = useState<NutritionSummaryRow[]>([]);
   const [pf, setPf] = useState<PfSummaryRow[]>([]);
   const [vaccinations, setVaccinations] = useState<VaccinationSummaryRow[]>([]);
+  const [lepreRapport, setLepreRapport] = useState<LepreRapportData | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
@@ -977,6 +1090,7 @@ export function RmaReport({ defaultEchelon }: { defaultEchelon: 'CSRéf' | 'CSCo
         ureniRows,
         pfRows,
         vaccinationRows,
+        lepreRow,
       ] = await Promise.all([
         fetchAllPages<ConsultationRow>('/api/consultations', dateFrom, dateTo),
         fetchAllPages<MaterniteRow>('/api/maternite', dateFrom, dateTo, { type: 'CPN' }),
@@ -996,6 +1110,7 @@ export function RmaReport({ defaultEchelon }: { defaultEchelon: 'CSRéf' | 'CSCo
         }),
         fetchAllPages<PfSummaryRow>('/api/planification-familiale', dateFrom, dateTo),
         fetchAllPages<VaccinationSummaryRow>('/api/vaccination', dateFrom, dateTo),
+        api<LepreRapportData>(`/api/registres/lepre?month=${selectedMonth}`),
       ]);
       setConsultations(consultationRows);
       setCpn(cpnRows);
@@ -1006,6 +1121,7 @@ export function RmaReport({ defaultEchelon }: { defaultEchelon: 'CSRéf' | 'CSCo
       setUreni(ureniRows);
       setPf(pfRows);
       setVaccinations(vaccinationRows);
+      setLepreRapport(lepreRow);
     } catch (err) {
       setError(friendlyError(err, 'Une erreur est survenue. Réessayez.'));
     } finally {
@@ -1524,14 +1640,14 @@ export function RmaReport({ defaultEchelon }: { defaultEchelon: 'CSRéf' | 'CSCo
           couvre toutes les consultations du mois : chacune compte sous sa maladie si un code
           d'affection RMA lui a été assigné, sinon sous « Autres ». Les autres sections du RMA
           (RH/matériel/financier, urgences obstétricales, chirurgie, fistule, laboratoire,
-          dracunculose, pharmacie) restent hors périmètre de cette page — les sections Hygiène et
-          Lèpre sont disponibles séparément (saisie manuelle mensuelle, sans lien patient) sur{' '}
-          <Link href="/registres/hygiene" className="text-[#2a78d6] hover:underline">
-            /registres/hygiene
-          </Link>{' '}
-          et{' '}
+          dracunculose, pharmacie) restent hors périmètre de cette page. Le tableau « Prise en
+          charge Lèpre » (section 5) reprend la saisie manuelle mensuelle du registre séparé{' '}
           <Link href="/registres/lepre" className="text-[#2a78d6] hover:underline">
             /registres/lepre
+          </Link>{' '}
+          — la section Hygiène reste, elle, disponible uniquement sur{' '}
+          <Link href="/registres/hygiene" className="text-[#2a78d6] hover:underline">
+            /registres/hygiene
           </Link>
           .
         </p>
@@ -1735,6 +1851,45 @@ export function RmaReport({ defaultEchelon }: { defaultEchelon: 'CSRéf' | 'CSCo
                 </div>
               ))}
             </dl>
+          </div>
+
+          <div className="overflow-hidden rounded-xl border border-[#e1e0d9] bg-white shadow-[0_1px_2px_rgba(11,11,11,0.04)]">
+            <h2 className="border-b border-[#e1e0d9] bg-[#f9f9f7] px-4 py-2 text-sm font-semibold text-[#0b0b0b]">
+              Prise en charge Lèpre
+            </h2>
+            {LEPRE_RMA_GROUPS.map((group) => (
+              <div key={group.title} className="border-b border-[#e1e0d9]">
+                <h3 className="px-4 pt-3 text-xs font-semibold tracking-wide text-[#898781] uppercase">
+                  {group.title}
+                </h3>
+                <dl>
+                  {group.fields.map((f, i) => (
+                    <div
+                      key={f.key}
+                      className={`flex items-center justify-between gap-4 px-4 py-3 text-sm ${
+                        i !== group.fields.length - 1 ? 'border-b border-[#e1e0d9]' : ''
+                      }`}
+                    >
+                      <dt className="text-[#52514e]">{f.label}</dt>
+                      <dd className="shrink-0 text-base font-semibold text-[#0b0b0b]">
+                        {lepreRapport?.[f.key] ?? '—'}
+                      </dd>
+                    </div>
+                  ))}
+                </dl>
+              </div>
+            ))}
+            <p className="px-4 py-3 text-xs leading-relaxed text-[#898781]">
+              Reprend le tableau « PRISE EN CHARGE LEPRE » du RMA (section 5, page 13 du 2ème
+              échelon / CSRéf — contenu identique au 1er échelon / CSCom). Aucun champ de MediAfrica
+              ne suit cette cohorte de malades aujourd'hui : ces chiffres viennent de la saisie
+              manuelle mensuelle sur{' '}
+              <Link href="/registres/lepre" className="text-[#2a78d6] hover:underline">
+                /registres/lepre
+              </Link>{' '}
+              (pas de lien avec les dossiers patients, pas filtré par le sélecteur Échelon
+              ci-dessus). «&nbsp;—&nbsp;» signifie que ce mois n'a pas encore été renseigné.
+            </p>
           </div>
 
           <div className="overflow-hidden rounded-xl border border-[#e1e0d9] bg-white shadow-[0_1px_2px_rgba(11,11,11,0.04)]">
