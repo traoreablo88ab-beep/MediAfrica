@@ -1,6 +1,7 @@
 'use client';
 
 import { useEffect, useState, useCallback } from 'react';
+import Link from 'next/link';
 import { api } from '@/lib/api';
 import { friendlyError } from '@/lib/errorMessages';
 import { AppHeader } from '@/components/AppHeader';
@@ -225,6 +226,12 @@ export default function RegistreLeprePage() {
           <div>
             <h1 className="text-2xl font-bold text-[#0b0b0b]">Registre Lèpre</h1>
             <p className="mt-1 text-sm text-[#52514e]">{clinicName}</p>
+            <Link
+              href="/registres/rma/csref"
+              className="mt-1 inline-block text-xs text-[#2a78d6] hover:underline"
+            >
+              Aide à la saisie RMA →
+            </Link>
             <p className="mt-1 text-xs text-[#898781]">
               Section 5 du RMA (Prise en charge Lèpre) — saisie manuelle mensuelle de la cohorte de
               malades PB/MB (pas de lien avec les dossiers patients).
