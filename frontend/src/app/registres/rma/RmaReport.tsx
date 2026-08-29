@@ -1051,6 +1051,264 @@ const LEPRE_RMA_GROUPS: {
   },
 ];
 
+// RMA section 7 — "Activités d'hygiène publique et salubrité". Même
+// registre à saisie manuelle mensuelle que Lèpre ci-dessus (HygieneRapport,
+// un enregistrement par organisation+mois, pas de notion d'échelon). Mêmes
+// 66 clés et mêmes 7 groupes que frontend/src/app/registres/hygiene/page.tsx
+// (HYGIENE_GROUPS) et frontend/src/app/api/registres/hygiene/route.ts
+// (HYGIENE_FIELD_KEYS), dupliqués ici pour l'affichage dans ce rapport.
+interface HygieneRapportData {
+  month: string;
+  [key: string]: number | string | null;
+}
+
+const HYGIENE_RMA_GROUPS: { title: string; fields: { key: string; label: string }[] }[] = [
+  {
+    title: "1. Hygiène de l'eau (surveillance et contrôle de la qualité de l'eau de boisson)",
+    fields: [
+      { key: 'nbComparateursChlorePh', label: 'Nombre de comparateurs de chlore et de pH' },
+      { key: 'nbNouveauxPuitsRealises', label: 'Nombre de nouveaux puits réalisés' },
+      { key: 'nbPuitsExistants', label: 'Nombre de puits existants' },
+      { key: 'nbNouveauxPuitsAmenages', label: 'Nombre de nouveaux puits aménagés' },
+      { key: 'nbPuitsTraites', label: 'Nombre de puits traités' },
+      { key: 'nbNouveauxForagesRealises', label: 'Nombre de nouveaux forages réalisés' },
+      { key: 'nbForagesExistants', label: 'Nombre de forages existants' },
+      { key: 'nbNouveauxForagesAmenages', label: 'Nombre de nouveaux forages aménagés' },
+      { key: 'nbForagesFonctionnels', label: 'Nombre de forages fonctionnels' },
+      { key: 'nbAesExistants', label: "Nombre d'adductions d'eau sommaire (AES) existants" },
+      {
+        key: 'nbAesChloreesAvantDistribution',
+        label: "Nombre d'AES dont l'eau est chlorée avant distribution",
+      },
+      {
+        key: 'nbControlesChloreEffectues',
+        label: 'Nombre de contrôle de chlore résiduel effectué',
+      },
+      {
+        key: 'nbControlesChloreNormes',
+        label: 'Nombre de contrôle de chlore résiduel répondant aux normes',
+      },
+    ],
+  },
+  {
+    title: '2. Hygiène de l’habitat et des établissements classés',
+    fields: [
+      { key: 'nbVisitesDomicileEffectuees', label: 'Nombre de visites à domiciles effectuées' },
+      {
+        key: 'nbConcessionsSourceEauPotable',
+        label: "Nombre de concessions ayant une source d'approvisionnement en eau potable",
+      },
+      { key: 'nbConcessionsLatrines', label: 'Nombre de concessions disposant de latrines' },
+      {
+        key: 'nbConcessionsLatrinesAmeliorees',
+        label: 'Nombre de concessions disposant de latrines améliorées',
+      },
+      { key: 'nbLatrinesDesinfectees', label: 'Nombre de latrines désinfectées' },
+      { key: 'nbConcessionsPuisard', label: 'Nombre de concessions disposant de puisard' },
+      { key: 'nbConcessionsDesinsectisees', label: 'Nombre de concessions désinsectisées' },
+      { key: 'nbConcessionsDeratisees', label: 'Nombre de concessions dératisées' },
+      {
+        key: 'nbMenagesLavageMains',
+        label: 'Nombre de ménages disposant de dispositif de lavage des mains',
+      },
+      {
+        key: 'nbEcolesPointEauPotable',
+        label: "Nombre d'écoles disposant d'un point d'eau potable",
+      },
+      {
+        key: 'nbEcolesLavageMains',
+        label: 'Nombre d’écoles dotées en dispositifs de lavage des mains',
+      },
+      { key: 'nbEcolesLatrinesAmeliorees', label: 'Nombre d’écoles dotées de latrines améliorées' },
+    ],
+  },
+  {
+    title: '3. Hygiène des aliments, en particulier celle de la restauration collective',
+    fields: [
+      { key: 'nbControlesIodationSel', label: "Nombre de contrôles d'iodation du sel effectués" },
+      {
+        key: 'nbCasIntoxicationsAlimentaires',
+        label: "Nombre de cas d'intoxications alimentaires enregistrés",
+      },
+      { key: 'nbTiacEnregistres', label: 'Nombre de TIAC enregistrés' },
+      {
+        key: 'nbEtabsRestaurationExistants',
+        label: 'Nombre d’établissements de restauration collective existants',
+      },
+      {
+        key: 'nbEtabsRestaurationInspectes',
+        label: 'Nombre d’établissements de restauration collective inspectés',
+      },
+      {
+        key: 'nbEtabsRestaurationConformes',
+        label:
+          'Nombre d’établissements de restauration collective inspectés répondant aux normes d’hygiène et de salubrité',
+      },
+      {
+        key: 'nbInspectionsSanitairesEffectuees',
+        label:
+          'Nombre d’inspections sanitaires dans les établissements de restauration collective effectuées',
+      },
+      {
+        key: 'nbVisitesMedicalesManipulateurs',
+        label:
+          'Nombre de visites médicales réalisées au niveau des manipulateurs de produits alimentaires',
+      },
+    ],
+  },
+  {
+    title:
+      "4. Accès à l'eau potable, l'hygiène et l'assainissement dans les établissements de santé (AEP)",
+    fields: [
+      {
+        key: 'nbSourcesEauExistantesCS',
+        label: 'Nombre de source d’eau potable existants au niveau des centres de santé',
+      },
+      {
+        key: 'nbSourcesEauFonctionnellesCS',
+        label: 'Nombre de source d’eau potable fonctionnels au niveau des centres de santé',
+      },
+      {
+        key: 'nbPointsDistributionFonctionnelsCS',
+        label:
+          'Nombre de points de distribution d’eau potable fonctionnels dans les unités de soins des centres de santé',
+      },
+      {
+        key: 'nbPointsDistributionExistantsCS',
+        label:
+          'Nombre de points de distribution d’eau potable existants dans les unités de soins des centres de santé',
+      },
+      {
+        key: 'nbReservoirsStockageExistantsCS',
+        label:
+          'Nombre de réservoirs de stockage d’eau potable existants au niveau des centres de santé',
+      },
+      {
+        key: 'nbReservoirsStockageFonctionnelsCS',
+        label:
+          'Nombre de réservoirs de stockage d’eau potable fonctionnels au niveau des centres de santé',
+      },
+      {
+        key: 'nbControlesChloreCS',
+        label: 'Nombre de contrôles de chlore résiduel effectués dans le centre de santé',
+      },
+      {
+        key: 'nbControlesChloreNormesCS',
+        label:
+          'Nombre de contrôles de chlore résiduel effectués dans le centre de santé répondant aux normes',
+      },
+    ],
+  },
+  {
+    title: '5. Gestion des eaux usées et excréta',
+    fields: [
+      {
+        key: 'nbToilettesExistantesCS',
+        label: 'Nombre de toilettes existantes au centre de santé',
+      },
+      {
+        key: 'nbToilettesFonctionnellesCS',
+        label: 'Nombre de toilettes fonctionnelles au centre de santé',
+      },
+      {
+        key: 'nbToilettesSepareesCS',
+        label: 'Nombre de toilettes fonctionnelles et séparées (hommes/femmes) au centre de santé',
+      },
+      {
+        key: 'nbToilettesHandicapCS',
+        label: 'Nombre de toilettes fonctionnelles adaptées aux personnes en situation d’handicap',
+      },
+      {
+        key: 'nbToilettesLavageMainsCS',
+        label: 'Nombre de toilettes disposant d’un point de lavage des mains fonctionnel',
+      },
+      {
+        key: 'nbDispositifsTraitementExistants',
+        label: 'Nombre de dispositifs de traitement des eaux usées existants',
+      },
+      {
+        key: 'nbDispositifsTraitementFonctionnels',
+        label: 'Nombre de dispositifs de traitement des eaux usées fonctionnels',
+      },
+    ],
+  },
+  {
+    title: '6. Gestion des déchets biomédicaux',
+    fields: [
+      {
+        key: 'nbKitsProtectionExistants',
+        label:
+          'Nombre de kits standard de protection, de collecte et de transport de gestion des déchets biomédicaux existants',
+      },
+      {
+        key: 'nbUnitesSoinsTotal',
+        label: 'Nombre total d’unités de soins dans les centres de santé',
+      },
+      {
+        key: 'nbUnitesSoinsTriSource',
+        label: 'Nombre d’unités de soins effectuant le tri des déchets à la source',
+      },
+      {
+        key: 'nbCsIncinerateurFonctionnel',
+        label: 'Nombre de centres de santé disposant d’un incinérateur fonctionnel',
+      },
+      { key: 'nbBoitesSecuriteCollectees', label: 'Nombre de boites de sécurité collectées' },
+      {
+        key: 'nbBoitesSecuriteConvoyees',
+        label: 'Nombre de boite de sécurité convoyés vers le site d’incinération',
+      },
+      { key: 'nbBoitesSecuriteIncinerees', label: 'Nombre de boites de sécurité incinérées' },
+    ],
+  },
+  {
+    title: '7. Prévention et lutte contre les infections + promotion de l’hygiène',
+    fields: [
+      {
+        key: 'nbUnitesSoinsLavageMainsFonctionnel',
+        label: 'Nombre d’unités de soins disposant d’un point de lavage des mains fonctionnel',
+      },
+      {
+        key: 'nbPersonnelEquipementProtection',
+        label:
+          'Nombre de personnel des centres de santé disposant d’équipements de protection individuelle',
+      },
+      { key: 'nbPersonnelTotal', label: 'Nombre total de personnel des centres de santé' },
+      {
+        key: 'nbUnitesProduitsEntretien',
+        label:
+          'Nombre d’unités des centres de santé disposant de produits d’entretien et de désinfection',
+      },
+      {
+        key: 'nbAppareilsSterilisationExistants',
+        label: 'Nombre total d’appareils de stérilisation existants au niveau des centres de santé',
+      },
+      {
+        key: 'nbAppareilsSterilisationFonctionnels',
+        label: 'Nombre d’appareils de stérilisation fonctionnels au niveau des centres de santé',
+      },
+      { key: 'nbComitesHygieneSalubrite', label: 'Nombre de comités d’hygiène et de salubrité' },
+      {
+        key: 'nbComitesHygieneSalubriteFonctionnels',
+        label: 'Nombre de comité d’hygiène et de salubrité fonctionnel',
+      },
+      {
+        key: 'nbAteliersConfectionDalles',
+        label: 'Nombre d’ateliers de confections des dalles fonctionnels',
+      },
+      {
+        key: 'nbSeancesSensibilisationRealisees',
+        label:
+          'Nombre de séances d’informations et sensibilisations sur les pratiques d’hygiène essentielles réalisée',
+      },
+      {
+        key: 'nbSeancesSensibilisationPlanifiees',
+        label:
+          'Nombre total de séances d’informations et sensibilisations planifiées sur les pratiques d’hygiène essentielles planifiées',
+      },
+    ],
+  },
+];
+
 export function RmaReport({ defaultEchelon }: { defaultEchelon: 'CSRéf' | 'CSCom' }) {
   const clinicName = useClinicName();
   const [month, setMonth] = useState(currentMonth());
@@ -1072,6 +1330,7 @@ export function RmaReport({ defaultEchelon }: { defaultEchelon: 'CSRéf' | 'CSCo
   const [pf, setPf] = useState<PfSummaryRow[]>([]);
   const [vaccinations, setVaccinations] = useState<VaccinationSummaryRow[]>([]);
   const [lepreRapport, setLepreRapport] = useState<LepreRapportData | null>(null);
+  const [hygieneRapport, setHygieneRapport] = useState<HygieneRapportData | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
@@ -1091,6 +1350,7 @@ export function RmaReport({ defaultEchelon }: { defaultEchelon: 'CSRéf' | 'CSCo
         pfRows,
         vaccinationRows,
         lepreRow,
+        hygieneRow,
       ] = await Promise.all([
         fetchAllPages<ConsultationRow>('/api/consultations', dateFrom, dateTo),
         fetchAllPages<MaterniteRow>('/api/maternite', dateFrom, dateTo, { type: 'CPN' }),
@@ -1111,6 +1371,7 @@ export function RmaReport({ defaultEchelon }: { defaultEchelon: 'CSRéf' | 'CSCo
         fetchAllPages<PfSummaryRow>('/api/planification-familiale', dateFrom, dateTo),
         fetchAllPages<VaccinationSummaryRow>('/api/vaccination', dateFrom, dateTo),
         api<LepreRapportData>(`/api/registres/lepre?month=${selectedMonth}`),
+        api<HygieneRapportData>(`/api/registres/hygiene?month=${selectedMonth}`),
       ]);
       setConsultations(consultationRows);
       setCpn(cpnRows);
@@ -1122,6 +1383,7 @@ export function RmaReport({ defaultEchelon }: { defaultEchelon: 'CSRéf' | 'CSCo
       setPf(pfRows);
       setVaccinations(vaccinationRows);
       setLepreRapport(lepreRow);
+      setHygieneRapport(hygieneRow);
     } catch (err) {
       setError(friendlyError(err, 'Une erreur est survenue. Réessayez.'));
     } finally {
@@ -1640,12 +1902,13 @@ export function RmaReport({ defaultEchelon }: { defaultEchelon: 'CSRéf' | 'CSCo
           couvre toutes les consultations du mois : chacune compte sous sa maladie si un code
           d'affection RMA lui a été assigné, sinon sous « Autres ». Les autres sections du RMA
           (RH/matériel/financier, urgences obstétricales, chirurgie, fistule, laboratoire,
-          dracunculose, pharmacie) restent hors périmètre de cette page. Le tableau « Prise en
-          charge Lèpre » (section 5) reprend la saisie manuelle mensuelle du registre séparé{' '}
+          dracunculose, pharmacie) restent hors périmètre de cette page. Les tableaux « Prise en
+          charge Lèpre » (section 5) et « Activités d&apos;hygiène publique et salubrité » (section
+          7) reprennent la saisie manuelle mensuelle des registres séparés{' '}
           <Link href="/registres/lepre" className="text-[#2a78d6] hover:underline">
             /registres/lepre
           </Link>{' '}
-          — la section Hygiène reste, elle, disponible uniquement sur{' '}
+          et{' '}
           <Link href="/registres/hygiene" className="text-[#2a78d6] hover:underline">
             /registres/hygiene
           </Link>
@@ -1985,6 +2248,44 @@ export function RmaReport({ defaultEchelon }: { defaultEchelon: 'CSRéf' | 'CSCo
                 </ul>
               )}
             </div>
+          </div>
+
+          <div className="overflow-hidden rounded-xl border border-[#e1e0d9] bg-white shadow-[0_1px_2px_rgba(11,11,11,0.04)]">
+            <h2 className="border-b border-[#e1e0d9] bg-[#f9f9f7] px-4 py-2 text-sm font-semibold text-[#0b0b0b]">
+              Activités d&apos;hygiène publique et salubrité
+            </h2>
+            {HYGIENE_RMA_GROUPS.map((group) => (
+              <div key={group.title} className="border-b border-[#e1e0d9]">
+                <h3 className="px-4 pt-3 text-xs font-semibold tracking-wide text-[#898781] uppercase">
+                  {group.title}
+                </h3>
+                <dl>
+                  {group.fields.map((f, i) => (
+                    <div
+                      key={f.key}
+                      className={`flex items-center justify-between gap-4 px-4 py-3 text-sm ${
+                        i !== group.fields.length - 1 ? 'border-b border-[#e1e0d9]' : ''
+                      }`}
+                    >
+                      <dt className="text-[#52514e]">{f.label}</dt>
+                      <dd className="shrink-0 text-base font-semibold text-[#0b0b0b]">
+                        {hygieneRapport?.[f.key] ?? '—'}
+                      </dd>
+                    </div>
+                  ))}
+                </dl>
+              </div>
+            ))}
+            <p className="px-4 py-3 text-xs leading-relaxed text-[#898781]">
+              Reprend le tableau « Activités d&apos;hygiène publique et salubrité » du RMA (section
+              7). Ce n&apos;est pas un journal par patient : ces chiffres viennent de la saisie
+              manuelle mensuelle sur{' '}
+              <Link href="/registres/hygiene" className="text-[#2a78d6] hover:underline">
+                /registres/hygiene
+              </Link>{' '}
+              (pas filtré par le sélecteur Échelon ci-dessus). «&nbsp;—&nbsp;» signifie que ce mois
+              n&apos;a pas encore été renseigné.
+            </p>
           </div>
         </div>
       </div>
