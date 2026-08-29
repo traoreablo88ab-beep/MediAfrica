@@ -81,6 +81,7 @@ interface ConsultationRow {
   codeAffection: string | null;
   deces: boolean | null;
   echelon: string | null;
+  traitementPrescrit: string | null;
   patient: { dateNaissance: string; sexe: string };
 }
 
@@ -824,6 +825,38 @@ const PALUDISME_SUSPECT_CODES = new Set([
   'Paludisme simple confirmé',
   'Paludisme grave confirmé',
 ]);
+
+// Le "Traitement prescrit" de la consultation est un champ texte libre (pas
+// une liste structurée) — ces mots-clés approximent les lignes "traité avec
+// les CTA" / "traité par Artésunate, Arthéméter ou quinine injectable" du
+// RMA par une recherche insensible à la casse. Approximation : dépend de la
+// façon dont le prescripteur a rédigé le champ ; un traitement réellement
+// donné mais formulé autrement (abréviation inhabituelle, faute de frappe)
+// n'est pas détecté.
+const CTA_KEYWORDS = [
+  'cta',
+  'coartem',
+  'artéméther-luméfantrine',
+  'artemether-lumefantrine',
+  'asaq',
+  'artésunate-amodiaquine',
+  'artesunate-amodiaquine',
+];
+const PALUDISME_GRAVE_TREATMENT_KEYWORDS = [
+  'artésunate',
+  'artesunate',
+  'arthéméter',
+  'artéméther',
+  'arthemeter',
+  'artemether',
+  'quinine',
+];
+
+function mentionsAny(text: string | null, keywords: string[]): boolean {
+  if (!text) return false;
+  const lower = text.toLowerCase();
+  return keywords.some((k) => lower.includes(k));
+}
 
 function AgeSexTable({
   title,
@@ -1743,16 +1776,27 @@ export function RmaReport({ defaultEchelon }: { defaultEchelon: 'CSRéf' | 'CSCo
       filteredConsultations,
       (c) => c.codeAffection === 'Paludisme grave confirmé' && c.ge === 'Positif',
     ),
-    paludismeAgeRow('Cas simples confirmés traités avec les CTA', filteredConsultations, null),
+    paludismeAgeRow(
+      'Cas simples confirmés traités avec les CTA',
+      filteredConsultations,
+      (c) =>
+        c.codeAffection === 'Paludisme simple confirmé' &&
+        mentionsAny(c.traitementPrescrit, CTA_KEYWORDS),
+    ),
     paludismeAgeRow(
       'Cas graves confirmés traités (Artésunate, Arthéméter ou quinine injectable)',
       filteredConsultations,
-      null,
+      (c) =>
+        c.codeAffection === 'Paludisme grave confirmé' &&
+        mentionsAny(c.traitementPrescrit, PALUDISME_GRAVE_TREATMENT_KEYWORDS),
     ),
     paludismeAgeRow(
       'Cas graves confirmés ayant pris les CTA en traitement de relais',
       filteredConsultations,
-      null,
+      (c) =>
+        c.codeAffection === 'Paludisme grave confirmé' &&
+        mentionsAny(c.traitementPrescrit, PALUDISME_GRAVE_TREATMENT_KEYWORDS) &&
+        mentionsAny(c.traitementPrescrit, CTA_KEYWORDS),
     ),
     paludismeAgeRow("Cas d'hospitalisation toutes causes confondues", filteredConsultations, null),
     paludismeAgeRow(
@@ -2216,15 +2260,18 @@ export function RmaReport({ defaultEchelon }: { defaultEchelon: 'CSRéf' | 'CSCo
               CSRéf, pages 19-20 du 1er échelon / CSCom). La colonne « Y compris les FE » (femmes
               enceintes) est toujours « — » : MediAfrica ne trace pas le statut de grossesse sur la
               consultation ; une FE compte dans sa tranche d'âge (0-4/5 ans et plus) mais pas dans
-              cette colonne. Les lignes traitement CTA/Artésunate, hospitalisation liée au
-              paludisme, et le bloc « Informations générales » (rupture de stock CTA, personnel
-              formé, ASC) n'ont pas non plus de champ correspondant dans MediAfrica — affichées « —
-              », à compléter à la main. « Cas suspects... dans la formation sanitaire » est une
-              approximation (toute consultation testée TDR/GE ou codée paludisme). « Cas de décès
-              toutes causes confondues » ne compte que les décès vus en consultation — pas ceux en
-              hospitalisation ou maternité. Les lignes MILD/TPI-SP viennent des fiches CPN
-              (Maternite), pas de la consultation — elles ne suivent donc pas le filtre Échelon
-              ci-dessus.
+              cette colonne. Les 3 lignes de traitement (CTA, Artésunate/Arthéméter/quinine
+              injectable, relais CTA) sont une approximation : recherche de mots-clés dans le champ
+              texte libre « Traitement prescrit » de la consultation, pas un champ structuré — un
+              traitement réellement donné mais formulé autrement peut ne pas être détecté. Les
+              lignes d'hospitalisation liée au paludisme et le bloc « Informations générales »
+              (rupture de stock CTA, personnel formé, ASC) n'ont, eux, aucun champ correspondant
+              dans MediAfrica — affichés « — », à compléter à la main. « Cas suspects... dans la
+              formation sanitaire » est une approximation (toute consultation testée TDR/GE ou codée
+              paludisme). « Cas de décès toutes causes confondues » ne compte que les décès vus en
+              consultation — pas ceux en hospitalisation ou maternité. Les lignes MILD/TPI-SP
+              viennent des fiches CPN (Maternite), pas de la consultation — elles ne suivent donc
+              pas le filtre Échelon ci-dessus.
             </p>
           </div>
 
