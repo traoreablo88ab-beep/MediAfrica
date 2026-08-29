@@ -535,9 +535,11 @@ export function AppHeader({ active }: { active?: AppNavTab }) {
               <NavLink href="/personnel" active={false} icon={StaffIcon}>
                 Personnel
               </NavLink>
-              <NavLink href="/admin-csref" active={false} icon={CsrefAdminIcon}>
-                Admin CSRéf
-              </NavLink>
+              {echelon === 'CSRéf' && (
+                <NavLink href="/admin-csref" active={false} icon={CsrefAdminIcon}>
+                  Admin CSRéf
+                </NavLink>
+              )}
               <NavLink href="/facturation" active={false} icon={BillingIcon}>
                 Facturation
               </NavLink>
@@ -653,15 +655,17 @@ export function AppHeader({ active }: { active?: AppNavTab }) {
                   <StaffIcon className="h-4 w-4" />
                   Personnel
                 </Link>
-                <Link
-                  href="/admin-csref"
-                  onClick={() => setMobileOpen(false)}
-                  style={{ animationDelay: `${(TABS.length + 1) * 40}ms` }}
-                  className="animate-fade-in-up flex items-center gap-2 rounded-md px-3 py-2 text-sm font-medium text-[#52514e] hover:bg-[#f9f9f7] hover:text-[#2a78d6]"
-                >
-                  <CsrefAdminIcon className="h-4 w-4" />
-                  Admin CSRéf
-                </Link>
+                {echelon === 'CSRéf' && (
+                  <Link
+                    href="/admin-csref"
+                    onClick={() => setMobileOpen(false)}
+                    style={{ animationDelay: `${(TABS.length + 1) * 40}ms` }}
+                    className="animate-fade-in-up flex items-center gap-2 rounded-md px-3 py-2 text-sm font-medium text-[#52514e] hover:bg-[#f9f9f7] hover:text-[#2a78d6]"
+                  >
+                    <CsrefAdminIcon className="h-4 w-4" />
+                    Admin CSRéf
+                  </Link>
+                )}
                 <Link
                   href="/facturation"
                   onClick={() => setMobileOpen(false)}
