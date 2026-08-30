@@ -5,6 +5,11 @@ import { api } from '@/lib/api';
 import { friendlyError } from '@/lib/errorMessages';
 import { AppHeader } from '@/components/AppHeader';
 import { useClinicName } from '@/lib/useClinicName';
+import { BarChart } from '@/components/charts/BarChart';
+import { LineChart } from '@/components/charts/LineChart';
+
+const CHART_COLOR_CURRENT_YEAR = '#2a78d6';
+const CHART_COLOR_PREVIOUS_YEAR = '#eb6834';
 
 const MONTH_LABELS = [
   'Janv.',
@@ -57,6 +62,8 @@ export default function RapportsPage() {
   const clinicName = useClinicName();
   const [year, setYear] = useState(new Date().getFullYear());
   const [data, setData] = useState<ActiviteResponse | null>(null);
+  const [prevYearData, setPrevYearData] = useState<ActiviteResponse | null>(null);
+  const [selectedCategoryKey, setSelectedCategoryKey] = useState('consultations');
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
@@ -64,8 +71,12 @@ export default function RapportsPage() {
     setLoading(true);
     setError(null);
     try {
-      const res = await api<ActiviteResponse>(`/api/rapports/activite?year=${selectedYear}`);
+      const [res, prevRes] = await Promise.all([
+        api<ActiviteResponse>(`/api/rapports/activite?year=${selectedYear}`),
+        api<ActiviteResponse>(`/api/rapports/activite?year=${selectedYear - 1}`),
+      ]);
       setData(res);
+      setPrevYearData(prevRes);
     } catch (err) {
       setError(friendlyError(err, 'Une erreur est survenue. Réessayez.'));
     } finally {
@@ -76,6 +87,10 @@ export default function RapportsPage() {
   useEffect(() => {
     void load(year);
   }, [year, load]);
+
+  const selectedCategory = data?.categories.find((c) => c.key === selectedCategoryKey) ?? null;
+  const selectedCategoryPrevYear =
+    prevYearData?.categories.find((c) => c.key === selectedCategoryKey) ?? null;
 
   return (
     <main className="min-h-screen bg-[#f9f9f7] md:pl-64">
@@ -137,6 +152,74 @@ export default function RapportsPage() {
           <p className="mb-4 text-sm text-[#898781]" aria-live="polite">
             Calcul en cours…
           </p>
+        )}
+
+        {data && (
+          <div className="mb-6 flex flex-col gap-4 print:hidden">
+            <div className="flex flex-wrap gap-2">
+              {data.categories.map((cat) => (
+                <button
+                  key={cat.key}
+                  type="button"
+                  onClick={() => setSelectedCategoryKey(cat.key)}
+                  className={`rounded-full border px-3 py-1.5 text-xs font-medium transition-colors ${
+                    cat.key === selectedCategoryKey
+                      ? 'border-[#2a78d6] bg-[#2a78d6]/10 text-[#2a78d6]'
+                      : 'border-[#e1e0d9] bg-white text-[#52514e] hover:bg-[#f9f9f7]'
+                  }`}
+                >
+                  {cat.label}
+                </button>
+              ))}
+            </div>
+
+            <div className="grid grid-cols-1 gap-4 lg:grid-cols-2">
+              <div className="rounded-xl border border-[#e1e0d9] bg-white p-4 shadow-[0_1px_2px_rgba(11,11,11,0.04)]">
+                <h2 className="mb-3 text-sm font-semibold text-[#0b0b0b]">
+                  {selectedCategory?.label} — volumes mensuels {year}
+                </h2>
+                {selectedCategory && (
+                  <BarChart
+                    data={selectedCategory.monthly.map((v, i) => ({
+                      label: MONTH_LABELS[i]!,
+                      value: v,
+                    }))}
+                    color={CHART_COLOR_CURRENT_YEAR}
+                  />
+                )}
+              </div>
+
+              <div className="rounded-xl border border-[#e1e0d9] bg-white p-4 shadow-[0_1px_2px_rgba(11,11,11,0.04)]">
+                <h2 className="mb-3 text-sm font-semibold text-[#0b0b0b]">
+                  {selectedCategory?.label} — évolution {year} vs {year - 1}
+                </h2>
+                {selectedCategory && selectedCategoryPrevYear && (
+                  <LineChart
+                    series={[
+                      {
+                        key: 'current',
+                        label: String(year),
+                        color: CHART_COLOR_CURRENT_YEAR,
+                        data: selectedCategory.monthly.map((v, i) => ({
+                          label: MONTH_LABELS[i]!,
+                          value: v,
+                        })),
+                      },
+                      {
+                        key: 'previous',
+                        label: String(year - 1),
+                        color: CHART_COLOR_PREVIOUS_YEAR,
+                        data: selectedCategoryPrevYear.monthly.map((v, i) => ({
+                          label: MONTH_LABELS[i]!,
+                          value: v,
+                        })),
+                      },
+                    ]}
+                  />
+                )}
+              </div>
+            </div>
+          </div>
         )}
 
         {data && (
