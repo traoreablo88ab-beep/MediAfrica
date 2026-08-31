@@ -14,6 +14,7 @@ vi.mock('@/lib/server/auth', () => ({
 
 import { requireOrgMember } from '@/lib/server/middleware';
 import { verifyCsrf } from '@/lib/server/auth';
+import { encryptSensitive, decryptSensitive } from '@/lib/server/patients/sensitive-fields';
 import { GET, PATCH } from './route';
 
 const mockRequireOrgMember = vi.mocked(requireOrgMember);
@@ -308,6 +309,18 @@ describe('GET /api/patients/[id]', () => {
     expect(body.planificationsFamiliales[0].providerName).toBe('Amadou Diallo');
   });
 
+  it('decrypts sensitive fields, and tolerates legacy plaintext for fields never encrypted', async () => {
+    prismaMock.patient.findFirst.mockResolvedValue({
+      ...fullPatient(),
+      numeroRamed: encryptSensitive('RM-9999'),
+      allergiesConnues: 'Pénicilline', // legacy plaintext row, predates this feature
+    } as never);
+    const res = await GET(makeGet(), ctxWith('pt-1'));
+    const body = await res.json();
+    expect(body.numeroRamed).toBe('RM-9999');
+    expect(body.allergiesConnues).toBe('Pénicilline');
+  });
+
   it('queries with the id-scoped consultations include, ordered desc, take 20', async () => {
     prismaMock.patient.findFirst.mockResolvedValue(fullPatient() as never);
     await GET(makeGet(), ctxWith('pt-1'));
@@ -429,7 +442,7 @@ describe('PATCH /api/patients/[id]', () => {
     expect(arg?.data).toEqual({ nom: 'Traoré', prenom: 'Ablo' });
   });
 
-  it('passes through numeroAmo', async () => {
+  it('encrypts numeroAmo before storing', async () => {
     prismaMock.patient.findFirst.mockResolvedValue(fullPatient() as never);
     prismaMock.patient.update.mockResolvedValue({
       ...fullPatient(),
@@ -439,6 +452,8 @@ describe('PATCH /api/patients/[id]', () => {
     await PATCH(makePatch({ numeroAmo: 'AMO-5678' }), ctxWith('pt-1'));
 
     const arg = prismaMock.patient.update.mock.calls[0]?.[0];
-    expect(arg?.data).toEqual({ numeroAmo: 'AMO-5678' });
+    const data = arg?.data as Record<string, unknown>;
+    expect(data.numeroAmo).not.toBe('AMO-5678');
+    expect(decryptSensitive(data.numeroAmo as string)).toBe('AMO-5678');
   });
 });

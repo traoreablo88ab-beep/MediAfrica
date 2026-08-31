@@ -11,6 +11,9 @@
 // throws when the secret matches that anchored regex. Prefix with
 // `vitest-fixture-` to satisfy length + entropy while bypassing the regex.
 process.env.JWT_SECRET ||= 'vitest-fixture-jwt-secret-with-enough-entropy-for-tests';
-process.env.ENCRYPTION_KEY ||= 'aGVsbG8td29ybGQtdGhpcy1pcy0zMi1ieXRlcy1sb25n';
+// Must decode to exactly 32 bytes (crypto.ts KEY_LENGTH) — the previous
+// fixture decoded to 33 and only worked because nothing called encrypt()/
+// decrypt() with it yet (crypto.test.ts generates its own key instead).
+process.env.ENCRYPTION_KEY ||= 'afsRgChLJZ2O1dLN6+TxZTzRSp7ylzUgVTTgVt6SQ68=';
 process.env.COOKIE_PREFIX ||= 'app';
 process.env.NODE_ENV ||= 'test';

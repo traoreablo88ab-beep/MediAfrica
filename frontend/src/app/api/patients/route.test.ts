@@ -11,6 +11,7 @@ vi.mock('@/lib/server/middleware', () => ({
 }));
 
 import { requireOrgMember } from '@/lib/server/middleware';
+import { decryptSensitive } from '@/lib/server/patients/sensitive-fields';
 import { GET, POST } from './route';
 
 const mockRequireOrgMember = vi.mocked(requireOrgMember);
@@ -227,14 +228,17 @@ describe('POST /api/patients', () => {
     expect(createArg?.data?.organizationId).toBe('org-1');
   });
 
-  it('passes through numeroRamed and numeroAmo', async () => {
+  it('encrypts numeroRamed and numeroAmo before storing', async () => {
     prismaMock.patient.create.mockResolvedValue(patientRow() as never);
 
     await POST(makePost({ ...validBody, numeroRamed: 'RM-1234', numeroAmo: 'AMO-5678' }));
 
     const createArg = prismaMock.patient.create.mock.calls[0]?.[0]?.data as Record<string, unknown>;
-    expect(createArg.numeroRamed).toBe('RM-1234');
-    expect(createArg.numeroAmo).toBe('AMO-5678');
+    // Stored value is ciphertext, not the plaintext the client sent.
+    expect(createArg.numeroRamed).not.toBe('RM-1234');
+    expect(createArg.numeroAmo).not.toBe('AMO-5678');
+    expect(decryptSensitive(createArg.numeroRamed as string)).toBe('RM-1234');
+    expect(decryptSensitive(createArg.numeroAmo as string)).toBe('AMO-5678');
   });
 
   it('same name+birthdate or same phone as an existing patient → 409 DUPLICATE_PATIENT, no create', async () => {

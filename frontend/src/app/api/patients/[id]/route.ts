@@ -16,6 +16,7 @@ import { requireOrgMember } from '@/lib/server/middleware';
 import { requireActiveSubscription } from '@/lib/server/subscriptions/access-guard';
 import { prisma } from '@/lib/server/prisma';
 import { zPhone } from '@/lib/server/zod-helpers';
+import { encryptSensitive, decryptSensitive } from '@/lib/server/patients/sensitive-fields';
 import { makeRequestContext, withRequestContext } from '@/lib/server/observability/request-context';
 
 const CONSULTATION_HISTORY_LIMIT = 20;
@@ -103,6 +104,20 @@ export async function GET(
         dateNaissance: fields.dateNaissance.toISOString(),
         createdAt: fields.createdAt.toISOString(),
         updatedAt: fields.updatedAt.toISOString(),
+        numeroRamed: fields.numeroRamed ? decryptSensitive(fields.numeroRamed) : fields.numeroRamed,
+        numeroAmo: fields.numeroAmo ? decryptSensitive(fields.numeroAmo) : fields.numeroAmo,
+        allergiesConnues: fields.allergiesConnues
+          ? decryptSensitive(fields.allergiesConnues)
+          : fields.allergiesConnues,
+        antecedentsPersonnels: fields.antecedentsPersonnels
+          ? decryptSensitive(fields.antecedentsPersonnels)
+          : fields.antecedentsPersonnels,
+        antecedentsChirurgicaux: fields.antecedentsChirurgicaux
+          ? decryptSensitive(fields.antecedentsChirurgicaux)
+          : fields.antecedentsChirurgicaux,
+        antecedentsFamiliaux: fields.antecedentsFamiliaux
+          ? decryptSensitive(fields.antecedentsFamiliaux)
+          : fields.antecedentsFamiliaux,
         consultations: consultations.map((c) => ({
           id: c.id,
           date: c.date.toISOString(),
@@ -358,18 +373,20 @@ export async function PATCH(
         ...(d.contactUrgenceTelephone !== undefined
           ? { contactUrgenceTelephone: d.contactUrgenceTelephone }
           : {}),
-        ...(d.numeroRamed !== undefined ? { numeroRamed: d.numeroRamed } : {}),
-        ...(d.numeroAmo !== undefined ? { numeroAmo: d.numeroAmo } : {}),
+        ...(d.numeroRamed !== undefined ? { numeroRamed: encryptSensitive(d.numeroRamed) } : {}),
+        ...(d.numeroAmo !== undefined ? { numeroAmo: encryptSensitive(d.numeroAmo) } : {}),
         ...(d.groupeSanguin !== undefined ? { groupeSanguin: d.groupeSanguin } : {}),
-        ...(d.allergiesConnues !== undefined ? { allergiesConnues: d.allergiesConnues } : {}),
+        ...(d.allergiesConnues !== undefined
+          ? { allergiesConnues: encryptSensitive(d.allergiesConnues) }
+          : {}),
         ...(d.antecedentsPersonnels !== undefined
-          ? { antecedentsPersonnels: d.antecedentsPersonnels }
+          ? { antecedentsPersonnels: encryptSensitive(d.antecedentsPersonnels) }
           : {}),
         ...(d.antecedentsChirurgicaux !== undefined
-          ? { antecedentsChirurgicaux: d.antecedentsChirurgicaux }
+          ? { antecedentsChirurgicaux: encryptSensitive(d.antecedentsChirurgicaux) }
           : {}),
         ...(d.antecedentsFamiliaux !== undefined
-          ? { antecedentsFamiliaux: d.antecedentsFamiliaux }
+          ? { antecedentsFamiliaux: encryptSensitive(d.antecedentsFamiliaux) }
           : {}),
       },
     });

@@ -24,6 +24,7 @@ import { prisma } from '@/lib/server/prisma';
 import { clampLimit, cursorWhere, buildPage, decodeCursor } from '@/lib/server/pagination/paginate';
 import { zPhone } from '@/lib/server/zod-helpers';
 import { generateDossierNumber } from '@/lib/server/patients/dossier-number';
+import { encryptSensitive } from '@/lib/server/patients/sensitive-fields';
 import { makeRequestContext, withRequestContext } from '@/lib/server/observability/request-context';
 
 const Q_MAX = 200;
@@ -279,17 +280,21 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
               ...(d.contactUrgenceTelephone
                 ? { contactUrgenceTelephone: d.contactUrgenceTelephone }
                 : {}),
-              ...(d.numeroRamed ? { numeroRamed: d.numeroRamed } : {}),
-              ...(d.numeroAmo ? { numeroAmo: d.numeroAmo } : {}),
+              ...(d.numeroRamed ? { numeroRamed: encryptSensitive(d.numeroRamed) } : {}),
+              ...(d.numeroAmo ? { numeroAmo: encryptSensitive(d.numeroAmo) } : {}),
               ...(d.groupeSanguin ? { groupeSanguin: d.groupeSanguin } : {}),
-              ...(d.allergiesConnues ? { allergiesConnues: d.allergiesConnues } : {}),
+              ...(d.allergiesConnues
+                ? { allergiesConnues: encryptSensitive(d.allergiesConnues) }
+                : {}),
               ...(d.antecedentsPersonnels
-                ? { antecedentsPersonnels: d.antecedentsPersonnels }
+                ? { antecedentsPersonnels: encryptSensitive(d.antecedentsPersonnels) }
                 : {}),
               ...(d.antecedentsChirurgicaux
-                ? { antecedentsChirurgicaux: d.antecedentsChirurgicaux }
+                ? { antecedentsChirurgicaux: encryptSensitive(d.antecedentsChirurgicaux) }
                 : {}),
-              ...(d.antecedentsFamiliaux ? { antecedentsFamiliaux: d.antecedentsFamiliaux } : {}),
+              ...(d.antecedentsFamiliaux
+                ? { antecedentsFamiliaux: encryptSensitive(d.antecedentsFamiliaux) }
+                : {}),
               ...(idemKey ? { idempotencyKey: idemKey, idempotencyBodyHash: bodyHash } : {}),
             },
           });
