@@ -1,5 +1,6 @@
 import type { Metadata } from 'next';
 import { Inter, Source_Serif_4 } from 'next/font/google';
+import { headers } from 'next/headers';
 import './globals.css';
 import { ToastProvider } from '@/contexts/ToastContext';
 import { AuthProvider } from '@/contexts/AuthContext';
@@ -62,17 +63,22 @@ const organizationJsonLd = {
   url: siteUrl,
 };
 
-export default function RootLayout({
+export default async function RootLayout({
   children,
 }: Readonly<{
   children: React.ReactNode;
 }>) {
+  // Only set when middleware.ts's CSP is active (production) — undefined in
+  // dev, where the script tag below just runs without a nonce requirement.
+  const nonce = (await headers()).get('x-nonce') ?? undefined;
+
   return (
     <html lang="fr" className={`${inter.variable} ${sourceSerif4.variable}`}>
       <body className={inter.className}>
         {/* Static JSON-LD built from constants above — no user input involved. */}
         <script
           type="application/ld+json"
+          nonce={nonce}
           dangerouslySetInnerHTML={{ __html: JSON.stringify(organizationJsonLd) }}
         />
         <ServiceWorkerRegister />

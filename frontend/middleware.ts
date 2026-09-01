@@ -31,13 +31,69 @@ function isAuthedPath(pathname: string): boolean {
   return AUTHED_PREFIXES.some((p) => pathname === p || pathname.startsWith(`${p}/`));
 }
 
+// Content-Security-Policy — production only. Dev mode is deliberately
+// excluded: Turbopack HMR needs eval + a websocket that would otherwise force
+// a parallel dev-only policy to maintain, and this middleware has no way to
+// tell a local `next dev` apart from a real user's browser. Nonce-based per
+// Next's documented App Router pattern — Next automatically applies the
+// nonce to its own injected inline scripts once it sees a `nonce-` source in
+// the response's script-src; app code (root layout's JSON-LD tag) reads the
+// same nonce via headers().get('x-nonce').
+//
+// style-src keeps 'unsafe-inline': dynamic inline style={{...}} (chart bar
+// heights, tooltip positioning in /rapports) compiles to inline style
+// attributes, which CSP has no nonce mechanism for — dropping this would
+// silently break those charts.
+function buildCsp(nonce: string): string {
+  return [
+    `default-src 'self'`,
+    `script-src 'self' 'nonce-${nonce}' 'strict-dynamic'`,
+    `style-src 'self' 'unsafe-inline'`,
+    `img-src 'self' blob: data: https://res.cloudinary.com`,
+    `font-src 'self'`,
+    // Sentry's browser SDK posts events straight to its ingest host (the
+    // tunnelRoute proxy in next.config.ts is off by default).
+    `connect-src 'self' https://*.ingest.sentry.io https://*.ingest.us.sentry.io https://*.ingest.de.sentry.io`,
+    // Same-origin service worker (see ServiceWorkerRegister) + Sentry
+    // Replay's compression worker, which it spins up from a blob: URL.
+    `worker-src 'self' blob:`,
+    `object-src 'none'`,
+    `base-uri 'self'`,
+    `form-action 'self'`,
+    `frame-ancestors 'none'`,
+    `upgrade-insecure-requests`,
+  ].join('; ');
+}
+
 export function middleware(req: NextRequest): NextResponse {
-  if (AUTHED_PREFIXES.length === 0) return NextResponse.next();
+  const cspEnabled = process.env.NODE_ENV === 'production';
+  const nonce = cspEnabled ? Buffer.from(crypto.randomUUID()).toString('base64') : '';
+  const csp = cspEnabled ? buildCsp(nonce) : '';
+
+  const requestHeaders = new Headers(req.headers);
+  if (cspEnabled) {
+    requestHeaders.set('x-nonce', nonce);
+    requestHeaders.set('Content-Security-Policy', csp);
+  }
+
+  function next(): NextResponse {
+    const res = NextResponse.next({ request: { headers: requestHeaders } });
+    if (cspEnabled) res.headers.set('Content-Security-Policy', csp);
+    return res;
+  }
+
+  function redirect(url: URL): NextResponse {
+    const res = NextResponse.redirect(url, 303);
+    if (cspEnabled) res.headers.set('Content-Security-Policy', csp);
+    return res;
+  }
+
+  if (AUTHED_PREFIXES.length === 0) return next();
 
   const { pathname, search } = req.nextUrl;
-  if (!isAuthedPath(pathname)) return NextResponse.next();
+  if (!isAuthedPath(pathname)) return next();
 
-  if (req.cookies.get(ACCESS_COOKIE)?.value) return NextResponse.next();
+  if (req.cookies.get(ACCESS_COOKIE)?.value) return next();
 
   const target = pathname + search;
 
@@ -45,13 +101,13 @@ export function middleware(req: NextRequest): NextResponse {
     const url = req.nextUrl.clone();
     url.pathname = LOGIN_PATH;
     url.search = `?next=${encodeURIComponent(target)}`;
-    return NextResponse.redirect(url, 303);
+    return redirect(url);
   }
 
   const url = req.nextUrl.clone();
   url.pathname = '/api/auth/refresh-and-return';
   url.search = `?next=${encodeURIComponent(target)}`;
-  return NextResponse.redirect(url, 303);
+  return redirect(url);
 }
 
 export const config = {
