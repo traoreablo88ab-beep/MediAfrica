@@ -21,6 +21,7 @@ import { makeRequestContext, withRequestContext } from '@/lib/server/observabili
 import { log } from '@/lib/server/observability/log';
 import { hashPassword, generateVerificationCode } from '@/lib/server/auth';
 import { isBanned } from '@/lib/server/auth/banned-passwords';
+import { verifyTurnstile } from '@/lib/server/auth/turnstile';
 import { isPwned } from '@/lib/server/auth/hibp';
 import { dummyBcryptCompare } from '@/lib/server/auth/dummy-bcrypt';
 import { enqueueOutbox } from '@/lib/server/outbox';
@@ -41,6 +42,10 @@ const Body = z.object({
   // separate flow — an OWNER/ADMIN invites staff from /personnel, which
   // reuses the password-reset UX instead of public self-signup.
   clinicName: z.string().trim().min(1).max(200),
+  // Optional — only meaningful once TURNSTILE_SECRET_KEY is configured and a
+  // widget is wired into the signup page; verifyTurnstile is a no-op true
+  // until then, so omitting it never blocks signup on a fresh clone.
+  turnstileToken: z.string().optional(),
 });
 
 const limiter = createEmailLimiter(redis ? { redis } : {}, {
@@ -69,7 +74,20 @@ export async function POST(req: NextRequest): Promise<Response> {
       res.headers.set('x-request-id', ctx.requestId);
       return res;
     }
-    const { email, password, clinicName } = parsed.data;
+    const { email, password, clinicName, turnstileToken } = parsed.data;
+
+    // 1.5. CAPTCHA — no-op true when TURNSTILE_SECRET_KEY is unset (see
+    // lib/server/auth/turnstile.ts). Gates before the password-policy checks
+    // below so obvious bot traffic doesn't burn bcrypt/HIBP cycles.
+    const captchaOk = await verifyTurnstile(turnstileToken, req.headers.get('x-forwarded-for'));
+    if (!captchaOk) {
+      const res = NextResponse.json(
+        { error: 'CAPTCHA_FAILED', message: 'Captcha verification failed.' },
+        { status: 400 },
+      );
+      res.headers.set('x-request-id', ctx.requestId);
+      return res;
+    }
 
     // 2. Password policy gates BEFORE looking up user (D-22 — keep the no-user
     //    and existing-user branches symmetric below).

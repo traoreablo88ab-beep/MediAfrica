@@ -209,6 +209,32 @@ describe('POST /api/auth/signup', () => {
     }
   });
 
+  it('returns CAPTCHA_FAILED when TURNSTILE_SECRET_KEY is set and verification fails', async () => {
+    vi.stubEnv('TURNSTILE_SECRET_KEY', 'test-secret');
+    const originalFetch = global.fetch;
+    global.fetch = vi.fn().mockResolvedValue({
+      ok: true,
+      json: async () => ({ success: false }),
+    }) as never;
+    try {
+      const res = await POST(
+        makeReq({
+          email: 'bot@example.com',
+          password: 'a-very-unique-passphrase-1234',
+          clinicName: 'Clinique Test',
+          turnstileToken: 'bad-token',
+        }),
+      );
+      expect(res.status).toBe(400);
+      const body = await res.json();
+      expect(body.error).toBe('CAPTCHA_FAILED');
+      expect(prismaMock.user.findUnique).not.toHaveBeenCalled();
+    } finally {
+      global.fetch = originalFetch;
+      vi.unstubAllEnvs();
+    }
+  });
+
   it("source exports runtime = 'nodejs' (Phase 0 guard)", () => {
     const src = fs.readFileSync(path.join(__dirname, 'route.ts'), 'utf8');
     expect(src).toMatch(/export\s+const\s+runtime\s*=\s*['"]nodejs['"]/);
