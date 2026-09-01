@@ -11,7 +11,9 @@
 //   5. No-user branch: dummy bcrypt compare → INVALID_CREDENTIALS (no recordFailure)
 //   6. verifyPassword → on fail recordFailure → LOCKED_OUT or INVALID_CREDENTIALS
 //   7. emailVerifiedAt check (after credential match — D-24)
-//   8. recordSuccess + issue 3 cookies
+//   8. recordSuccess; if totpEnabledAt is set, withhold cookies and issue a
+//      pending-2FA cookie instead (see lib/server/auth/two-factor-session.ts
+//      + POST /api/auth/2fa/verify) — otherwise issue the 3 session cookies
 export const runtime = 'nodejs';
 
 import 'server-only';
@@ -26,6 +28,10 @@ import {
 } from '@/lib/server/auth';
 import { isLockedOut, recordFailure, recordSuccess } from '@/lib/server/auth/lockout';
 import { dummyBcryptCompare } from '@/lib/server/auth/dummy-bcrypt';
+import {
+  mintPendingTwoFactorToken,
+  setPendingTwoFactorCookie,
+} from '@/lib/server/auth/two-factor-session';
 import { createEmailLimiter } from '@/lib/server/middleware/rate-limit-by-email';
 import { getRedis } from '@/lib/server/redis';
 import { prisma } from '@/lib/server/prisma';
@@ -99,6 +105,7 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
         emailVerifiedAt: true,
         tokenVersion: true,
         status: true,
+        totpEnabledAt: true,
       },
     });
 
@@ -162,9 +169,25 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
       );
     }
 
-    // 8. Reset failure count and issue cookies.
+    // 8. Reset failure count.
     await recordSuccess(email);
 
+    // 8b. 2FA gate — totpEnabledAt is the sole trigger (not role: enrollment
+    // is ADMIN/SUPERADMIN-only via /api/auth/2fa/setup, but stays enforced
+    // even if the account is later demoted). Password already verified, so
+    // recordSuccess above stands; withhold session cookies and issue a
+    // short-lived pending-2FA cookie instead — POST /api/auth/2fa/verify
+    // completes the login.
+    if (user.totpEnabledAt) {
+      const pendingToken = await mintPendingTwoFactorToken(user.id);
+      await setPendingTwoFactorCookie(pendingToken);
+      return NextResponse.json(
+        { twoFactorRequired: true },
+        { status: 200, headers: { 'x-request-id': ctx.requestId } },
+      );
+    }
+
+    // 9. Issue cookies.
     const accessToken = await createAccessToken({
       sub: user.id,
       email: user.email,

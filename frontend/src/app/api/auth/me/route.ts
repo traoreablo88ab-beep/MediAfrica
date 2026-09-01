@@ -54,6 +54,7 @@ export async function GET(req: NextRequest): Promise<NextResponse> {
         createdAt: true,
         updatedAt: true,
         passwordHash: true,
+        totpEnabledAt: true,
         oauthAccounts: { select: { provider: true } },
       },
     });
@@ -92,6 +93,7 @@ export async function GET(req: NextRequest): Promise<NextResponse> {
       hasPassword: !!dbUser?.passwordHash,
       linkedProviders: (dbUser?.oauthAccounts ?? []).map((a) => a.provider),
       orgRole: orgMember?.role ?? null,
+      totpEnabled: !!dbUser?.totpEnabledAt,
     };
 
     return NextResponse.json({ user }, { status: 200, headers: { 'x-request-id': ctx.requestId } });

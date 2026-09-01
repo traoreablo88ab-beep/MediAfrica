@@ -198,4 +198,27 @@ describe('POST /api/auth/login', () => {
     expect(__cookieStore.has('app-refresh')).toBe(false);
     expect(__cookieStore.has('app-csrf')).toBe(false);
   });
+
+  it('Test 10: totpEnabledAt set — twoFactorRequired, pending-2FA cookie set, no session cookies', async () => {
+    prismaMock.user.findUnique.mockResolvedValue({
+      id: 'u1',
+      email: 'admin@b.com',
+      passwordHash: '$2a$12$hashhashhashhashhashhashhashhashhashhashhashhashhashhha',
+      emailVerifiedAt: new Date(),
+      tokenVersion: 0,
+      status: 'ACTIVE',
+      totpEnabledAt: new Date(),
+    } as never);
+    vi.mocked(verifyPassword).mockResolvedValue(true);
+
+    const res = await POST(makeReq({ email: 'admin@b.com', password: 'longenough' }));
+
+    expect(res.status).toBe(200);
+    expect(await res.json()).toEqual({ twoFactorRequired: true });
+    expect(recordSuccess).toHaveBeenCalledWith('admin@b.com');
+    expect(__cookieStore.has('app-2fa-pending')).toBe(true);
+    expect(__cookieStore.has('app-token')).toBe(false);
+    expect(__cookieStore.has('app-refresh')).toBe(false);
+    expect(__cookieStore.has('app-csrf')).toBe(false);
+  });
 });

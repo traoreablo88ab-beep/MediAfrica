@@ -97,6 +97,82 @@ export default function SettingsPage() {
     if (user) setName(user.name ?? '');
   }, [user]);
 
+  // 2FA (TOTP) section — ADMIN/SUPERADMIN only (same isAdmin probe as the
+  // clinic-name section above). `totpStep` walks: idle → setup (QR shown) →
+  // backup-codes (shown once, right after confirm) → back to idle.
+  const [totpStep, setTotpStep] = useState<'idle' | 'setup' | 'backup-codes'>('idle');
+  const [totpSecret, setTotpSecret] = useState('');
+  const [totpQrCodeDataUrl, setTotpQrCodeDataUrl] = useState('');
+  const [totpConfirmCode, setTotpConfirmCode] = useState('');
+  const [totpBackupCodes, setTotpBackupCodes] = useState<string[]>([]);
+  const [totpSubmitting, setTotpSubmitting] = useState(false);
+  const [totpError, setTotpError] = useState<string | null>(null);
+  const [disabling, setDisabling] = useState(false);
+  const [disablePassword, setDisablePassword] = useState('');
+  const [disableSubmitting, setDisableSubmitting] = useState(false);
+  const [disableError, setDisableError] = useState<string | null>(null);
+
+  async function onStartTotpSetup() {
+    setTotpError(null);
+    setTotpSubmitting(true);
+    try {
+      const res = await api<{ secret: string; qrCodeDataUrl: string }>('/api/auth/2fa/setup', {
+        method: 'POST',
+      });
+      setTotpSecret(res.secret);
+      setTotpQrCodeDataUrl(res.qrCodeDataUrl);
+      setTotpConfirmCode('');
+      setTotpStep('setup');
+    } catch (err) {
+      setTotpError(friendlyError(err, 'Erreur réseau. Réessaie.'));
+    } finally {
+      setTotpSubmitting(false);
+    }
+  }
+
+  async function onConfirmTotp(e: FormEvent) {
+    e.preventDefault();
+    setTotpError(null);
+    setTotpSubmitting(true);
+    try {
+      const res = await api<{ backupCodes: string[] }>('/api/auth/2fa/confirm', {
+        method: 'POST',
+        body: { code: totpConfirmCode },
+      });
+      setTotpBackupCodes(res.backupCodes);
+      setTotpStep('backup-codes');
+      await refresh();
+    } catch (err) {
+      setTotpError(friendlyError(err, 'Erreur réseau. Réessaie.'));
+    } finally {
+      setTotpSubmitting(false);
+    }
+  }
+
+  function onAcknowledgeBackupCodes() {
+    setTotpStep('idle');
+    setTotpSecret('');
+    setTotpQrCodeDataUrl('');
+    setTotpBackupCodes([]);
+  }
+
+  async function onSubmitDisableTotp(e: FormEvent) {
+    e.preventDefault();
+    setDisableError(null);
+    setDisableSubmitting(true);
+    try {
+      await api('/api/auth/2fa/disable', { method: 'POST', body: { password: disablePassword } });
+      setDisabling(false);
+      setDisablePassword('');
+      toast('Authentification à deux facteurs désactivée.', 'success');
+      await refresh();
+    } catch (err) {
+      setDisableError(friendlyError(err, 'Erreur réseau. Réessaie.'));
+    } finally {
+      setDisableSubmitting(false);
+    }
+  }
+
   if (!user) {
     return (
       <main className="min-h-screen bg-[#f9f9f7] md:pl-64">
@@ -331,6 +407,168 @@ export default function SettingsPage() {
                 {clinicSubmitting ? 'Enregistrement…' : 'Enregistrer le nom'}
               </button>
             </form>
+          </section>
+        )}
+
+        {/* ── 2FA (TOTP) section (admin-only) ─────────────────────────── */}
+        {isAdmin && (
+          <section className="flex flex-col gap-3 rounded-lg border border-gray-200 p-5">
+            <h2 className="text-lg font-semibold">Authentification à deux facteurs</h2>
+
+            {totpStep === 'backup-codes' ? (
+              <div className="flex flex-col gap-3">
+                <p className="text-sm font-medium text-red-600">
+                  Enregistrez ces codes maintenant — ils ne seront plus jamais affichés. Chacun ne
+                  peut être utilisé qu’une seule fois, à la place du code de votre application, si
+                  vous perdez l’accès à celle-ci.
+                </p>
+                <div className="grid grid-cols-2 gap-2 rounded-md bg-gray-50 p-4 font-mono text-sm">
+                  {totpBackupCodes.map((code) => (
+                    <span key={code}>{code}</span>
+                  ))}
+                </div>
+                <button
+                  type="button"
+                  onClick={onAcknowledgeBackupCodes}
+                  className="rounded-md bg-black px-5 py-2.5 text-sm font-medium text-white hover:bg-gray-800"
+                >
+                  J’ai sauvegardé mes codes
+                </button>
+              </div>
+            ) : totpStep === 'setup' ? (
+              <div className="flex flex-col gap-3">
+                <p className="text-sm text-gray-600">
+                  Scannez ce QR code avec votre application d’authentification (Google
+                  Authenticator, Authy, etc.), puis entrez le code à 6 chiffres généré.
+                </p>
+                <img
+                  src={totpQrCodeDataUrl}
+                  alt="QR code d’activation 2FA"
+                  className="h-40 w-40 self-center"
+                />
+                <p className="break-all rounded-md bg-gray-50 px-3 py-2 text-center font-mono text-xs text-gray-600">
+                  {totpSecret}
+                </p>
+                <form onSubmit={onConfirmTotp} className="flex flex-col gap-3">
+                  <label className="flex flex-col gap-1 text-sm">
+                    Code de vérification
+                    <input
+                      type="text"
+                      required
+                      inputMode="numeric"
+                      maxLength={6}
+                      autoComplete="one-time-code"
+                      value={totpConfirmCode}
+                      onChange={(e) => setTotpConfirmCode(e.target.value)}
+                      className="rounded-md border border-gray-300 px-3 py-2 text-center font-mono tracking-widest"
+                    />
+                  </label>
+                  {totpError && (
+                    <p role="alert" className="text-sm text-red-600">
+                      {totpError}
+                    </p>
+                  )}
+                  <div className="flex gap-2">
+                    <button
+                      type="submit"
+                      disabled={totpSubmitting}
+                      className="flex-1 rounded-md bg-black px-5 py-2.5 text-sm font-medium text-white hover:bg-gray-800 disabled:opacity-50"
+                    >
+                      {totpSubmitting ? 'Vérification…' : 'Confirmer'}
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setTotpStep('idle');
+                        setTotpError(null);
+                      }}
+                      className="rounded-md border border-gray-300 px-5 py-2.5 text-sm font-medium hover:bg-gray-50"
+                    >
+                      Annuler
+                    </button>
+                  </div>
+                </form>
+              </div>
+            ) : user.totpEnabled ? (
+              <div className="flex flex-col gap-3">
+                <div className="flex items-center justify-between gap-3">
+                  <span className="text-sm text-gray-600">
+                    Activée — un code est demandé à chaque connexion.
+                  </span>
+                  <span className="rounded-full border border-emerald-200 bg-emerald-50 px-3 py-1 text-xs font-medium text-emerald-700">
+                    Activée
+                  </span>
+                </div>
+                {disabling ? (
+                  <form onSubmit={onSubmitDisableTotp} className="flex flex-col gap-3">
+                    <label className="flex flex-col gap-1 text-sm">
+                      Mot de passe
+                      <input
+                        type="password"
+                        required
+                        autoComplete="current-password"
+                        value={disablePassword}
+                        onChange={(e) => setDisablePassword(e.target.value)}
+                        className="rounded-md border border-gray-300 px-3 py-2"
+                      />
+                    </label>
+                    {disableError && (
+                      <p role="alert" className="text-sm text-red-600">
+                        {disableError}
+                      </p>
+                    )}
+                    <div className="flex gap-2">
+                      <button
+                        type="submit"
+                        disabled={disableSubmitting}
+                        className="flex-1 rounded-md border border-red-300 px-5 py-2.5 text-sm font-medium text-red-600 hover:bg-red-50 disabled:opacity-50"
+                      >
+                        {disableSubmitting ? 'Désactivation…' : 'Confirmer la désactivation'}
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setDisabling(false);
+                          setDisablePassword('');
+                          setDisableError(null);
+                        }}
+                        className="rounded-md border border-gray-300 px-5 py-2.5 text-sm font-medium hover:bg-gray-50"
+                      >
+                        Annuler
+                      </button>
+                    </div>
+                  </form>
+                ) : (
+                  <button
+                    type="button"
+                    onClick={() => setDisabling(true)}
+                    className="self-start rounded-md border border-gray-300 px-4 py-2 text-sm font-medium hover:bg-gray-50"
+                  >
+                    Désactiver
+                  </button>
+                )}
+              </div>
+            ) : (
+              <div className="flex flex-col gap-3">
+                <p className="text-sm text-gray-600">
+                  Ajoute une étape de vérification à la connexion, en plus du mot de passe.
+                  Recommandé pour les comptes administrateur.
+                </p>
+                {totpError && (
+                  <p role="alert" className="text-sm text-red-600">
+                    {totpError}
+                  </p>
+                )}
+                <button
+                  type="button"
+                  onClick={onStartTotpSetup}
+                  disabled={totpSubmitting}
+                  className="self-start rounded-md bg-black px-5 py-2.5 text-sm font-medium text-white hover:bg-gray-800 disabled:opacity-50"
+                >
+                  {totpSubmitting ? 'Préparation…' : 'Activer'}
+                </button>
+              </div>
+            )}
           </section>
         )}
 

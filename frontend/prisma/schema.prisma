@@ -30,9 +30,17 @@ model User {
   // refused with 403 ACCOUNT_SUSPENDED. Mutated via /api/admin/users/[id]/status
   // (ADMIN can suspend; only SUPERADMIN can restore).
   status          String    @default("ACTIVE") // ACTIVE | SUSPENDED
+  // TOTP 2FA — opt-in, self-service via /api/auth/2fa/*. totpSecret is
+  // AES-256-GCM-encrypted (crypto.ts), never stored in clear. totpEnabledAt
+  // null = 2FA inactive (also true mid-setup, before the confirm step) —
+  // this is the sole gate the login route checks, independent of role, so
+  // enrollment survives a later role change.
+  totpSecret      String?
+  totpEnabledAt   DateTime?
   createdAt       DateTime  @default(now())
   updatedAt       DateTime  @updatedAt
 
+  totpBackupCodes                  TotpBackupCode[]
   verificationCodes                VerificationCode[]
   uploads                          FileUpload[]
   notifications                    Notification[]
@@ -197,6 +205,20 @@ model VerificationCode {
 
   @@index([userId, type])
   @@index([code, type])
+}
+
+// Single-use TOTP recovery codes, issued 10-at-a-time when 2FA is confirmed
+// (see /api/auth/2fa/confirm). codeHash uses the same bcrypt primitive as
+// User.passwordHash (hashPassword/verifyPassword from lib/server/auth.ts).
+model TotpBackupCode {
+  id        String    @id @default(cuid())
+  userId    String
+  user      User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  codeHash  String
+  usedAt    DateTime?
+  createdAt DateTime  @default(now())
+
+  @@index([userId])
 }
 
 // ───────────────────────────────────────────────────────────────────────

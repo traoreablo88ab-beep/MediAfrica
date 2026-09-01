@@ -22,6 +22,8 @@ export interface User {
   linkedProviders: string[];
   /** Clinic-level role (OWNER/ADMIN/MEMBER). Null when the account has no organization. */
   orgRole: 'OWNER' | 'ADMIN' | 'MEMBER' | null;
+  /** Whether TOTP 2FA is active — see /api/auth/2fa/*. */
+  totpEnabled: boolean;
 }
 
 interface AuthContextValue {

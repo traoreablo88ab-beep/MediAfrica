@@ -110,6 +110,24 @@ describe('GET /api/auth/me', () => {
     expect(body.user.orgRole).toBeNull();
   });
 
+  it('Test 1d: totpEnabled reflects whether totpEnabledAt is set', async () => {
+    vi.mocked(verifyToken).mockResolvedValue({
+      sub: 'u1',
+      email: 'a@b.com',
+      tokenVersion: 0,
+    });
+    prismaMock.user.findUnique.mockResolvedValue({
+      id: 'u1',
+      email: 'a@b.com',
+      tokenVersion: 0,
+      totpEnabledAt: new Date(),
+    } as never);
+
+    const res = await GET(makeReq({ bearer: 'valid-access-token' }));
+    const body = await res.json();
+    expect(body.user.totpEnabled).toBe(true);
+  });
+
   it('Test 2: no cookie + no bearer — 401 missing token', async () => {
     const res = await GET(makeReq());
     expect(res.status).toBe(401);
