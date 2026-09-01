@@ -14,7 +14,7 @@ jobs:
       # Dummy env so the app can boot during typecheck/build (validation runs at import-time).
       DATABASE_URL: postgresql://user:pass@localhost:5432/db?schema=public
       JWT_SECRET: ci-only-jwt-secret-at-least-32-characters-long-xyz
-      ENCRYPTION_KEY: aGVsbG8td29ybGQtdGhpcy1pcy0zMi1ieXRlcy1sb25n
+      ENCRYPTION_KEY: Rq0eyhkRn0ESgdmE5O9xUzIJmXiLCVPUVPxh4T6FjiU=
       COOKIE_PREFIX: app
       NEXT_PUBLIC_COOKIE_PREFIX: app
       AUTH_FORGOT_TARGET_LATENCY_MS: '0'
