@@ -14,26 +14,32 @@
 // quand c'est possible. Ne soumet rien à DHIS2 : l'utilisateur recopie les
 // chiffres dans le formulaire papier ou dans DHIS2.
 //
-// Numérotation officielle du RMA (confirmée par le Ministère) : Section 3 =
-// Activités curatives, Grossesse/Accouchement et suites de couche,
-// Planification familiale, Prise en charge des urgences obstétricales et
-// néo-natales (ce dernier bloc n'est pas repris dans cette page, voir plus
-// haut) ; Section 4 = Activités de laboratoire et transfusion (+ Imagerie
-// médicale/Anesthésie, propres au CSRéf) ; Section 5 = Prise en charge
-// Lèpre, Prise en charge du Paludisme, Nutrition (repris ici sous
-// malnutrition URENI/URENAS/URENAM) ; Section 6 = Gestion des stocks des
-// médicaments du panier/PF/Paludisme/SMI, intrants de nutrition, vaccins et
-// consommables ; Section 7 = Activités d'hygiène publique et salubrité,
-// Rapport de morbidité et de mortalité. Les diviseurs
-// "-------- SECTION N --------" à l'impression (voir RmaSectionDivider plus
-// bas) suivent ce découpage ; les blocs Vaccination (×3) et MDO n'ont pas de
-// numéro confirmé et n'affichent donc aucun diviseur avant eux.
+// Numérotation officielle du RMA (confirmée par le Ministère) : Section 1 =
+// Fonctionnement du centre / santé et décentralisation ; Section 2 =
+// Ressources humaines, matérielles et financières ; Section 3 = Provenance
+// et circonstances de prise en charge (CSRéf), Activités curatives,
+// Grossesse/Accouchement et suites de couche, Planification familiale, Prise
+// en charge des urgences obstétricales et néo-natales (ce dernier bloc n'est
+// pas repris dans cette page, voir plus haut) ; Section 4 = Activités de
+// laboratoire et transfusion (+ Imagerie médicale/Anesthésie, propres au
+// CSRéf) ; Section 5 = Prise en charge Lèpre, Prise en charge du Paludisme,
+// Nutrition (repris ici sous malnutrition URENI/URENAS/URENAM) ; Section 6 =
+// Gestion des stocks des médicaments du panier/PF/Paludisme/SMI, intrants de
+// nutrition, vaccins et consommables ; Section 7 = Activités d'hygiène
+// publique et salubrité, Rapport de morbidité et de mortalité. Sections 1, 2
+// et la partie "Provenance et circonstances" de la section 3 sont saisies
+// sur /registres/ressources (RessourcesRapport/PersonnelLine/EquipmentLine/
+// VisiteReunionLine) et rendues ici en lecture seule, en tête de page. Les
+// diviseurs "-------- SECTION N --------" à l'impression (voir
+// RmaSectionDivider plus bas) suivent ce découpage ; les blocs Vaccination
+// (×3) et MDO n'ont pas de numéro confirmé et n'affichent donc aucun
+// diviseur avant eux.
 //
 // Les tranches d'âge (0-11 mois, 1-4, 5-14, 15-44, 45-59, 60 ans et plus)
 // reproduisent exactement le découpage du tableau "ACTIVITES CURATIVES" du
 // RMA (page 5). L'âge est calculé à la date de la consultation (pas
 // "aujourd'hui"), pour rester correct sur les mois passés.
-import { useEffect, useState, useCallback } from 'react';
+import { useEffect, useState, useCallback, useRef } from 'react';
 import Link from 'next/link';
 import { api } from '@/lib/api';
 import { friendlyError } from '@/lib/errorMessages';
@@ -45,6 +51,10 @@ import {
   stockItemsByCategory,
   type StockCategory,
 } from '@/lib/server/registers/stock-items';
+import {
+  PERSONNEL_CATEGORIES_CSREF,
+  equipmentItemsFor,
+} from '@/lib/server/registers/ressources-items';
 
 const AGE_BRACKETS = [
   '0-11 mois',
@@ -1609,6 +1619,204 @@ function stockRmaColumnsFor(category: StockCategory): { key: string; label: stri
   return category === 'vaccins' ? STOCK_RMA_VACCIN_COLUMNS : STOCK_RMA_COLUMNS;
 }
 
+// RMA sections 1 (fonctionnement du centre / santé et décentralisation), 2
+// (ressources humaines/matérielles/financières) et la partie de la section 3
+// "Provenance et circonstances de prise en charge" (CSRéf) — saisie manuelle
+// mensuelle sur /registres/ressources (RessourcesRapport/PersonnelLine/
+// EquipmentLine/VisiteReunionLine), rendue ici en lecture seule. Contrairement
+// à Laboratoire/Stock, ces champs diffèrent significativement entre CSRéf et
+// CSCom (pas juste "vide côté CSCom") — les groupes ci-dessous sont donc des
+// fonctions du sélecteur Échelon, même raisonnement que
+// frontend/src/app/registres/ressources/page.tsx.
+interface RessourcesFlatData {
+  month: string;
+  [key: string]: boolean | number | string | null;
+}
+
+interface RessourcesLineData {
+  itemKey: string;
+  label: string;
+  [column: string]: string | number | boolean | null;
+}
+
+function toEchelonKey(filter: 'CSRéf' | 'CSCom'): 'csref' | 'cscom' {
+  return filter === 'CSCom' ? 'cscom' : 'csref';
+}
+
+function ressourcesFonctionnementGroups(
+  filter: 'CSRéf' | 'CSCom',
+): { title: string; fields: { key: string; label: string; bool?: boolean }[] }[] {
+  return filter === 'CSRéf'
+    ? [
+        {
+          title: 'Santé et décentralisation',
+          fields: [
+            { key: 'csrefAppuiConseilCercle', label: 'Appui-conseil du cercle reçu', bool: true },
+            { key: 'csrefConseilGestionTenu', label: 'Conseil de gestion tenu', bool: true },
+            { key: 'csrefAutreAppui', label: 'Autre appui (préciser)' },
+          ],
+        },
+      ]
+    : [
+        {
+          title: 'Fonctionnement du centre',
+          fields: [
+            { key: 'cscomNbJoursFermeture', label: 'Jours de fermeture' },
+            { key: 'cscomNbReunionsConseilAdmin', label: "Réunions du conseil d'administration" },
+          ],
+        },
+        {
+          title: 'ASACO et genre',
+          fields: [
+            {
+              key: 'cscomAsacoSubventionMairie',
+              label: "L'ASACO a reçu une subvention de la mairie",
+              bool: true,
+            },
+            {
+              key: 'cscomAsacoConventionSignee',
+              label: "Convention d'assistance mutuelle signée",
+              bool: true,
+            },
+            { key: 'cscomCaHommes', label: 'Assemblée générale — Hommes' },
+            { key: 'cscomCaFemmes', label: 'Assemblée générale — Femmes' },
+            { key: 'cscomComiteGestionHommes', label: 'Comité de gestion — Hommes' },
+            { key: 'cscomComiteGestionFemmes', label: 'Comité de gestion — Femmes' },
+          ],
+        },
+      ];
+}
+
+const RESSOURCES_ENERGIE_FIELDS: { key: string; label: string; bool: boolean }[] = [
+  { key: 'energieEdm', label: 'Énergie du Mali (EDM)', bool: true },
+  { key: 'energieGroupeElectrogene', label: 'Groupe électrogène', bool: true },
+  { key: 'energieSolaire', label: 'Solaire', bool: true },
+];
+
+const RESSOURCES_PROVENANCE_ROWS = [
+  { key: 'Curative', label: 'Activités curatives' },
+  { key: 'Grossesse', label: 'Grossesse / Accouchement' },
+  { key: 'Pf', label: 'Planification familiale' },
+] as const;
+
+const RESSOURCES_PROVENANCE_COLS = [
+  { key: 'ReferesAdresses', label: 'Référés — Adressés' },
+  { key: 'ReferesPrisEnCharge', label: 'Référés — Pris en charge' },
+  { key: 'EvacuesAdresses', label: 'Évacués — Adressés' },
+  { key: 'EvacuesPrisEnCharge', label: 'Évacués — Pris en charge' },
+] as const;
+
+function ressourcesFinanceGroups(
+  filter: 'CSRéf' | 'CSCom',
+): { title: string; fields: { key: string; label: string }[] }[] {
+  return [
+    {
+      title: 'Bilan financier — Laboratoire',
+      fields: [
+        { key: 'laboFinancierRecettesAttendues', label: 'Recettes attendues' },
+        { key: 'laboFinancierRecettesVersees', label: 'Recettes versées' },
+        { key: 'laboFinancierDepenses', label: 'Dépenses' },
+        { key: 'laboFinancierSolde', label: 'Solde' },
+      ],
+    },
+    {
+      title: 'Bilan financier — Hors médicaments',
+      fields:
+        filter === 'CSRéf'
+          ? [
+              { key: 'csrefHorsMedSoldeDebut', label: 'Solde début de période' },
+              { key: 'csrefHorsMedTotalRecettes', label: 'Total recettes' },
+              { key: 'csrefHorsMedTotalDepenses', label: 'Total dépenses' },
+              { key: 'csrefHorsMedSoldeFin', label: 'Solde fin de période' },
+            ]
+          : [
+              { key: 'cscomHorsMedBanqueDebut', label: 'Banque — début de période' },
+              { key: 'cscomHorsMedCaisseDebut', label: 'Caisse — début de période' },
+              { key: 'cscomHorsMedRecTarification', label: 'Recettes — Tarification' },
+              {
+                key: 'cscomHorsMedRecTransfertCaisseMed',
+                label: 'Recettes — Transfert caisse médicaments',
+              },
+              { key: 'cscomHorsMedRecCotisations', label: 'Recettes — Cotisations' },
+              {
+                key: 'cscomHorsMedRecReferenceEvacuation',
+                label: 'Recettes — Référence/évacuation',
+              },
+              { key: 'cscomHorsMedRecCarteAdhesion', label: "Recettes — Carte d'adhésion" },
+              { key: 'cscomHorsMedRecAutres', label: 'Recettes — Autres' },
+              { key: 'cscomHorsMedDepSalaires', label: 'Dépenses — Salaires' },
+              {
+                key: 'cscomHorsMedDepAutresFonctionnement',
+                label: 'Dépenses — Autres fonctionnement',
+              },
+              { key: 'cscomHorsMedBanqueFin', label: 'Banque — fin de période' },
+              { key: 'cscomHorsMedCaisseFin', label: 'Caisse — fin de période' },
+            ],
+    },
+    {
+      title: 'Bilan financier — Médicaments',
+      fields: [
+        { key: 'medCapitalInitial', label: 'Capital initial' },
+        { key: 'medValeurFinPeriode', label: 'Valeur fin de période' },
+        { key: 'medBanqueDebut', label: 'Banque' },
+        { key: 'medCaisseFin', label: 'Caisse' },
+        { key: 'medCreancesFin', label: 'Créances' },
+        { key: 'medDettesFin', label: 'Dettes' },
+        { key: 'medCapitalFin', label: 'Capital fin de période' },
+        { key: 'medIndicateurMaintien', label: 'Indicateur de maintien du capital (%)' },
+      ],
+    },
+    {
+      title: "Compte d'exploitation médicaments",
+      fields: [
+        { key: 'compteValeurDebut', label: 'Valeur début de période' },
+        { key: 'compteValeurFin', label: 'Valeur fin de période' },
+        { key: 'compteVariationStock', label: 'Variation de stock' },
+        { key: 'compteAchatMedicaments', label: 'Achat de médicaments' },
+        { key: 'compteAppuiTarification', label: 'Appui/tarification' },
+        { key: 'compteSalairesGerant', label: 'Salaires du gérant' },
+        { key: 'compteAutresFonctionnement', label: 'Autres frais de fonctionnement' },
+        { key: 'compteTotalCharges', label: 'Total charges' },
+        { key: 'compteRecettesVenteMed', label: 'Recettes — vente médicaments' },
+        { key: 'compteAutresRecettes', label: 'Autres recettes' },
+        { key: 'compteTotalRecettes', label: 'Total recettes' },
+        { key: 'compteResultat', label: 'Résultat' },
+      ],
+    },
+  ];
+}
+
+function ressourcesFlatDisplay(
+  rapport: RessourcesFlatData | null,
+  field: { key: string; bool?: boolean },
+): string {
+  const v = rapport?.[field.key];
+  if (v === null || v === undefined) return '—';
+  if (field.bool) return v ? 'Oui' : 'Non';
+  return String(v);
+}
+
+const RESSOURCES_PERSONNEL_COLUMNS_CSREF: { key: string; label: string }[] = [
+  { key: 'effectifOfficiel', label: 'Effectif' },
+];
+
+const RESSOURCES_PERSONNEL_COLUMNS_CSCOM: { key: string; label: string }[] = [
+  { key: 'sexe', label: 'Sexe' },
+  { key: 'fonctionResponsabilite', label: 'Fonction' },
+];
+
+const RESSOURCES_EQUIPMENT_COLUMNS: { key: string; label: string }[] = [
+  { key: 'nombreFonctionnel', label: 'Fonctionnel' },
+  { key: 'nombreEnPanne', label: 'En panne' },
+];
+
+const RESSOURCES_EQUIPMENT_CATEGORY_LABELS: Record<string, string> = {
+  communication: 'Moyens de communication',
+  vehicule: 'Véhicules',
+  refrigerateur: 'Réfrigérateurs',
+  congelateur: 'Congélateurs',
+};
+
 export function RmaReport({ defaultEchelon }: { defaultEchelon: 'CSRéf' | 'CSCom' }) {
   const clinicName = useClinicName();
   const [month, setMonth] = useState(currentMonth());
@@ -1634,14 +1842,26 @@ export function RmaReport({ defaultEchelon }: { defaultEchelon: 'CSRéf' | 'CSCo
   const [hygieneRapport, setHygieneRapport] = useState<HygieneRapportData | null>(null);
   const [laboratoireRapport, setLaboratoireRapport] = useState<LaboratoireRapportData | null>(null);
   const [stockLines, setStockLines] = useState<StockLineData[]>([]);
+  const [ressourcesRapport, setRessourcesRapport] = useState<RessourcesFlatData | null>(null);
+  const [ressourcesPersonnel, setRessourcesPersonnel] = useState<RessourcesLineData[]>([]);
+  const [ressourcesEquipment, setRessourcesEquipment] = useState<RessourcesLineData[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
-  const load = useCallback(async (selectedMonth: string) => {
+  // Toggling the Échelon selector re-fires load() for the Ressources
+  // personnel/equipment fetches (echelon-scoped) while a previous in-flight
+  // call for the other échelon may still be pending — without this guard a
+  // slow response landing after a newer one would silently overwrite state
+  // with stale data (same race fixed in registres/ressources/page.tsx).
+  const loadIdRef = useRef(0);
+
+  const load = useCallback(async (selectedMonth: string, selectedEchelon: 'CSRéf' | 'CSCom') => {
+    const requestId = ++loadIdRef.current;
     setLoading(true);
     setError(null);
     try {
       const { dateFrom, dateTo } = monthBounds(selectedMonth);
+      const ressourcesEchelon = toEchelonKey(selectedEchelon);
       const [
         consultationRows,
         cpnRows,
@@ -1657,6 +1877,9 @@ export function RmaReport({ defaultEchelon }: { defaultEchelon: 'CSRéf' | 'CSCo
         hygieneRow,
         laboratoireRow,
         stockRes,
+        ressourcesRow,
+        ressourcesPersonnelRes,
+        ressourcesEquipmentRes,
       ] = await Promise.all([
         fetchAllPages<ConsultationRow>('/api/consultations', dateFrom, dateTo),
         fetchAllPages<MaterniteRow>('/api/maternite', dateFrom, dateTo, { type: 'CPN' }),
@@ -1683,7 +1906,17 @@ export function RmaReport({ defaultEchelon }: { defaultEchelon: 'CSRéf' | 'CSCo
         api<{ month: string; lines: StockLineData[] }>(
           `/api/registres/stock?month=${selectedMonth}`,
         ),
+        api<RessourcesFlatData>(`/api/registres/ressources?month=${selectedMonth}`),
+        api<{ lines: RessourcesLineData[] }>(
+          `/api/registres/ressources/personnel?month=${selectedMonth}&echelon=${ressourcesEchelon}`,
+        ),
+        api<{ lines: RessourcesLineData[] }>(
+          `/api/registres/ressources/equipement?month=${selectedMonth}&echelon=${ressourcesEchelon}`,
+        ),
       ]);
+
+      if (requestId !== loadIdRef.current) return; // a newer load has since started
+
       setConsultations(consultationRows);
       setCpn(cpnRows);
       setAccouchements(accouchementRows);
@@ -1698,16 +1931,20 @@ export function RmaReport({ defaultEchelon }: { defaultEchelon: 'CSRéf' | 'CSCo
       setHygieneRapport(hygieneRow);
       setLaboratoireRapport(laboratoireRow);
       setStockLines(stockRes.lines);
+      setRessourcesRapport(ressourcesRow);
+      setRessourcesPersonnel(ressourcesPersonnelRes.lines);
+      setRessourcesEquipment(ressourcesEquipmentRes.lines);
     } catch (err) {
+      if (requestId !== loadIdRef.current) return;
       setError(friendlyError(err, 'Une erreur est survenue. Réessayez.'));
     } finally {
-      setLoading(false);
+      if (requestId === loadIdRef.current) setLoading(false);
     }
   }, []);
 
   useEffect(() => {
-    void load(month);
-  }, [month, load]);
+    void load(month, echelonFilter);
+  }, [month, echelonFilter, load]);
 
   const filteredConsultations = consultations.filter(
     (c) => (c.echelon ?? 'CSRéf') === echelonFilter,
@@ -2254,11 +2491,16 @@ export function RmaReport({ defaultEchelon }: { defaultEchelon: 'CSRéf' | 'CSCo
           dossier patient — ne sont pas suivies du tout. Le tableau « Morbidité et mortalité »
           couvre toutes les consultations du mois : chacune compte sous sa maladie si un code
           d'affection RMA lui a été assigné, sinon sous « Autres ». Les autres sections du RMA
-          (RH/matériel/financier, urgences obstétricales, chirurgie, fistule, dracunculose) restent
-          hors périmètre de cette page. Les tableaux « Activités de laboratoire et transfusion »
-          (section 4), « Prise en charge Lèpre » (section 5), « Gestion des stocks » (section 6) et
-          « Activités d&apos;hygiène publique et salubrité » (section 7) reprennent la saisie
-          manuelle mensuelle des registres séparés{' '}
+          (urgences obstétricales, chirurgie, fistule, dracunculose) restent hors périmètre de cette
+          page. Les tableaux « Fonctionnement, ressources humaines/matérielles/financières »
+          (sections 1-2), « Activités de laboratoire et transfusion » (section 4), « Prise en charge
+          Lèpre » (section 5), « Gestion des stocks » (section 6) et « Activités d&apos;hygiène
+          publique et salubrité » (section 7) reprennent la saisie manuelle mensuelle des registres
+          séparés{' '}
+          <Link href="/registres/ressources" className="text-[#2a78d6] hover:underline">
+            /registres/ressources
+          </Link>
+          ,{' '}
           <Link href="/registres/laboratoire" className="text-[#2a78d6] hover:underline">
             /registres/laboratoire
           </Link>
@@ -2293,7 +2535,288 @@ export function RmaReport({ defaultEchelon }: { defaultEchelon: 'CSRéf' | 'CSCo
         )}
 
         <div className="space-y-6">
+          <RmaSectionDivider n={1} />
+          <div className="overflow-hidden rounded-xl border border-[#e1e0d9] bg-white shadow-[0_1px_2px_rgba(11,11,11,0.04)]">
+            <h2 className="border-b border-[#e1e0d9] bg-[#f9f9f7] px-4 py-2 text-sm font-semibold text-[#0b0b0b]">
+              Fonctionnement
+            </h2>
+            {ressourcesFonctionnementGroups(echelonFilter).map((group) => (
+              <div key={group.title} className="border-b border-[#e1e0d9]">
+                <h3 className="px-4 pt-3 text-xs font-semibold tracking-wide text-[#898781] uppercase">
+                  {group.title}
+                </h3>
+                <dl>
+                  {group.fields.map((f, i) => (
+                    <div
+                      key={f.key}
+                      className={`flex items-center justify-between gap-4 px-4 py-3 text-sm ${
+                        i !== group.fields.length - 1 ? 'border-b border-[#e1e0d9]' : ''
+                      }`}
+                    >
+                      <dt className="text-[#52514e]">{f.label}</dt>
+                      <dd className="shrink-0 text-base font-semibold text-[#0b0b0b]">
+                        {ressourcesFlatDisplay(ressourcesRapport, f)}
+                      </dd>
+                    </div>
+                  ))}
+                </dl>
+              </div>
+            ))}
+            <div className="border-b border-[#e1e0d9]">
+              <h3 className="px-4 pt-3 text-xs font-semibold tracking-wide text-[#898781] uppercase">
+                Source d&apos;énergie
+              </h3>
+              <dl>
+                {RESSOURCES_ENERGIE_FIELDS.map((f, i) => (
+                  <div
+                    key={f.key}
+                    className={`flex items-center justify-between gap-4 px-4 py-3 text-sm ${
+                      i !== RESSOURCES_ENERGIE_FIELDS.length - 1 ? 'border-b border-[#e1e0d9]' : ''
+                    }`}
+                  >
+                    <dt className="text-[#52514e]">{f.label}</dt>
+                    <dd className="shrink-0 text-base font-semibold text-[#0b0b0b]">
+                      {ressourcesFlatDisplay(ressourcesRapport, f)}
+                    </dd>
+                  </div>
+                ))}
+              </dl>
+            </div>
+            <p className="px-4 py-3 text-xs leading-relaxed text-[#898781]">
+              Reprend le tableau « Fonctionnement du centre » du RMA (section 1). Saisie manuelle
+              mensuelle sur{' '}
+              <Link href="/registres/ressources" className="text-[#2a78d6] hover:underline">
+                /registres/ressources
+              </Link>{' '}
+              — pas filtré par le sélecteur Échelon ci-dessus (les champs affichés dépendent
+              directement de l&apos;échelon choisi côté formulaire). «&nbsp;—&nbsp;» signifie que ce
+              mois n&apos;a pas encore été renseigné.
+            </p>
+          </div>
+
+          <RmaSectionDivider n={2} />
+          <div className="overflow-hidden rounded-xl border border-[#e1e0d9] bg-white shadow-[0_1px_2px_rgba(11,11,11,0.04)]">
+            <h2 className="border-b border-[#e1e0d9] bg-[#f9f9f7] px-4 py-2 text-sm font-semibold text-[#0b0b0b]">
+              Personnel
+            </h2>
+            <div className="overflow-x-auto">
+              <table className="w-full text-left text-xs">
+                <thead>
+                  <tr className="border-b border-[#e1e0d9] uppercase tracking-wide text-[#898781]">
+                    <th className="px-3 py-2 font-medium">Poste</th>
+                    {(echelonFilter === 'CSRéf'
+                      ? RESSOURCES_PERSONNEL_COLUMNS_CSREF
+                      : RESSOURCES_PERSONNEL_COLUMNS_CSCOM
+                    ).map((c) => (
+                      <th
+                        key={c.key}
+                        className="px-2 py-2 text-right font-medium whitespace-nowrap"
+                      >
+                        {c.label}
+                      </th>
+                    ))}
+                  </tr>
+                </thead>
+                <tbody>
+                  {(echelonFilter === 'CSRéf'
+                    ? PERSONNEL_CATEGORIES_CSREF.map((cat) => ({
+                        itemKey: cat.key,
+                        label: cat.label,
+                        row: ressourcesPersonnel.find((r) => r.itemKey === cat.key) ?? null,
+                      }))
+                    : ressourcesPersonnel.map((r) => ({
+                        itemKey: r.itemKey,
+                        label: r.label,
+                        row: r,
+                      }))
+                  ).map((entry, i, arr) => (
+                    <tr
+                      key={entry.itemKey}
+                      className={i !== arr.length - 1 ? 'border-b border-[#e1e0d9]' : ''}
+                    >
+                      <td className="px-3 py-2 font-medium whitespace-nowrap text-[#0b0b0b]">
+                        {entry.label}
+                      </td>
+                      {(echelonFilter === 'CSRéf'
+                        ? RESSOURCES_PERSONNEL_COLUMNS_CSREF
+                        : RESSOURCES_PERSONNEL_COLUMNS_CSCOM
+                      ).map((c) => (
+                        <td key={c.key} className="px-2 py-2 text-right text-[#52514e]">
+                          {entry.row?.[c.key] ?? '—'}
+                        </td>
+                      ))}
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+            <p className="px-4 py-3 text-xs leading-relaxed text-[#898781]">
+              Reprend le tableau « Ressources humaines » du RMA (section 2). CSRéf : effectif par
+              catégorie de poste. CSCom : liste individuelle du personnel. Saisie manuelle mensuelle
+              sur{' '}
+              <Link href="/registres/ressources" className="text-[#2a78d6] hover:underline">
+                /registres/ressources
+              </Link>
+              .
+            </p>
+          </div>
+
+          <div className="overflow-hidden rounded-xl border border-[#e1e0d9] bg-white shadow-[0_1px_2px_rgba(11,11,11,0.04)]">
+            <h2 className="border-b border-[#e1e0d9] bg-[#f9f9f7] px-4 py-2 text-sm font-semibold text-[#0b0b0b]">
+              Équipements
+            </h2>
+            {[
+              ...new Set(equipmentItemsFor(toEchelonKey(echelonFilter)).map((i) => i.category)),
+            ].map((category) => {
+              const items = equipmentItemsFor(toEchelonKey(echelonFilter)).filter(
+                (i) => i.category === category,
+              );
+              return (
+                <div key={category} className="border-b border-[#e1e0d9]">
+                  <h3 className="px-4 pt-3 text-xs font-semibold tracking-wide text-[#898781] uppercase">
+                    {RESSOURCES_EQUIPMENT_CATEGORY_LABELS[category] ?? category}
+                  </h3>
+                  <div className="overflow-x-auto">
+                    <table className="w-full text-left text-xs">
+                      <thead>
+                        <tr className="border-b border-[#e1e0d9] uppercase tracking-wide text-[#898781]">
+                          <th className="px-3 py-2 font-medium">Article</th>
+                          {RESSOURCES_EQUIPMENT_COLUMNS.map((c) => (
+                            <th
+                              key={c.key}
+                              className="px-2 py-2 text-right font-medium whitespace-nowrap"
+                            >
+                              {c.label}
+                            </th>
+                          ))}
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {items.map((item, i) => {
+                          const row = ressourcesEquipment.find((r) => r.itemKey === item.key);
+                          return (
+                            <tr
+                              key={item.key}
+                              className={i !== items.length - 1 ? 'border-b border-[#e1e0d9]' : ''}
+                            >
+                              <td className="px-3 py-2 font-medium whitespace-nowrap text-[#0b0b0b]">
+                                {item.label}
+                              </td>
+                              {RESSOURCES_EQUIPMENT_COLUMNS.map((c) => (
+                                <td key={c.key} className="px-2 py-2 text-right text-[#52514e]">
+                                  {row?.[c.key] ?? '—'}
+                                </td>
+                              ))}
+                            </tr>
+                          );
+                        })}
+                      </tbody>
+                    </table>
+                  </div>
+                </div>
+              );
+            })}
+            <p className="px-4 py-3 text-xs leading-relaxed text-[#898781]">
+              Reprend le tableau « Ressources matérielles » du RMA (section 2 — moyens de
+              communication, véhicules, et pour le CSCom réfrigérateurs/congélateurs). Saisie
+              manuelle mensuelle sur{' '}
+              <Link href="/registres/ressources" className="text-[#2a78d6] hover:underline">
+                /registres/ressources
+              </Link>{' '}
+              (colonnes panne/réparation/température non reprises ici par manque de place).
+            </p>
+          </div>
+
+          <div className="overflow-hidden rounded-xl border border-[#e1e0d9] bg-white shadow-[0_1px_2px_rgba(11,11,11,0.04)]">
+            <h2 className="border-b border-[#e1e0d9] bg-[#f9f9f7] px-4 py-2 text-sm font-semibold text-[#0b0b0b]">
+              Finances
+            </h2>
+            {ressourcesFinanceGroups(echelonFilter).map((group) => (
+              <div key={group.title} className="border-b border-[#e1e0d9]">
+                <h3 className="px-4 pt-3 text-xs font-semibold tracking-wide text-[#898781] uppercase">
+                  {group.title}
+                </h3>
+                <dl>
+                  {group.fields.map((f, i) => (
+                    <div
+                      key={f.key}
+                      className={`flex items-center justify-between gap-4 px-4 py-3 text-sm ${
+                        i !== group.fields.length - 1 ? 'border-b border-[#e1e0d9]' : ''
+                      }`}
+                    >
+                      <dt className="text-[#52514e]">{f.label}</dt>
+                      <dd className="shrink-0 text-base font-semibold text-[#0b0b0b]">
+                        {ressourcesFlatDisplay(ressourcesRapport, f)}
+                      </dd>
+                    </div>
+                  ))}
+                </dl>
+              </div>
+            ))}
+            <p className="px-4 py-3 text-xs leading-relaxed text-[#898781]">
+              Reprend les 4 bilans financiers du RMA (section 2 — Laboratoire, Hors médicaments,
+              Médicaments, Compte d&apos;exploitation médicaments). Saisie manuelle mensuelle sur{' '}
+              <Link href="/registres/ressources" className="text-[#2a78d6] hover:underline">
+                /registres/ressources
+              </Link>
+              .
+            </p>
+          </div>
+
           <RmaSectionDivider n={3} />
+          {echelonFilter === 'CSRéf' && (
+            <div className="overflow-hidden rounded-xl border border-[#e1e0d9] bg-white shadow-[0_1px_2px_rgba(11,11,11,0.04)]">
+              <h2 className="border-b border-[#e1e0d9] bg-[#f9f9f7] px-4 py-2 text-sm font-semibold text-[#0b0b0b]">
+                Provenance et circonstances de prise en charge
+              </h2>
+              <div className="overflow-x-auto">
+                <table className="w-full text-left text-xs">
+                  <thead>
+                    <tr className="border-b border-[#e1e0d9] uppercase tracking-wide text-[#898781]">
+                      <th className="px-3 py-2 font-medium">Activité</th>
+                      {RESSOURCES_PROVENANCE_COLS.map((c) => (
+                        <th
+                          key={c.key}
+                          className="px-2 py-2 text-right font-medium whitespace-nowrap"
+                        >
+                          {c.label}
+                        </th>
+                      ))}
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {RESSOURCES_PROVENANCE_ROWS.map((row, i) => (
+                      <tr
+                        key={row.key}
+                        className={
+                          i !== RESSOURCES_PROVENANCE_ROWS.length - 1
+                            ? 'border-b border-[#e1e0d9]'
+                            : ''
+                        }
+                      >
+                        <td className="px-3 py-2 font-medium whitespace-nowrap text-[#0b0b0b]">
+                          {row.label}
+                        </td>
+                        {RESSOURCES_PROVENANCE_COLS.map((col) => (
+                          <td key={col.key} className="px-2 py-2 text-right text-[#52514e]">
+                            {ressourcesRapport?.[`provenance${row.key}${col.key}`] ?? '—'}
+                          </td>
+                        ))}
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+              <p className="px-4 py-3 text-xs leading-relaxed text-[#898781]">
+                Reprend le tableau « Provenance et circonstances de prise en charge » du RMA
+                (section 3, CSRéf uniquement). Saisie manuelle mensuelle sur{' '}
+                <Link href="/registres/ressources" className="text-[#2a78d6] hover:underline">
+                  /registres/ressources
+                </Link>
+                .
+              </p>
+            </div>
+          )}
           <div className="overflow-hidden rounded-xl border border-[#e1e0d9] bg-white shadow-[0_1px_2px_rgba(11,11,11,0.04)]">
             <h2 className="border-b border-[#e1e0d9] bg-[#f9f9f7] px-4 py-2 text-sm font-semibold text-[#0b0b0b]">
               ACTIVITES CURATIVES

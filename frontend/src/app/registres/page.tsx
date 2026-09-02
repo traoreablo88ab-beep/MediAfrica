@@ -86,6 +86,12 @@ const SHARED_REGISTERS: RegisterCard[] = [
     description:
       'Grand livre mensuel des stocks (médicaments du panier/PF/Paludisme/SMI, intrants de nutrition, vaccins), saisie manuelle.',
   },
+  {
+    href: '/registres/ressources',
+    title: 'Registre Ressources',
+    description:
+      'Fonctionnement, personnel, équipements et finances du centre (sections 1 et 2 du RMA), saisie manuelle avec sélecteur CSRéf/CSCom.',
+  },
 ];
 
 const CSREF_REGISTERS: RegisterCard[] = [

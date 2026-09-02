@@ -59,6 +59,10 @@ model User {
   lepreRapportsUpdated             LepreRapport[]
   laboratoireRapportsUpdated       LaboratoireRapport[]
   stockLinesUpdated                StockLine[]
+  ressourcesRapportsUpdated        RessourcesRapport[]
+  personnelLinesUpdated            PersonnelLine[]
+  equipmentLinesUpdated            EquipmentLine[]
+  visiteReunionLinesUpdated        VisiteReunionLine[]
   reportsFiled                     Report[]
 
   // Multi-tenancy: MediAfrica is a multi-tenant SaaS — each User belongs to
@@ -143,6 +147,10 @@ model Organization {
   lepreRapports       LepreRapport[]
   laboratoireRapports LaboratoireRapport[]
   stockLines          StockLine[]
+  ressourcesRapports  RessourcesRapport[]
+  personnelLines      PersonnelLine[]
+  equipmentLines      EquipmentLine[]
+  visiteReunionLines  VisiteReunionLine[]
   clinicSettings      ClinicSettings?
   subscription        Subscription?
   orders              Order[]
@@ -1255,6 +1263,228 @@ model StockLine {
 
   @@unique([organizationId, month, itemKey])
   @@index([organizationId, month, category])
+}
+
+// RMA — sections 1 (fonctionnement du centre / santé et décentralisation) et
+// 2 (ressources humaines/matérielles/financières), confirmées par le texte
+// "Section 1"/"Section 2" des deux PDF officiels. Contrairement à
+// Laboratoire/Stock ce n'est pas un domaine clinique — RH, matériel,
+// comptabilité — donc pas de champ dérivable d'une consultation existante.
+// Les compteurs plats (Section 1, source d'énergie, 4 bilans financiers par
+// échelon) vivent ici ; Personnel/Équipements/Visites-réunions sont des
+// listes à cardinalité variable, donc des tables séparées (PersonnelLine,
+// EquipmentLine, VisiteReunionLine) — même raisonnement que StockLine.
+// Champs préfixés csref*/cscom* quand la structure diffère entre échelons ;
+// non préfixés quand partagés (source d'énergie) ou quand les deux échelons
+// utilisent la même forme A-H (bilans médicaments/compte d'exploitation).
+model RessourcesRapport {
+  id             String       @id @default(cuid())
+  organizationId String
+  organization   Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  month          String // "2026-01"
+
+  // Section 1 — CSRéf (Santé et décentralisation, 3 questions)
+  csrefAppuiConseilCercle Boolean?
+  csrefConseilGestionTenu Boolean?
+  csrefAutreAppui         String?
+
+  // Section 1 — CSCom (fonctionnement du centre + ASACO/genre)
+  cscomNbJoursFermeture       Int?
+  cscomNbReunionsConseilAdmin Int?
+  cscomAsacoSubventionMairie  Boolean?
+  cscomAsacoConventionSignee  Boolean?
+  cscomCaHommes               Int?
+  cscomCaFemmes               Int?
+  cscomComiteGestionHommes    Int?
+  cscomComiteGestionFemmes    Int?
+
+  // Section 2 — Source d'énergie (partagé CSRéf/CSCom)
+  energieEdm               Boolean?
+  energieGroupeElectrogene Boolean?
+  energieSolaire           Boolean?
+
+  // Section 3 — Provenance et circonstances de prise en charge (CSRéf
+  // uniquement ; regroupement colonne par colonne à reconfirmer visuellement
+  // contre le PDF page 4-5, l'extraction texte a mélangé l'ordre des
+  // en-têtes multi-niveaux — seule la liste des 12 compteurs est fiable)
+  provenanceCurativeReferesAdresses      Int?
+  provenanceCurativeReferesPrisEnCharge  Int?
+  provenanceCurativeEvacuesAdresses      Int?
+  provenanceCurativeEvacuesPrisEnCharge  Int?
+  provenanceGrossesseReferesAdresses     Int?
+  provenanceGrossesseReferesPrisEnCharge Int?
+  provenanceGrossesseEvacuesAdresses     Int?
+  provenanceGrossesseEvacuesPrisEnCharge Int?
+  provenancePfReferesAdresses            Int?
+  provenancePfReferesPrisEnCharge        Int?
+  provenancePfEvacuesAdresses            Int?
+  provenancePfEvacuesPrisEnCharge        Int?
+
+  // Bilan financier — Laboratoire (CSRéf + CSCom, même structure A-D)
+  laboFinancierRecettesAttendues Int?
+  laboFinancierRecettesVersees   Int?
+  laboFinancierDepenses          Int?
+  laboFinancierSolde             Int?
+
+  // Bilan financier — Hors médicaments (CSRéf : solde simple)
+  csrefHorsMedSoldeDebut    Int?
+  csrefHorsMedTotalRecettes Int?
+  csrefHorsMedTotalDepenses Int?
+  csrefHorsMedSoldeFin      Int?
+
+  // Bilan financier — Hors médicaments (CSCom : détaillé par poste)
+  cscomHorsMedBanqueDebut             Int?
+  cscomHorsMedCaisseDebut             Int?
+  cscomHorsMedRecTarification         Int?
+  cscomHorsMedRecTransfertCaisseMed   Int?
+  cscomHorsMedRecCotisations          Int?
+  cscomHorsMedRecReferenceEvacuation  Int?
+  cscomHorsMedRecCarteAdhesion        Int?
+  cscomHorsMedRecAutres               Int?
+  cscomHorsMedDepSalaires             Int?
+  cscomHorsMedDepAutresFonctionnement Int?
+  cscomHorsMedBanqueFin               Int?
+  cscomHorsMedCaisseFin               Int?
+
+  // Bilan financier — Médicaments (CSRéf + CSCom, même structure A-H)
+  medCapitalInitial     Int?
+  medValeurFinPeriode   Int?
+  medBanqueDebut        Int?
+  medCaisseFin          Int?
+  medCreancesFin        Int?
+  medDettesFin          Int?
+  medCapitalFin         Int?
+  medIndicateurMaintien Float?
+
+  // Compte d'exploitation médicaments (CSRéf + CSCom)
+  compteValeurDebut          Int?
+  compteValeurFin            Int?
+  compteVariationStock       Int?
+  compteAchatMedicaments     Int?
+  compteAppuiTarification    Int?
+  compteSalairesGerant       Int?
+  compteAutresFonctionnement Int?
+  compteTotalCharges         Int?
+  compteRecettesVenteMed     Int?
+  compteAutresRecettes       Int?
+  compteTotalRecettes        Int?
+  compteResultat             Int?
+
+  updatedById String?
+  updatedBy   User?    @relation(fields: [updatedById], references: [id], onDelete: SetNull)
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  @@unique([organizationId, month])
+}
+
+// RMA section 2 — personnel. Une ligne par (organisation, mois, poste).
+// CSRéf : liste canonique de catégories de poste avec un effectif agrégé par
+// catégorie (voir PERSONNEL_CATEGORIES_CSREF dans ressources-items.ts).
+// CSCom : liste libre, une ligne par agent nommé (itemKey généré côté
+// client, pas de liste canonique) — le RMA 1er échelon liste le personnel
+// individuellement, pas par catégorie agrégée.
+model PersonnelLine {
+  id             String       @id @default(cuid())
+  organizationId String
+  organization   Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  month          String // "2026-01"
+  echelon        String // 'csref' | 'cscom'
+  itemKey        String // clé canonique (CSRéf) ou id généré (CSCom, ligne libre)
+  qualification  String // libellé du poste (fixe CSRéf, saisi CSCom)
+
+  sexe                       String? // 'H' | 'F' — CSCom
+  fonctionResponsabilite     String? // CSCom
+  effectifOfficiel           Int? // CSRéf
+  priseEnChargeSalaire       String?
+  absenceFormation           Int?
+  absenceRaisonsService      Int?
+  absenceRaisonsPersonnelles Int?
+  absenceDureeTotale         Int?
+  observations               String?
+
+  updatedById String?
+  updatedBy   User?    @relation(fields: [updatedById], references: [id], onDelete: SetNull)
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  @@unique([organizationId, month, itemKey])
+  @@index([organizationId, month, echelon])
+}
+
+// RMA section 2 — matériel. Communication (Téléphone/Fax/Internet,
+// canonique, partagé) et véhicules (canonique par échelon — voir
+// EQUIPMENT_ITEMS) partagent les 6 colonnes communes ; réfrigérateurs et
+// congélateurs numérotés 1-5 (CSCom uniquement) ajoutent des relevés de
+// température/alarme à deux moments de la journée (8h et 14h), null pour
+// les autres catégories.
+model EquipmentLine {
+  id             String       @id @default(cuid())
+  organizationId String
+  organization   Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  month          String // "2026-01"
+  category       String // 'communication' | 'vehicule' | 'refrigerateur' | 'congelateur'
+  itemKey        String // slug canonique, voir EQUIPMENT_ITEMS
+  label          String
+
+  nombreFonctionnel Int?
+  nombreEnPanne     Int?
+  joursArretPanne   Int?
+  naturePanne       String?
+  reparationsFaites Boolean?
+  nombreRepare      Int? // communication uniquement
+
+  // Réfrigérateur / congélateur (CSCom) — relevés à deux moments de la journée
+  tempMin8h        Float?
+  tempMax8h        Float?
+  nbAlarmeBasse8h  Int?
+  nbAlarmeHaute8h  Int?
+  tempMin14h       Float?
+  tempMax14h       Float?
+  nbAlarmeBasse14h Int?
+  nbAlarmeHaute14h Int?
+
+  updatedById String?
+  updatedBy   User?    @relation(fields: [updatedById], references: [id], onDelete: SetNull)
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  @@unique([organizationId, month, itemKey])
+  @@index([organizationId, month, category])
+}
+
+// RMA section 1 — visites de supervision et réunions du CSCom (5
+// mini-tableaux : supervision équipe district, autres visites, supervision
+// équipe CSCom, sessions de monitorage, réunions du conseil
+// d'administration). Liste ouverte (jusqu'à ~5 lignes par tableau), itemKey
+// généré côté client comme les lignes libres de PersonnelLine — aucun de ces
+// tableaux n'a de liste canonique dans le RMA officiel (dates/nature saisies
+// librement chaque mois). N'existe pas côté CSRéf (Section 1 y est juste 3
+// questions OUI/NON sur RessourcesRapport).
+model VisiteReunionLine {
+  id             String       @id @default(cuid())
+  organizationId String
+  organization   Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  month          String // "2026-01"
+  tableau        String // 'supervision_district' | 'autres_visites' | 'supervision_cscom' | 'monitorage' | 'conseil_administration'
+  itemKey        String // id généré côté client
+
+  type                 String? // nature/type de la visite
+  datePrevue           String? // ou "date d'arrivée" pour autres_visites
+  dateRealisation      String? // ou "date de retour" pour autres_visites
+  nombreJours          Int?
+  integreeOuSpecifique String? // supervision_district uniquement
+  numeroCompteRendu    String? // conseil_administration uniquement
+  decision1            String?
+  decision2            String?
+
+  updatedById String?
+  updatedBy   User?    @relation(fields: [updatedById], references: [id], onDelete: SetNull)
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  @@unique([organizationId, month, itemKey])
+  @@index([organizationId, month, tableau])
 }
 
 // ───────────────────────────────────────────────────────────────────────
