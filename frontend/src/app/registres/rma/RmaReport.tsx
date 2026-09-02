@@ -18,13 +18,16 @@
 // Activités curatives, Grossesse/Accouchement et suites de couche,
 // Planification familiale, Prise en charge des urgences obstétricales et
 // néo-natales (ce dernier bloc n'est pas repris dans cette page, voir plus
-// haut) ; Section 5 = Prise en charge Lèpre, Prise en charge du Paludisme,
-// Nutrition (repris ici sous malnutrition URENI/URENAS/URENAM) ; Section 7 =
-// Activités d'hygiène publique et salubrité, Rapport de morbidité et de
-// mortalité. Les diviseurs "-------- SECTION N --------" à l'impression
-// (voir RmaSectionDivider plus bas) suivent ce découpage ; les blocs
-// Vaccination (×3) et MDO n'ont pas de numéro confirmé et n'affichent donc
-// aucun diviseur avant eux.
+// haut) ; Section 4 = Activités de laboratoire et transfusion (+ Imagerie
+// médicale/Anesthésie, propres au CSRéf) ; Section 5 = Prise en charge
+// Lèpre, Prise en charge du Paludisme, Nutrition (repris ici sous
+// malnutrition URENI/URENAS/URENAM) ; Section 6 = Gestion des stocks des
+// médicaments du panier/PF/Paludisme/SMI, intrants de nutrition, vaccins et
+// consommables ; Section 7 = Activités d'hygiène publique et salubrité,
+// Rapport de morbidité et de mortalité. Les diviseurs
+// "-------- SECTION N --------" à l'impression (voir RmaSectionDivider plus
+// bas) suivent ce découpage ; les blocs Vaccination (×3) et MDO n'ont pas de
+// numéro confirmé et n'affichent donc aucun diviseur avant eux.
 //
 // Les tranches d'âge (0-11 mois, 1-4, 5-14, 15-44, 45-59, 60 ans et plus)
 // reproduisent exactement le découpage du tableau "ACTIVITES CURATIVES" du
@@ -37,6 +40,11 @@ import { friendlyError } from '@/lib/errorMessages';
 import { AppHeader } from '@/components/AppHeader';
 import { useClinicName } from '@/lib/useClinicName';
 import { MonthPicker } from '@/components/MonthPicker';
+import {
+  STOCK_CATEGORY_LABELS,
+  stockItemsByCategory,
+  type StockCategory,
+} from '@/lib/server/registers/stock-items';
 
 const AGE_BRACKETS = [
   '0-11 mois',
@@ -905,11 +913,12 @@ function paludismeHospitalisationRow(
 // (see the reference screenshot this feature was built from). Rendered only
 // at genuine section transitions, per the confirmed mapping in the file
 // header comment: Section 3 (Activités curatives, Grossesse/Accouchement,
-// Planification familiale), Section 5 (malnutrition URENI/URENAS/URENAM,
-// Lèpre, Paludisme), Section 7 (Morbidité et mortalité + Tuberculose,
-// Hygiène). Vaccination (×3) and MDO have no confirmed official number, so
-// no divider is shown before them — they simply follow whichever confirmed
-// section precedes them, same as in the official document. To add a missing
+// Planification familiale), Section 4 (Laboratoire), Section 5 (malnutrition
+// URENI/URENAS/URENAM, Lèpre, Paludisme), Section 6 (Gestion des stocks),
+// Section 7 (Morbidité et mortalité + Tuberculose, Hygiène). Vaccination
+// (×3) and MDO have no confirmed official number, so no divider is shown
+// before them — they simply follow whichever confirmed section precedes
+// them, same as in the official document. To add a missing
 // number once confirmed, drop `<RmaSectionDivider n={N} />` immediately
 // before that block's heading — no other change needed.
 //
@@ -1159,6 +1168,146 @@ const LEPRE_RMA_GROUPS: {
       },
       { key: 'nbJoursRuptureMedicamentsPB', label: 'Jours de rupture des médicaments PB' },
       { key: 'nbJoursRuptureMedicamentsMB', label: 'Jours de rupture des médicaments MB' },
+    ],
+  },
+];
+
+// RMA section 4 — "Activités de laboratoire et transfusion". Même registre à
+// saisie manuelle mensuelle que Lèpre ci-dessus (LaboratoireRapport, un
+// enregistrement par organisation+mois, pas de notion d'échelon — les
+// groupes Imagerie médicale/Anesthésie restent vides côté CSCom, qui n'a pas
+// ces tableaux dans le RMA officiel). Mêmes 84 clés et mêmes 8 groupes que
+// frontend/src/app/registres/laboratoire/page.tsx (LABORATOIRE_GROUPS) et
+// frontend/src/app/api/registres/laboratoire/route.ts
+// (LABORATOIRE_FIELD_KEYS), dupliqués ici pour l'affichage dans ce rapport.
+interface LaboratoireRapportData {
+  month: string;
+  [key: string]: number | string | null;
+}
+
+const LABORATOIRE_RMA_GROUPS: { title: string; fields: { key: string; label: string }[] }[] = [
+  {
+    title: 'Hématologie',
+    fields: [
+      { key: 'nfsTotal', label: 'NFS — Total' },
+      { key: 'nfsPositif', label: 'NFS — Positif' },
+      { key: 'vsTotal', label: 'VS — Total' },
+      { key: 'vsPositif', label: 'VS — Positif' },
+      { key: 'tsTotal', label: 'TS — Total' },
+      { key: 'tsPositif', label: 'TS — Positif' },
+      { key: 'tcTotal', label: 'TC — Total' },
+      { key: 'tcPositif', label: 'TC — Positif' },
+      { key: 'teTotal', label: 'T.E. — Total' },
+      { key: 'tePositif', label: 'T.E. — Positif' },
+      { key: 'groupeAboTotal', label: 'Groupe ABO — Total' },
+      { key: 'groupeAboPositif', label: 'Groupe ABO — Positif' },
+      { key: 'rhesusDTotal', label: 'Rhésus D — Total' },
+      { key: 'rhesusDPositif', label: 'Rhésus D — Positif' },
+    ],
+  },
+  {
+    title: 'Sérologie',
+    fields: [
+      { key: 'hbsTotal', label: 'HBS — Total' },
+      { key: 'hbsPositif', label: 'HBS — Positif' },
+      { key: 'bwTotal', label: 'B.W. — Total' },
+      { key: 'bwPositif', label: 'B.W. — Positif' },
+      { key: 'widalTotal', label: 'Widal — Total' },
+      { key: 'widalPositif', label: 'Widal — Positif' },
+      { key: 'vihTotal', label: 'VIH — Total' },
+      { key: 'vihPositif', label: 'VIH — Positif' },
+      { key: 'transfusionPocheTesteeTotal', label: 'Transfusion (poche testée) — Total' },
+      { key: 'transfusionPocheTesteePositif', label: 'Transfusion (poche testée) — Positif' },
+      { key: 'testGrossesseTotal', label: 'Test de grossesse — Total' },
+      { key: 'testGrossessePositif', label: 'Test de grossesse — Positif' },
+    ],
+  },
+  {
+    title: 'Biochimie',
+    fields: [
+      { key: 'glycemieTotal', label: 'Glycémie — Total' },
+      { key: 'glycemieAnormal', label: 'Glycémie — Anormal' },
+      { key: 'albumineTotal', label: 'Albumine — Total' },
+      { key: 'albumineAnormal', label: 'Albumine — Anormal' },
+      { key: 'sucreTotal', label: 'Sucre — Total' },
+      { key: 'sucreAnormal', label: 'Sucre — Anormal' },
+      { key: 'creatinemieTotal', label: 'Créatinémie — Total' },
+      { key: 'creatinemieAnormal', label: 'Créatinémie — Anormal' },
+      { key: 'transaminasesTotal', label: 'Transaminases — Total' },
+      { key: 'transaminasesAnormal', label: 'Transaminases — Anormal' },
+      { key: 'cholesterolemieTotal', label: 'Cholestérolémie — Total' },
+      { key: 'cholesterolemieAnormal', label: 'Cholestérolémie — Anormal' },
+      { key: 'asloTotal', label: 'ASLO — Total' },
+      { key: 'asloAnormal', label: 'ASLO — Anormal' },
+      { key: 'serologieToxoTotal', label: 'Sérologie toxoplasmose — Total' },
+      { key: 'serologieToxoAnormal', label: 'Sérologie toxoplasmose — Anormal' },
+      { key: 'serologieRubeoleTotal', label: 'Sérologie de la rubéole — Total' },
+      { key: 'serologieRubeoleAnormal', label: 'Sérologie de la rubéole — Anormal' },
+      { key: 'autresBiochimiesTotal', label: 'Autres biochimies — Total' },
+      { key: 'autresBiochimiesAnormal', label: 'Autres biochimies — Anormal' },
+    ],
+  },
+  {
+    title: 'Bactériologie',
+    fields: [
+      { key: 'lcrTotal', label: 'LCR — Total' },
+      { key: 'lcrPositif', label: 'LCR — Positif' },
+      { key: 'bkTotal', label: 'B.K. — Total' },
+      { key: 'bkPositif', label: 'B.K. — Positif' },
+      { key: 'ecbuTotal', label: 'ECBU — Total' },
+      { key: 'ecbuPositif', label: 'ECBU — Positif' },
+      { key: 'pvGramTotal', label: 'PV (coloration Gram) — Total' },
+      { key: 'pvGramPositif', label: 'PV (coloration Gram) — Positif' },
+      { key: 'puGramTotal', label: 'PU (coloration Gram) — Total' },
+      { key: 'puGramPositif', label: 'PU (coloration Gram) — Positif' },
+      { key: 'autreBacterioTotal', label: 'Autre bactériologie — Total' },
+      { key: 'autreBacterioPositif', label: 'Autre bactériologie — Positif' },
+    ],
+  },
+  {
+    title: 'Parasitologie',
+    fields: [
+      { key: 'geFrottisTotal', label: 'G.E. / Frottis mince — Total' },
+      { key: 'geFrottisPositif', label: 'G.E. / Frottis mince — Positif' },
+      { key: 'tdrTotal', label: 'TDR — Total' },
+      { key: 'tdrPositif', label: 'TDR — Positif' },
+      { key: 'culotUrinaireTotal', label: 'Culot urinaire — Total' },
+      { key: 'culotUrinairePositif', label: 'Culot urinaire — Positif' },
+      { key: 'pokDirectTotal', label: 'P.O.K. (examen direct) — Total' },
+      { key: 'pokDirectPositif', label: 'P.O.K. (examen direct) — Positif' },
+      { key: 'pokKatoTotal', label: 'P.O.K. (Kato) — Total' },
+      { key: 'pokKatoPositif', label: 'P.O.K. (Kato) — Positif' },
+      { key: 'rechSchistoTotal', label: 'Rech. Schisto/urines — Total' },
+      { key: 'rechSchistoPositif', label: 'Rech. Schisto/urines — Positif' },
+      { key: 'pvDirectTotal', label: 'PV (examen direct) — Total' },
+      { key: 'pvDirectPositif', label: 'PV (examen direct) — Positif' },
+      { key: 'puDirectTotal', label: 'PU (examen direct) — Total' },
+      { key: 'puDirectPositif', label: 'PU (examen direct) — Positif' },
+      { key: 'rechMicrofilairesTotal', label: 'Rech. microfilaires — Total' },
+      { key: 'rechMicrofilairesPositif', label: 'Rech. microfilaires — Positif' },
+    ],
+  },
+  {
+    title: 'Transfusion',
+    fields: [
+      { key: 'nbPochesDisponibles', label: 'Nombre de poches disponibles' },
+      { key: 'nbPatientsTransfuses', label: 'Nombre de patients transfusés' },
+    ],
+  },
+  {
+    title: 'Imagerie médicale (2ème échelon / CSRéf uniquement)',
+    fields: [
+      { key: 'nbGraphiesRealisees', label: 'Graphies réalisées' },
+      { key: 'nbEchographiesRealisees', label: "Nombre d'échographies réalisées" },
+      { key: 'imagerieAutres', label: 'Autres' },
+    ],
+  },
+  {
+    title: 'Anesthésie (2ème échelon / CSRéf uniquement)',
+    fields: [
+      { key: 'anesthesieLocale', label: 'Locale' },
+      { key: 'anesthesieLocoRegionale', label: 'Loco-régionale' },
+      { key: 'anesthesieGenerale', label: 'Générale' },
     ],
   },
 ];
@@ -1421,6 +1570,45 @@ const HYGIENE_RMA_GROUPS: { title: string; fields: { key: string; label: string 
   },
 ];
 
+// RMA section 6 — "Gestion des stocks des médicaments du panier/PF/
+// Paludisme/SMI", intrants de nutrition et vaccins/consommables. Contrairement
+// aux registres ci-dessus (un enregistrement plat par mois), Stock est une
+// table enfant — une ligne StockLine par (organisation, mois, article), voir
+// frontend/src/lib/server/registers/stock-items.ts (STOCK_ITEMS, ~111
+// articles) pour la liste faisant foi, partagée avec la page
+// /registres/stock. Rendu ici en lecture seule, mêmes 6 catégories/colonnes
+// que la page de saisie (STOCK_CATEGORY_LABELS, colonnes communes ou
+// vaccins), juste sans les <input>.
+interface StockLineData {
+  itemKey: string;
+  category: StockCategory;
+  [column: string]: string | number | null | StockCategory;
+}
+
+const STOCK_RMA_COLUMNS: { key: string; label: string }[] = [
+  { key: 'quantiteDebut', label: 'Début' },
+  { key: 'quantiteRecue', label: 'Reçue' },
+  { key: 'consommation', label: 'Consommation' },
+  { key: 'quantiteAjustee', label: 'Ajustée' },
+  { key: 'joursRuptureStock', label: 'Jours rupture' },
+  { key: 'quantiteFin', label: 'Fin' },
+  { key: 'quantiteCommandee', label: 'Commandée' },
+];
+
+const STOCK_RMA_VACCIN_COLUMNS: { key: string; label: string }[] = [
+  { key: 'quantiteDebut', label: 'Stock début' },
+  { key: 'quantiteRecue', label: 'Reçue' },
+  { key: 'consommation', label: 'Utilisée' },
+  { key: 'quantiteAjustee', label: 'Ajustée' },
+  { key: 'joursRuptureStock', label: 'Jours rupture' },
+  { key: 'quantiteFin', label: 'Stock fin' },
+  { key: 'numeroLot', label: 'N° lot' },
+];
+
+function stockRmaColumnsFor(category: StockCategory): { key: string; label: string }[] {
+  return category === 'vaccins' ? STOCK_RMA_VACCIN_COLUMNS : STOCK_RMA_COLUMNS;
+}
+
 export function RmaReport({ defaultEchelon }: { defaultEchelon: 'CSRéf' | 'CSCom' }) {
   const clinicName = useClinicName();
   const [month, setMonth] = useState(currentMonth());
@@ -1444,6 +1632,8 @@ export function RmaReport({ defaultEchelon }: { defaultEchelon: 'CSRéf' | 'CSCo
   const [hospitalisations, setHospitalisations] = useState<HospitalisationRow[]>([]);
   const [lepreRapport, setLepreRapport] = useState<LepreRapportData | null>(null);
   const [hygieneRapport, setHygieneRapport] = useState<HygieneRapportData | null>(null);
+  const [laboratoireRapport, setLaboratoireRapport] = useState<LaboratoireRapportData | null>(null);
+  const [stockLines, setStockLines] = useState<StockLineData[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
@@ -1465,6 +1655,8 @@ export function RmaReport({ defaultEchelon }: { defaultEchelon: 'CSRéf' | 'CSCo
         hospitalisationRows,
         lepreRow,
         hygieneRow,
+        laboratoireRow,
+        stockRes,
       ] = await Promise.all([
         fetchAllPages<ConsultationRow>('/api/consultations', dateFrom, dateTo),
         fetchAllPages<MaterniteRow>('/api/maternite', dateFrom, dateTo, { type: 'CPN' }),
@@ -1487,6 +1679,10 @@ export function RmaReport({ defaultEchelon }: { defaultEchelon: 'CSRéf' | 'CSCo
         fetchAllPages<HospitalisationRow>('/api/hospitalisation', dateFrom, dateTo),
         api<LepreRapportData>(`/api/registres/lepre?month=${selectedMonth}`),
         api<HygieneRapportData>(`/api/registres/hygiene?month=${selectedMonth}`),
+        api<LaboratoireRapportData>(`/api/registres/laboratoire?month=${selectedMonth}`),
+        api<{ month: string; lines: StockLineData[] }>(
+          `/api/registres/stock?month=${selectedMonth}`,
+        ),
       ]);
       setConsultations(consultationRows);
       setCpn(cpnRows);
@@ -1500,6 +1696,8 @@ export function RmaReport({ defaultEchelon }: { defaultEchelon: 'CSRéf' | 'CSCo
       setHospitalisations(hospitalisationRows);
       setLepreRapport(lepreRow);
       setHygieneRapport(hygieneRow);
+      setLaboratoireRapport(laboratoireRow);
+      setStockLines(stockRes.lines);
     } catch (err) {
       setError(friendlyError(err, 'Une erreur est survenue. Réessayez.'));
     } finally {
@@ -1521,6 +1719,8 @@ export function RmaReport({ defaultEchelon }: { defaultEchelon: 'CSRéf' | 'CSCo
     const key = c.mdoMaladie?.trim() || 'Non précisé';
     mdoByMaladie.set(key, (mdoByMaladie.get(key) ?? 0) + 1);
   }
+
+  const stockLineByKey = new Map(stockLines.map((l) => [l.itemKey, l]));
 
   // { rowLabel -> { bracket -> count } }, plus un total par ligne.
   const curativeCounts = CURATIVE_ROWS.map((row) => {
@@ -2054,12 +2254,21 @@ export function RmaReport({ defaultEchelon }: { defaultEchelon: 'CSRéf' | 'CSCo
           dossier patient — ne sont pas suivies du tout. Le tableau « Morbidité et mortalité »
           couvre toutes les consultations du mois : chacune compte sous sa maladie si un code
           d'affection RMA lui a été assigné, sinon sous « Autres ». Les autres sections du RMA
-          (RH/matériel/financier, urgences obstétricales, chirurgie, fistule, laboratoire,
-          dracunculose, pharmacie) restent hors périmètre de cette page. Les tableaux « Prise en
-          charge Lèpre » (section 5) et « Activités d&apos;hygiène publique et salubrité » (section
-          7) reprennent la saisie manuelle mensuelle des registres séparés{' '}
+          (RH/matériel/financier, urgences obstétricales, chirurgie, fistule, dracunculose) restent
+          hors périmètre de cette page. Les tableaux « Activités de laboratoire et transfusion »
+          (section 4), « Prise en charge Lèpre » (section 5), « Gestion des stocks » (section 6) et
+          « Activités d&apos;hygiène publique et salubrité » (section 7) reprennent la saisie
+          manuelle mensuelle des registres séparés{' '}
+          <Link href="/registres/laboratoire" className="text-[#2a78d6] hover:underline">
+            /registres/laboratoire
+          </Link>
+          ,{' '}
           <Link href="/registres/lepre" className="text-[#2a78d6] hover:underline">
             /registres/lepre
+          </Link>
+          ,{' '}
+          <Link href="/registres/stock" className="text-[#2a78d6] hover:underline">
+            /registres/stock
           </Link>{' '}
           et{' '}
           <Link href="/registres/hygiene" className="text-[#2a78d6] hover:underline">
@@ -2277,6 +2486,47 @@ export function RmaReport({ defaultEchelon }: { defaultEchelon: 'CSRéf' | 'CSCo
             </dl>
           </div>
 
+          <RmaSectionDivider n={4} />
+          <div className="overflow-hidden rounded-xl border border-[#e1e0d9] bg-white shadow-[0_1px_2px_rgba(11,11,11,0.04)]">
+            <h2 className="border-b border-[#e1e0d9] bg-[#f9f9f7] px-4 py-2 text-sm font-semibold text-[#0b0b0b]">
+              Activités de laboratoire et transfusion
+            </h2>
+            {LABORATOIRE_RMA_GROUPS.map((group) => (
+              <div key={group.title} className="border-b border-[#e1e0d9]">
+                <h3 className="px-4 pt-3 text-xs font-semibold tracking-wide text-[#898781] uppercase">
+                  {group.title}
+                </h3>
+                <dl>
+                  {group.fields.map((f, i) => (
+                    <div
+                      key={f.key}
+                      className={`flex items-center justify-between gap-4 px-4 py-3 text-sm ${
+                        i !== group.fields.length - 1 ? 'border-b border-[#e1e0d9]' : ''
+                      }`}
+                    >
+                      <dt className="text-[#52514e]">{f.label}</dt>
+                      <dd className="shrink-0 text-base font-semibold text-[#0b0b0b]">
+                        {laboratoireRapport?.[f.key] ?? '—'}
+                      </dd>
+                    </div>
+                  ))}
+                </dl>
+              </div>
+            ))}
+            <p className="px-4 py-3 text-xs leading-relaxed text-[#898781]">
+              Reprend le tableau « Activités de laboratoire et transfusion » du RMA (section 4). Les
+              groupes Imagerie médicale et Anesthésie ne concernent que le 2ème échelon / CSRéf (« —
+              » côté CSCom, qui n'a pas ces tableaux dans le RMA officiel). Aucun champ de
+              MediAfrica ne suit ces examens aujourd'hui : ces chiffres viennent de la saisie
+              manuelle mensuelle sur{' '}
+              <Link href="/registres/laboratoire" className="text-[#2a78d6] hover:underline">
+                /registres/laboratoire
+              </Link>{' '}
+              (pas de lien avec les dossiers patients, pas filtré par le sélecteur Échelon
+              ci-dessus). «&nbsp;—&nbsp;» signifie que ce mois n'a pas encore été renseigné.
+            </p>
+          </div>
+
           <RmaSectionDivider n={5} />
           <div className="overflow-hidden rounded-xl border border-[#e1e0d9] bg-white shadow-[0_1px_2px_rgba(11,11,11,0.04)]">
             <h2 className="border-b border-[#e1e0d9] bg-[#f9f9f7] px-4 py-2 text-sm font-semibold text-[#0b0b0b]">
@@ -2418,6 +2668,78 @@ export function RmaReport({ defaultEchelon }: { defaultEchelon: 'CSRéf' | 'CSCo
                 </ul>
               )}
             </div>
+          </div>
+
+          <RmaSectionDivider n={6} />
+          <div className="overflow-hidden rounded-xl border border-[#e1e0d9] bg-white shadow-[0_1px_2px_rgba(11,11,11,0.04)]">
+            <h2 className="border-b border-[#e1e0d9] bg-[#f9f9f7] px-4 py-2 text-sm font-semibold text-[#0b0b0b]">
+              Gestion des stocks
+            </h2>
+            {(['panier', 'pf', 'paludisme', 'smi', 'nutrition', 'vaccins'] as const).map(
+              (category) => {
+                const items = stockItemsByCategory(category);
+                const cols = stockRmaColumnsFor(category);
+                return (
+                  <div key={category} className="border-b border-[#e1e0d9]">
+                    <h3 className="px-4 pt-3 text-xs font-semibold tracking-wide text-[#898781] uppercase">
+                      {STOCK_CATEGORY_LABELS[category]}
+                    </h3>
+                    <div className="overflow-x-auto">
+                      <table className="w-full text-left text-xs">
+                        <thead>
+                          <tr className="border-b border-[#e1e0d9] uppercase tracking-wide text-[#898781]">
+                            <th className="px-3 py-2 font-medium">Article</th>
+                            {cols.map((c) => (
+                              <th
+                                key={c.key}
+                                className="px-2 py-2 text-right font-medium whitespace-nowrap"
+                              >
+                                {c.label}
+                              </th>
+                            ))}
+                          </tr>
+                        </thead>
+                        <tbody>
+                          {items.map((item, i) => {
+                            const row = stockLineByKey.get(item.key);
+                            return (
+                              <tr
+                                key={item.key}
+                                className={
+                                  i !== items.length - 1 ? 'border-b border-[#e1e0d9]' : ''
+                                }
+                              >
+                                <td className="px-3 py-2 font-medium whitespace-nowrap text-[#0b0b0b]">
+                                  {item.label}
+                                </td>
+                                {cols.map((c) => (
+                                  <td key={c.key} className="px-2 py-2 text-right text-[#52514e]">
+                                    {row?.[c.key] ?? '—'}
+                                  </td>
+                                ))}
+                              </tr>
+                            );
+                          })}
+                        </tbody>
+                      </table>
+                    </div>
+                  </div>
+                );
+              },
+            )}
+            <p className="px-4 py-3 text-xs leading-relaxed text-[#898781]">
+              Reprend le grand livre du tableau « Gestion des stocks » du RMA (section 6 —
+              médicaments du panier/PF/Paludisme/SMI, intrants de nutrition, vaccins et
+              consommables). Aucun champ de MediAfrica ne suit ces stocks aujourd'hui : ces chiffres
+              viennent de la saisie manuelle mensuelle sur{' '}
+              <Link href="/registres/stock" className="text-[#2a78d6] hover:underline">
+                /registres/stock
+              </Link>{' '}
+              (pas de lien avec les dossiers patients, pas filtré par le sélecteur Échelon
+              ci-dessus, colonnes texte — raisons d'ajustement/rupture, numéro de lot — non reprises
+              ici par manque de place). «&nbsp;—&nbsp;» signifie que ce mois n'a pas encore été
+              renseigné pour cet article.
+            </p>
           </div>
 
           <RmaSectionDivider n={7} />

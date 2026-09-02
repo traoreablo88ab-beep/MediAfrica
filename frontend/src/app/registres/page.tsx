@@ -74,6 +74,18 @@ const SHARED_REGISTERS: RegisterCard[] = [
     description:
       'Cohorte mensuelle de malades PB/MB (nouveaux cas, guérisons, décès, infirmités...), saisie manuelle.',
   },
+  {
+    href: '/registres/laboratoire',
+    title: 'Registre Laboratoire',
+    description:
+      'Examens de laboratoire et transfusion du mois (hématologie, sérologie, biochimie, bactériologie, parasitologie...), saisie manuelle.',
+  },
+  {
+    href: '/registres/stock',
+    title: 'Registre Stock',
+    description:
+      'Grand livre mensuel des stocks (médicaments du panier/PF/Paludisme/SMI, intrants de nutrition, vaccins), saisie manuelle.',
+  },
 ];
 
 const CSREF_REGISTERS: RegisterCard[] = [
