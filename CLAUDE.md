@@ -25,7 +25,7 @@ pnpm workspace — run from repo root unless noted. The root `package.json` is a
 
 | Task | Command |
 |---|---|
-| Dev (Next.js on :3000, Turbopack) | `pnpm dev` |
+| Dev (Next.js on :3001, Turbopack) | `pnpm dev` |
 | Build | `pnpm build` |
 | Apply Prisma schema (dev iteration) | `pnpm db:push` |
 | Versioned migrations | `pnpm db:migrate:dev` (local) / `pnpm db:migrate:deploy` (CI/prod) |

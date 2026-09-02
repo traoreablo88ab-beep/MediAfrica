@@ -39,7 +39,7 @@ cd my-project
 cp .env.example frontend/.env.local              # remplis DATABASE_URL, JWT_SECRET, ENCRYPTION_KEY, CRON_SECRET au minimum
 pnpm install
 pnpm db:migrate:deploy                           # applique les migrations versionnées sur ta DB Neon
-pnpm dev                                         # http://localhost:3000
+pnpm dev                                         # http://localhost:3001
 # dans un autre terminal, après le premier signup :
 pnpm db:make-superadmin you@example.com
 pnpm smoke:auth                                  # vérifie le happy path auth de bout en bout
@@ -65,7 +65,7 @@ Pour obtenir `DATABASE_URL` + `DIRECT_URL` : crée un projet gratuit sur https:/
 | `JWT_SECRET`     | ≥32 chars, générer avec `openssl rand -base64 32`                                                        |
 | `ENCRYPTION_KEY` | 32 bytes base64, générer avec `openssl rand -base64 32`                                                  |
 | `CRON_SECRET`    | Bearer token requis par les handlers `/api/cron/*` ; `openssl rand -base64 32`                           |
-| `APP_URL`        | Utilisé pour la génération des liens email et la base de redirect OAuth ; défaut `http://localhost:3000` |
+| `APP_URL`        | Utilisé pour la génération des liens email et la base de redirect OAuth ; défaut `http://localhost:3001` |
 
 Groupes optionnels (set les vars pour activer ; absent = inerte) :
 

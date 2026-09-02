@@ -26,7 +26,7 @@ const securityHeaders = [
 const config: NextConfig = {
   reactStrictMode: true,
   // Lets `next dev` serve assets/HMR to devices on the LAN (e.g. testing on a
-  // phone at http://192.168.1.162:3000) — without this, Next's dev-only
+  // phone at http://192.168.1.162:3001) — without this, Next's dev-only
   // cross-origin guard silently drops CSS/JS chunks for non-localhost origins.
   allowedDevOrigins: ['192.168.1.162'],
   // Standalone output bundles a self-contained server.js + minimal node_modules

@@ -22,7 +22,7 @@ import { PrismaClient } from '@prisma/client';
 
 // `|| ` (not `??`) — .env.example ships SMOKE_BASE_URL="" uncommented, and an
 // explicit empty string should fall back to the default same as "unset".
-const BASE_URL = process.env.SMOKE_BASE_URL || 'http://localhost:3000';
+const BASE_URL = process.env.SMOKE_BASE_URL || 'http://localhost:3001';
 const TEST_EMAIL = `smoke-${Date.now()}@example.test`;
 const TEST_PASSWORD = 'SmokeTestPwd123!';
 
