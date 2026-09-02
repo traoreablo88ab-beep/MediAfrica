@@ -14,13 +14,17 @@
 // quand c'est possible. Ne soumet rien à DHIS2 : l'utilisateur recopie les
 // chiffres dans le formulaire papier ou dans DHIS2.
 //
-// Précision sur la numérotation du PDF : la "Section 3" officielle est en
-// réalité "PROVENANCE ET CIRCONSTANCES DE PRISE EN CHARGE" (référé/évacué
-// par structure d'origine, page 4) — pas les activités curatives. Le
-// tableau "ACTIVITES CURATIVES" et le bloc "GROSSESSE, ACCOUCHEMENT ET
-// SUITES DE COUCHE" suivent juste après, sans numéro de section propre
-// (le PDF ne les numérote pas). La "Section 5" officielle, elle, couvre
-// Lèpre / Dracunculose / Paludisme (page 13), pas la maternité.
+// Numérotation officielle du RMA (confirmée par le Ministère) : Section 3 =
+// Activités curatives, Grossesse/Accouchement et suites de couche,
+// Planification familiale, Prise en charge des urgences obstétricales et
+// néo-natales (ce dernier bloc n'est pas repris dans cette page, voir plus
+// haut) ; Section 5 = Prise en charge Lèpre, Prise en charge du Paludisme,
+// Nutrition (repris ici sous malnutrition URENI/URENAS/URENAM) ; Section 7 =
+// Activités d'hygiène publique et salubrité, Rapport de morbidité et de
+// mortalité. Les diviseurs "-------- SECTION N --------" à l'impression
+// (voir RmaSectionDivider plus bas) suivent ce découpage ; les blocs
+// Vaccination (×3) et MDO n'ont pas de numéro confirmé et n'affichent donc
+// aucun diviseur avant eux.
 //
 // Les tranches d'âge (0-11 mois, 1-4, 5-14, 15-44, 45-59, 60 ans et plus)
 // reproduisent exactement le découpage du tableau "ACTIVITES CURATIVES" du
@@ -897,18 +901,50 @@ function paludismeHospitalisationRow(
   return { label, v0a4, v5plus, vFE: null };
 }
 
+// Reproduces the official RMA form's "-------- SECTION N --------" divider
+// (see the reference screenshot this feature was built from). Rendered only
+// at genuine section transitions, per the confirmed mapping in the file
+// header comment: Section 3 (Activités curatives, Grossesse/Accouchement,
+// Planification familiale), Section 5 (malnutrition URENI/URENAS/URENAM,
+// Lèpre, Paludisme), Section 7 (Morbidité et mortalité + Tuberculose,
+// Hygiène). Vaccination (×3) and MDO have no confirmed official number, so
+// no divider is shown before them — they simply follow whichever confirmed
+// section precedes them, same as in the official document. To add a missing
+// number once confirmed, drop `<RmaSectionDivider n={N} />` immediately
+// before that block's heading — no other change needed.
+//
+// This divider owns the page break for the block it precedes (verified
+// empirically: a forced `break-before: page` on this AND on the immediately
+// following block's own wrapper does NOT merge into one break in Chromium —
+// it produces two, stranding the divider alone on a blank page in between).
+// So whichever block follows a divider must NOT also force its own break —
+// for a plain <div> block that means dropping print:break-before-page from
+// its wrapper; for an AgeSexTable call site it means passing
+// printBreakBefore={false}.
+function RmaSectionDivider({ n }: { n: number }) {
+  return (
+    <p className="hidden text-center font-mono text-xs tracking-wide text-[#52514e] print:block print:break-before-page">
+      {'—'.repeat(20)} SECTION {n} {'—'.repeat(20)}
+    </p>
+  );
+}
+
 function AgeSexTable({
   title,
   ageBrackets,
   counts,
   note,
   summaryLines,
+  printBreakBefore = true,
 }: {
   title: string;
   ageBrackets: readonly string[];
   counts: AgeSexCountRow[];
   note?: string;
   summaryLines?: RmaLine[];
+  // False when a RmaSectionDivider immediately precedes this table — the
+  // divider then owns the page break instead (see its own comment above).
+  printBreakBefore?: boolean;
 }) {
   const columns = ageBrackets.flatMap((b) => [
     { bracket: b, sex: 'M' as const },
@@ -916,7 +952,11 @@ function AgeSexTable({
   ]);
 
   return (
-    <div className="overflow-hidden rounded-xl border border-[#e1e0d9] bg-white shadow-[0_1px_2px_rgba(11,11,11,0.04)]">
+    <div
+      className={`overflow-hidden rounded-xl border border-[#e1e0d9] bg-white shadow-[0_1px_2px_rgba(11,11,11,0.04)] ${
+        printBreakBefore ? 'print:break-before-page' : ''
+      }`}
+    >
       <h2 className="border-b border-[#e1e0d9] bg-[#f9f9f7] px-4 py-2 text-sm font-semibold text-[#0b0b0b]">
         {title}
       </h2>
@@ -1900,13 +1940,31 @@ export function RmaReport({ defaultEchelon }: { defaultEchelon: 'CSRéf' | 'CSCo
     },
   ];
 
+  const [year, monthNum] = month.split('-');
+
+  // Chromium only resolves a custom property used inside a @page margin box's
+  // `content` against the ROOT element — setting it via inline style on a
+  // nested div (like the .rma-print-root wrapper below) is silently ignored,
+  // falling back to var()'s default (verified empirically). So this has to
+  // go on document.documentElement, not through React's style prop.
+  useEffect(() => {
+    const escaped = clinicName.replace(/\\/g, '\\\\').replace(/"/g, '\\"');
+    document.documentElement.style.setProperty(
+      '--rma-print-header',
+      `"RAPPORT MENSUEL D'ACTIVITES DE ${escaped} — AN ${year} MOIS N° ${monthNum}"`,
+    );
+    return () => {
+      document.documentElement.style.removeProperty('--rma-print-header');
+    };
+  }, [clinicName, year, monthNum]);
+
   return (
     <main className="min-h-screen bg-[#f9f9f7] md:pl-64">
       <div className="print:hidden">
         <AppHeader active="registres" />
       </div>
 
-      <div className="animate-fade-in-up mx-auto max-w-6xl px-6 py-6">
+      <div className="rma-print-root animate-fade-in-up mx-auto max-w-6xl px-6 py-6">
         <div className="mb-1 print:hidden">
           <Link
             href={echelonFilter === 'CSCom' ? '/registres/cscom' : '/registres/consultation'}
@@ -2026,6 +2084,7 @@ export function RmaReport({ defaultEchelon }: { defaultEchelon: 'CSRéf' | 'CSCo
         )}
 
         <div className="space-y-6">
+          <RmaSectionDivider n={3} />
           <div className="overflow-hidden rounded-xl border border-[#e1e0d9] bg-white shadow-[0_1px_2px_rgba(11,11,11,0.04)]">
             <h2 className="border-b border-[#e1e0d9] bg-[#f9f9f7] px-4 py-2 text-sm font-semibold text-[#0b0b0b]">
               ACTIVITES CURATIVES
@@ -2067,11 +2126,13 @@ export function RmaReport({ defaultEchelon }: { defaultEchelon: 'CSRéf' | 'CSCo
             </div>
           </div>
 
+          <RmaSectionDivider n={7} />
           <AgeSexTable
             title="Morbidité et mortalité"
             ageBrackets={AGE_BRACKETS}
             counts={morbiditeCounts}
             note={`Toute consultation ${echelonFilter} du mois est comptée ici : sous sa maladie si un code d'affection RMA lui a été assigné (depuis le formulaire de consultation ou directement depuis le registre), sinon sous « Autres — Cas ».`}
+            printBreakBefore={false}
           />
 
           <AgeSexTable
@@ -2081,6 +2142,7 @@ export function RmaReport({ defaultEchelon }: { defaultEchelon: 'CSRéf' | 'CSCo
             note="Les 2 lignes « Tuberculose » du tableau Morbidité ci-dessus, isolées ici pour plus de lisibilité — même donnée, pas de double comptage."
           />
 
+          <RmaSectionDivider n={3} />
           <div className="overflow-hidden rounded-xl border border-[#e1e0d9] bg-white shadow-[0_1px_2px_rgba(11,11,11,0.04)]">
             <h2 className="border-b border-[#e1e0d9] bg-[#f9f9f7] px-4 py-2 text-sm font-semibold text-[#0b0b0b]">
               GROSSESSE, ACCOUCHEMENT ET SUITES DE COUCHE
@@ -2107,10 +2169,12 @@ export function RmaReport({ defaultEchelon }: { defaultEchelon: 'CSRéf' | 'CSCo
             </dl>
           </div>
 
+          <RmaSectionDivider n={5} />
           <AgeSexTable
             title="PRISE EN CHARGE DE LA MALNUTRITION — URENI (MAS avec complications)"
             ageBrackets={URENI_AGE_BRACKETS}
             counts={ureniCounts}
+            printBreakBefore={false}
           />
 
           <AgeSexTable
@@ -2130,11 +2194,13 @@ export function RmaReport({ defaultEchelon }: { defaultEchelon: 'CSRéf' | 'CSCo
               : {})}
           />
 
+          <RmaSectionDivider n={3} />
           <AgeSexTable
             title="PLANIFICATION FAMILIALE — 1. Nouveaux utilisateurs"
             ageBrackets={PF_AGE_BRACKETS}
             counts={pfNouveauxCounts}
             summaryLines={pfNouveauxLines}
+            printBreakBefore={false}
           />
 
           <AgeSexTable
@@ -2151,7 +2217,7 @@ export function RmaReport({ defaultEchelon }: { defaultEchelon: 'CSRéf' | 'CSCo
             note="Sources d'information des utilisateurs sur la PF (radio, télévision, causerie, ami/connaissance, ASC/relais, réseaux sociaux, autres) : non suivies dans MediAfrica."
           />
 
-          <div className="overflow-hidden rounded-xl border border-[#e1e0d9] bg-white shadow-[0_1px_2px_rgba(11,11,11,0.04)]">
+          <div className="overflow-hidden rounded-xl border border-[#e1e0d9] bg-white shadow-[0_1px_2px_rgba(11,11,11,0.04)] print:break-before-page">
             <h2 className="border-b border-[#e1e0d9] bg-[#f9f9f7] px-4 py-2 text-sm font-semibold text-[#0b0b0b]">
               PLANIFICATION FAMILIALE — 4. Sensibilisation
             </h2>
@@ -2185,7 +2251,7 @@ export function RmaReport({ defaultEchelon }: { defaultEchelon: 'CSRéf' | 'CSCo
             counts={r21Counts}
           />
 
-          <div className="overflow-hidden rounded-xl border border-[#e1e0d9] bg-white shadow-[0_1px_2px_rgba(11,11,11,0.04)]">
+          <div className="overflow-hidden rounded-xl border border-[#e1e0d9] bg-white shadow-[0_1px_2px_rgba(11,11,11,0.04)] print:break-before-page">
             <h2 className="border-b border-[#e1e0d9] bg-[#f9f9f7] px-4 py-2 text-sm font-semibold text-[#0b0b0b]">
               VACCINATION — HPV, Td/TdR, suppléments &amp; activités promotionnelles
             </h2>
@@ -2211,6 +2277,7 @@ export function RmaReport({ defaultEchelon }: { defaultEchelon: 'CSRéf' | 'CSCo
             </dl>
           </div>
 
+          <RmaSectionDivider n={5} />
           <div className="overflow-hidden rounded-xl border border-[#e1e0d9] bg-white shadow-[0_1px_2px_rgba(11,11,11,0.04)]">
             <h2 className="border-b border-[#e1e0d9] bg-[#f9f9f7] px-4 py-2 text-sm font-semibold text-[#0b0b0b]">
               Prise en charge Lèpre
@@ -2250,7 +2317,7 @@ export function RmaReport({ defaultEchelon }: { defaultEchelon: 'CSRéf' | 'CSCo
             </p>
           </div>
 
-          <div className="overflow-hidden rounded-xl border border-[#e1e0d9] bg-white shadow-[0_1px_2px_rgba(11,11,11,0.04)]">
+          <div className="overflow-hidden rounded-xl border border-[#e1e0d9] bg-white shadow-[0_1px_2px_rgba(11,11,11,0.04)] print:break-before-page">
             <h2 className="border-b border-[#e1e0d9] bg-[#f9f9f7] px-4 py-2 text-sm font-semibold text-[#0b0b0b]">
               Prise en charge du Paludisme
             </h2>
@@ -2331,7 +2398,7 @@ export function RmaReport({ defaultEchelon }: { defaultEchelon: 'CSRéf' | 'CSCo
             </p>
           </div>
 
-          <div className="overflow-hidden rounded-xl border border-[#e1e0d9] bg-white shadow-[0_1px_2px_rgba(11,11,11,0.04)]">
+          <div className="overflow-hidden rounded-xl border border-[#e1e0d9] bg-white shadow-[0_1px_2px_rgba(11,11,11,0.04)] print:break-before-page">
             <h2 className="border-b border-[#e1e0d9] bg-[#f9f9f7] px-4 py-2 text-sm font-semibold text-[#0b0b0b]">
               Maladies à déclaration obligatoire (MDO)
             </h2>
@@ -2353,6 +2420,7 @@ export function RmaReport({ defaultEchelon }: { defaultEchelon: 'CSRéf' | 'CSCo
             </div>
           </div>
 
+          <RmaSectionDivider n={7} />
           <div className="overflow-hidden rounded-xl border border-[#e1e0d9] bg-white shadow-[0_1px_2px_rgba(11,11,11,0.04)]">
             <h2 className="border-b border-[#e1e0d9] bg-[#f9f9f7] px-4 py-2 text-sm font-semibold text-[#0b0b0b]">
               Activités d&apos;hygiène publique et salubrité
