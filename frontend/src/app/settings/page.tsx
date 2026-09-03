@@ -26,23 +26,51 @@ import { api, ApiError } from '@/lib/api';
 import { friendlyError } from '@/lib/errorMessages';
 import { useAuth, useUser } from '@/contexts/AuthContext';
 import { useToast } from '@/contexts/ToastContext';
-import { useClinicName } from '@/lib/useClinicName';
-import { invalidateCache } from '@/lib/useApi';
+import { useApi, invalidateCache } from '@/lib/useApi';
 import { AppHeader } from '@/components/AppHeader';
 import { Skeleton } from '@/components/Skeleton';
+
+interface ClinicSettingsResponse {
+  name: string;
+  heureOuverture: string | null;
+  heureFermeture: string | null;
+  joursFermeture: string[];
+}
+
+// Same 7 values the server validates joursFermeture against
+// (lib/server/guichet/alertes.ts::WEEKDAY_NAMES_FR) — kept as a plain literal
+// here since that module is server-only and can't be imported client-side.
+const JOURS = [
+  { value: 'lundi', label: 'Lundi' },
+  { value: 'mardi', label: 'Mardi' },
+  { value: 'mercredi', label: 'Mercredi' },
+  { value: 'jeudi', label: 'Jeudi' },
+  { value: 'vendredi', label: 'Vendredi' },
+  { value: 'samedi', label: 'Samedi' },
+  { value: 'dimanche', label: 'Dimanche' },
+] as const;
 
 export default function SettingsPage() {
   const user = useUser();
   const { refresh } = useAuth();
   const { toast } = useToast();
 
-  // Clinic name section — only rendered once we know the user is an admin.
-  const clinicName = useClinicName();
+  // Clinic name + horaires section — only rendered once we know the user is
+  // an admin. Both forms PATCH the same resource, so they share one fetch.
+  const clinicSettingsQuery = useApi<ClinicSettingsResponse>('/api/settings/clinic');
+  const clinicName = clinicSettingsQuery.data?.name ?? 'MediAfrica';
   const [isAdmin, setIsAdmin] = useState(false);
   const [clinicNameInput, setClinicNameInput] = useState('');
   const [clinicNameSynced, setClinicNameSynced] = useState(false);
   const [clinicSubmitting, setClinicSubmitting] = useState(false);
   const [clinicError, setClinicError] = useState<string | null>(null);
+
+  const [heureOuverture, setHeureOuverture] = useState('');
+  const [heureFermeture, setHeureFermeture] = useState('');
+  const [joursFermeture, setJoursFermeture] = useState<string[]>([]);
+  const [horairesSynced, setHorairesSynced] = useState(false);
+  const [horairesSubmitting, setHorairesSubmitting] = useState(false);
+  const [horairesError, setHorairesError] = useState<string | null>(null);
 
   useEffect(() => {
     api('/api/admin/me')
@@ -51,7 +79,7 @@ export default function SettingsPage() {
   }, []);
 
   // Seed the input from the fetched name exactly once (avoid clobbering
-  // what the admin is typing on every background refresh of useClinicName).
+  // what the admin is typing on every background refresh).
   useEffect(() => {
     if (!clinicNameSynced && clinicName) {
       setClinicNameInput(clinicName);
@@ -71,11 +99,59 @@ export default function SettingsPage() {
     try {
       await api('/api/settings/clinic', { method: 'PATCH', body: { name: trimmed } });
       invalidateCache('/api/settings/clinic');
+      await clinicSettingsQuery.refresh();
       toast('Nom du centre mis à jour.', 'success');
     } catch (err) {
       setClinicError(friendlyError(err, 'Erreur réseau. Réessaie.'));
     } finally {
       setClinicSubmitting(false);
+    }
+  }
+
+  // Seed the horaires form from the fetched settings exactly once — same
+  // pattern as the clinic-name sync above.
+  useEffect(() => {
+    if (!horairesSynced && clinicSettingsQuery.data) {
+      setHeureOuverture(clinicSettingsQuery.data.heureOuverture ?? '');
+      setHeureFermeture(clinicSettingsQuery.data.heureFermeture ?? '');
+      setJoursFermeture(clinicSettingsQuery.data.joursFermeture);
+      setHorairesSynced(true);
+    }
+  }, [clinicSettingsQuery.data, horairesSynced]);
+
+  function toggleJourFermeture(jour: string) {
+    setJoursFermeture((prev) =>
+      prev.includes(jour) ? prev.filter((j) => j !== jour) : [...prev, jour],
+    );
+  }
+
+  async function onSubmitHoraires(e: FormEvent) {
+    e.preventDefault();
+    setHorairesError(null);
+    if ((heureOuverture === '') !== (heureFermeture === '')) {
+      setHorairesError(
+        "Renseigne l'heure d'ouverture et de fermeture ensemble, ou laisse les deux vides.",
+      );
+      return;
+    }
+    setHorairesSubmitting(true);
+    try {
+      await api('/api/settings/clinic', {
+        method: 'PATCH',
+        body: {
+          name: clinicSettingsQuery.data?.name ?? clinicName,
+          heureOuverture: heureOuverture || null,
+          heureFermeture: heureFermeture || null,
+          joursFermeture,
+        },
+      });
+      invalidateCache('/api/settings/clinic');
+      await clinicSettingsQuery.refresh();
+      toast('Horaires mis à jour.', 'success');
+    } catch (err) {
+      setHorairesError(friendlyError(err, 'Erreur réseau. Réessaie.'));
+    } finally {
+      setHorairesSubmitting(false);
     }
   }
 
@@ -405,6 +481,66 @@ export default function SettingsPage() {
                 className="rounded-md bg-black px-5 py-2.5 text-sm font-medium text-white hover:bg-gray-800 disabled:opacity-50"
               >
                 {clinicSubmitting ? 'Enregistrement…' : 'Enregistrer le nom'}
+              </button>
+            </form>
+          </section>
+        )}
+
+        {/* ── Horaires d'ouverture section (admin-only) ───────────────── */}
+        {isAdmin && (
+          <section className="flex flex-col gap-3 rounded-lg border border-gray-200 p-5">
+            <h2 className="text-lg font-semibold">Horaires d’ouverture</h2>
+            <p className="text-sm text-gray-600">
+              Sert de référence aux alertes Guichet « activité hors horaires » et « inactivité
+              anormale ». Laisse les heures vides pour désactiver ces deux alertes.
+            </p>
+            <form onSubmit={onSubmitHoraires} className="mt-2 flex flex-col gap-4">
+              <div className="flex gap-4">
+                <label className="flex flex-1 flex-col gap-1 text-sm">
+                  Ouverture
+                  <input
+                    type="time"
+                    value={heureOuverture}
+                    onChange={(e) => setHeureOuverture(e.target.value)}
+                    className="rounded-md border border-gray-300 px-3 py-2"
+                  />
+                </label>
+                <label className="flex flex-1 flex-col gap-1 text-sm">
+                  Fermeture
+                  <input
+                    type="time"
+                    value={heureFermeture}
+                    onChange={(e) => setHeureFermeture(e.target.value)}
+                    className="rounded-md border border-gray-300 px-3 py-2"
+                  />
+                </label>
+              </div>
+              <fieldset className="flex flex-col gap-2 text-sm">
+                <legend className="mb-1">Jours de fermeture hebdomadaire</legend>
+                <div className="flex flex-wrap gap-3">
+                  {JOURS.map((jour) => (
+                    <label key={jour.value} className="flex items-center gap-1.5">
+                      <input
+                        type="checkbox"
+                        checked={joursFermeture.includes(jour.value)}
+                        onChange={() => toggleJourFermeture(jour.value)}
+                      />
+                      {jour.label}
+                    </label>
+                  ))}
+                </div>
+              </fieldset>
+              {horairesError && (
+                <p role="alert" className="text-sm text-red-600">
+                  {horairesError}
+                </p>
+              )}
+              <button
+                type="submit"
+                disabled={horairesSubmitting || !clinicSettingsQuery.data}
+                className="self-start rounded-md bg-black px-5 py-2.5 text-sm font-medium text-white hover:bg-gray-800 disabled:opacity-50"
+              >
+                {horairesSubmitting ? 'Enregistrement…' : 'Enregistrer les horaires'}
               </button>
             </form>
           </section>

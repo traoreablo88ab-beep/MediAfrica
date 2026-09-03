@@ -43,7 +43,9 @@ export const SEUILS = {
 } as const;
 
 const DAY_MS = 24 * 60 * 60 * 1000;
-const WEEKDAY_NAMES_FR = [
+// Exported so /api/settings/clinic can validate joursFermeture against the
+// same canonical list this module reads it back with.
+export const WEEKDAY_NAMES_FR = [
   'dimanche',
   'lundi',
   'mardi',
