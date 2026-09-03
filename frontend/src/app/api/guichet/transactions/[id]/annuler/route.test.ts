@@ -60,6 +60,15 @@ beforeEach(() => {
   __cookieStore.clear();
   mockRequireOrgMember.mockResolvedValue(ctxWith('MEMBER'));
   prismaMock.guichetTransaction.findFirst.mockResolvedValue(txRow() as never);
+  // checkAnnulationsRafale (§ 6.3) runs after every cancellation — below
+  // threshold by default (see the rafale-firing test below for the alert path).
+  prismaMock.guichetTransaction.count.mockResolvedValue(0);
+  prismaMock.$transaction.mockImplementation((cb: unknown) => {
+    if (typeof cb === 'function') {
+      return (cb as (tx: typeof prismaMock) => unknown)(prismaMock) as Promise<unknown>;
+    }
+    return Promise.resolve(cb);
+  });
 });
 
 afterEach(() => {
@@ -169,5 +178,33 @@ describe('POST /api/guichet/transactions/[id]/annuler', () => {
     const body = await res.json();
     expect(body.statut).toBe('annulee');
     expect(body.annulationAt).toBe('2026-01-12T09:00:00.000Z');
+  });
+
+  it('3 annulations en moins de 10 minutes déclenche une alerte (§ 6.3 rafale)', async () => {
+    prismaMock.guichetTransaction.update.mockResolvedValue(
+      txRow({
+        statut: 'annulee',
+        annulationMotif: 'Erreur de saisie',
+        annulationParId: 'user-1',
+        annulationAt: new Date(),
+      }) as never,
+    );
+    prismaMock.guichetTransaction.count.mockResolvedValue(3);
+    prismaMock.organization.findUnique.mockResolvedValue({
+      owner: { id: 'owner-1', email: 'owner@example.com' },
+    } as never);
+    prismaMock.guichetAlerte.create.mockResolvedValue({ id: 'al-1' } as never);
+
+    const res = await callPost({ motif: 'Erreur de saisie' });
+
+    expect(res.status).toBe(200);
+    expect(prismaMock.guichetAlerte.create).toHaveBeenCalledWith(
+      expect.objectContaining({
+        data: expect.objectContaining({
+          typeAlerte: 'annulations_suspectes',
+          severite: 'attention',
+        }),
+      }),
+    );
   });
 });

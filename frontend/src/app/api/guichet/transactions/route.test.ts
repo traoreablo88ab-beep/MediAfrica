@@ -66,6 +66,7 @@ function txRow(overrides: Record<string, unknown> = {}) {
     remiseMotif: null,
     createdAt: new Date('2026-01-12T09:00:00Z'),
     typeRecette: { libelle: 'Consultation' },
+    guichetier: { name: 'Awa Guichetière', email: 'staff@example.com' },
     ...overrides,
   };
 }
@@ -239,6 +240,32 @@ describe('POST /api/guichet/transactions', () => {
     );
     expect(res.status).toBe(201);
     expect(prismaMock.guichetTransaction.create).toHaveBeenCalledTimes(2);
+  });
+
+  it('une transaction émise un jour de fermeture déclaré déclenche une alerte (§ 6.2)', async () => {
+    prismaMock.guichetTransaction.create.mockResolvedValue(txRow() as never);
+    prismaMock.clinicSettings.findUnique.mockResolvedValue({
+      heureOuverture: '08:00',
+      heureFermeture: '17:00',
+      // 2026-01-12 is a Monday.
+      joursFermeture: ['lundi'],
+    } as never);
+    prismaMock.guichetAlerte.count.mockResolvedValue(0);
+    prismaMock.organization.findUnique.mockResolvedValue({
+      owner: { id: 'owner-1', email: 'owner@example.com' },
+    } as never);
+    prismaMock.guichetAlerte.create.mockResolvedValue({ id: 'al-1' } as never);
+
+    const res = await POST(
+      makePost({ patientNom: 'Awa Traoré', typeRecetteId: 'tr-1', modePaiement: 'especes' }),
+    );
+
+    expect(res.status).toBe(201);
+    expect(prismaMock.guichetAlerte.create).toHaveBeenCalledWith(
+      expect.objectContaining({
+        data: expect.objectContaining({ typeAlerte: 'hors_horaires', severite: 'critique' }),
+      }),
+    );
   });
 
   it('an ADMIN applying a valid remise succeeds and montant reflects the discount', async () => {

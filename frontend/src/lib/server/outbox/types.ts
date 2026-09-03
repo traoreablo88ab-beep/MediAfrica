@@ -16,7 +16,8 @@ export type OutboxEvent =
   | EmailPasswordResetEvent
   | EmailSubscriptionRenewalDueEvent
   | EmailSubscriptionReminderEvent
-  | EmailAdminPromotedEvent;
+  | EmailAdminPromotedEvent
+  | GuichetAlerteEvent;
 
 export interface NotificationPaymentReceivedEvent {
   kind: 'notification.payment_received';
@@ -104,6 +105,28 @@ export interface EmailAdminPromotedEvent {
   payload: {
     to: string;
     role: 'ADMIN' | 'SUPERADMIN';
+  };
+}
+
+/**
+ * Emitted by lib/server/guichet/alertes.ts's fireGuichetAlerte() whenever a
+ * GuichetAlerte is created with severite 'attention' or 'critique' (never
+ * 'info' — those stay report/historique-only per
+ * .planning/prd-guichet-entree.md § 6.7). Consumed by the email-queue cron:
+ * always creates the in-app Notification; additionally sends an email for
+ * severite 'critique'.
+ */
+export interface GuichetAlerteEvent {
+  kind: 'guichet.alerte';
+  payload: {
+    alerteId: string;
+    organizationId: string;
+    typeAlerte: string;
+    severite: 'attention' | 'critique';
+    ownerId: string;
+    ownerEmail: string;
+    title: string;
+    body: string;
   };
 }
 

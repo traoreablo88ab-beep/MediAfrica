@@ -6,6 +6,7 @@
     { "path": "/api/cron/order-expiration", "schedule": "0 4 * * *" },
     { "path": "/api/cron/webhook-log-purge", "schedule": "0 0 * * *" },
     { "path": "/api/cron/email-job-purge", "schedule": "0 0 * * *" },
-    { "path": "/api/cron/subscription-billing", "schedule": "0 6 * * *" }
+    { "path": "/api/cron/subscription-billing", "schedule": "0 6 * * *" },
+    { "path": "/api/cron/guichet-alertes", "schedule": "0 7 * * *" }
   ]
 }

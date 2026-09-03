@@ -21,7 +21,7 @@ const PatchBody = z
     actif: z.boolean().optional(),
   })
   .refine((b) => b.libelle !== undefined || b.tarif !== undefined || b.actif !== undefined, {
-    message: 'At least one field must be provided',
+    message: 'Au moins un champ doit être fourni.',
   });
 
 export async function PATCH(
@@ -68,7 +68,7 @@ export async function PATCH(
     });
     if (!existing) {
       return NextResponse.json(
-        { error: 'NOT_FOUND', message: 'Tariff not found' },
+        { error: 'NOT_FOUND', message: 'Tarif introuvable.' },
         { status: 404, headers: { 'x-request-id': ctx.requestId } },
       );
     }

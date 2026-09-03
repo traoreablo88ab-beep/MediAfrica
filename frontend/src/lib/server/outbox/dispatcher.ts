@@ -193,6 +193,28 @@ async function dispatchEvent(deps: OutboxDispatcherDeps, event: OutboxEvent): Pr
       await deps.emailQueue.enqueue({ to, subject: tpl.subject, html: tpl.html });
       return;
     }
+    case 'guichet.alerte': {
+      // Emitted by lib/server/guichet/alertes.ts's fireGuichetAlerte() for
+      // severite 'attention'/'critique' (never 'info'). Always creates the
+      // in-app Notification; additionally emails the org owner for 'critique'.
+      const { ownerId, ownerEmail, severite, title, body, alerteId, typeAlerte, organizationId } =
+        event.payload;
+      await createNotification(deps.prisma, {
+        userId: ownerId,
+        type: `guichet_alerte_${severite}`,
+        title,
+        body,
+        data: { alerteId, typeAlerte, organizationId },
+        dedupeKey: `guichet-alerte:${alerteId}`,
+      });
+      if (severite === 'critique') {
+        if (!deps.emailQueue) throw new Error('email queue not configured');
+        const { guichetAlerteCritiqueEmail } = await import('../guichet/email-templates');
+        const tpl = guichetAlerteCritiqueEmail({ title, body });
+        await deps.emailQueue.enqueue({ to: ownerEmail, subject: tpl.subject, html: tpl.html });
+      }
+      return;
+    }
     default: {
       // Exhaustive check — TS will yell if we add a new variant and forget it.
       const _exhaustive: never = event;

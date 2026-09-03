@@ -22,6 +22,7 @@ import { ORG_ROLE_RANK } from '@/lib/server/middleware/require-org-role';
 import { requireActiveSubscription } from '@/lib/server/subscriptions/access-guard';
 import { prisma } from '@/lib/server/prisma';
 import { generateNumeroSequence } from '@/lib/server/guichet/numero-sequence';
+import { checkHorsHoraires } from '@/lib/server/guichet/alertes';
 import { makeRequestContext, withRequestContext } from '@/lib/server/observability/request-context';
 
 const MODES_PAIEMENT = ['especes', 'mobile_money', 'exoneration'] as const;
@@ -39,7 +40,12 @@ const EmitBody = z
     message: 'remiseAppliquee and remiseMotif must be provided together',
   });
 
-function serialize(t: GuichetTransaction & { typeRecette: { libelle: string } }) {
+type SerializableTransaction = GuichetTransaction & {
+  typeRecette: { libelle: string };
+  guichetier: { name: string | null; email: string };
+};
+
+function serialize(t: SerializableTransaction) {
   return {
     id: t.id,
     numeroSequence: t.numeroSequence,
@@ -50,6 +56,7 @@ function serialize(t: GuichetTransaction & { typeRecette: { libelle: string } })
     montant: t.montant,
     modePaiement: t.modePaiement,
     guichetierId: t.guichetierId,
+    guichetierName: t.guichetier.name ?? t.guichetier.email,
     statut: t.statut,
     createdAt: t.createdAt.toISOString(),
     annulationMotif: t.annulationMotif,
@@ -80,7 +87,7 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
       return NextResponse.json(
         {
           error: 'VALIDATION_FAILED',
-          message: 'Invalid request body',
+          message: 'Requête invalide.',
           issues: parsed.error.issues,
         },
         { status: 400, headers: { 'x-request-id': ctx.requestId } },
@@ -96,7 +103,8 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
       return NextResponse.json(
         {
           error: 'ORG_ROLE_INSUFFICIENT',
-          message: 'Applying an exceptional discount requires the ADMIN role',
+          message:
+            'Seul un responsable de centre (ADMIN) peut appliquer une remise exceptionnelle.',
         },
         { status: 403, headers: { 'x-request-id': ctx.requestId } },
       );
@@ -107,7 +115,7 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
     });
     if (!typeRecette || !typeRecette.actif) {
       return NextResponse.json(
-        { error: 'TYPE_RECETTE_INVALID', message: 'Unknown or inactive tariff' },
+        { error: 'TYPE_RECETTE_INVALID', message: 'Ce type de recette est inconnu ou désactivé.' },
         { status: 400, headers: { 'x-request-id': ctx.requestId } },
       );
     }
@@ -119,7 +127,7 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
       });
       if (!patient) {
         return NextResponse.json(
-          { error: 'PATIENT_NOT_FOUND', message: 'Patient not found' },
+          { error: 'PATIENT_NOT_FOUND', message: 'Patient introuvable.' },
           { status: 404, headers: { 'x-request-id': ctx.requestId } },
         );
       }
@@ -132,7 +140,7 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
     const montant = typeRecette.tarif - (d.remiseAppliquee ?? 0);
     if (montant < 0) {
       return NextResponse.json(
-        { error: 'REMISE_EXCEEDS_TARIF', message: 'Discount cannot exceed the tariff' },
+        { error: 'REMISE_EXCEEDS_TARIF', message: 'La remise ne peut pas dépasser le tarif.' },
         { status: 400, headers: { 'x-request-id': ctx.requestId } },
       );
     }
@@ -152,14 +160,17 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
     // Same read-then-write race as generateDossierNumber — retry the whole
     // transaction on a numeroSequence collision rather than a raw 500.
     const MAX_ATTEMPTS = 5;
-    let transaction: (GuichetTransaction & { typeRecette: { libelle: string } }) | undefined;
+    let transaction: SerializableTransaction | undefined;
     for (let attempt = 1; attempt <= MAX_ATTEMPTS; attempt++) {
       try {
         transaction = await prisma.$transaction(async (tx) => {
           const numeroSequence = await generateNumeroSequence(tx, organizationId);
           return tx.guichetTransaction.create({
             data: { ...createData, numeroSequence },
-            include: { typeRecette: { select: { libelle: true } } },
+            include: {
+              typeRecette: { select: { libelle: true } },
+              guichetier: { select: { name: true, email: true } },
+            },
           });
         });
         break;
@@ -174,6 +185,14 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
         if (!isSequenceCollision || attempt === MAX_ATTEMPTS) throw err;
       }
     }
+
+    // § 6.2 — évalué immédiatement contre les horaires déclarés du centre
+    // (no-op si non déclarés).
+    await checkHorsHoraires(prisma, {
+      organizationId,
+      transactionId: transaction!.id,
+      createdAt: transaction!.createdAt,
+    });
 
     return NextResponse.json(serialize(transaction!), {
       status: 201,
@@ -217,7 +236,10 @@ export async function GET(req: NextRequest): Promise<NextResponse> {
         ...(isStaff ? { guichetierId: auth.user.sub } : {}),
       },
       orderBy: { numeroSequence: 'asc' },
-      include: { typeRecette: { select: { libelle: true } } },
+      include: {
+        typeRecette: { select: { libelle: true } },
+        guichetier: { select: { name: true, email: true } },
+      },
     });
 
     return NextResponse.json(

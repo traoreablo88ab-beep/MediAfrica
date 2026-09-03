@@ -119,6 +119,13 @@ model ClinicSettings {
   organizationId String       @unique
   organization   Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
   name           String       @default("CSRéf Bamako V")
+  // Horaires déclarés du centre — alimentent la règle d'alerte Guichet
+  // "activité hors horaires" (.planning/prd-guichet-entree.md § 6.2) et
+  // "inactivité anormale" (§ 6.4). Null = horaires non déclarés ; ces deux
+  // règles sont alors ignorées (pas de faux positifs sans référence).
+  heureOuverture String? // "08:00"
+  heureFermeture String? // "17:00"
+  joursFermeture String[] @default([]) // ex: ["dimanche"] — fermeture hebdomadaire déclarée
   updatedAt      DateTime     @updatedAt
 }
 
@@ -1654,6 +1661,11 @@ model GuichetAlerte {
 
 // Phase 2 consumes this (clôture de caisse UI); the model ships in Phase 1
 // alongside the other 3 tables per the PRD's phasing.
+// dateService is always normalized to midnight (see the cloture route's
+// dayKey()) so @@unique enforces one closure per guichetier per calendar
+// day — re-closing the same day would otherwise silently recompute
+// recetteTheorique from every transaction of the day again, not just those
+// since the last closure.
 model ClotureCaisse {
   id               String       @id @default(cuid())
   organizationId   String
@@ -1666,5 +1678,6 @@ model ClotureCaisse {
   ecart            Int
   createdAt        DateTime     @default(now())
 
+  @@unique([organizationId, guichetierId, dateService])
   @@index([organizationId, dateService])
 }

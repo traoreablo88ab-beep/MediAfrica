@@ -14,6 +14,7 @@ import { requireOrgMember } from '@/lib/server/middleware';
 import { ORG_ROLE_RANK } from '@/lib/server/middleware/require-org-role';
 import { requireActiveSubscription } from '@/lib/server/subscriptions/access-guard';
 import { prisma } from '@/lib/server/prisma';
+import { checkAnnulationsRafale } from '@/lib/server/guichet/alertes';
 import { makeRequestContext, withRequestContext } from '@/lib/server/observability/request-context';
 
 const AnnulerBody = z.object({
@@ -43,7 +44,7 @@ export async function POST(
       return NextResponse.json(
         {
           error: 'VALIDATION_FAILED',
-          message: 'A cancellation reason (motif) is required',
+          message: "Un motif d'annulation est obligatoire (3 caractères minimum).",
           issues: parsed.error.issues,
         },
         { status: 400, headers: { 'x-request-id': ctx.requestId } },
@@ -56,7 +57,7 @@ export async function POST(
     });
     if (!existing) {
       return NextResponse.json(
-        { error: 'NOT_FOUND', message: 'Transaction not found' },
+        { error: 'NOT_FOUND', message: 'Transaction introuvable.' },
         { status: 404, headers: { 'x-request-id': ctx.requestId } },
       );
     }
@@ -64,14 +65,17 @@ export async function POST(
     const isStaff = ORG_ROLE_RANK[auth.orgMember.role] < ORG_ROLE_RANK.ADMIN;
     if (isStaff && existing.guichetierId !== auth.user.sub) {
       return NextResponse.json(
-        { error: 'ORG_ROLE_INSUFFICIENT', message: 'You can only cancel your own transactions' },
+        {
+          error: 'ORG_ROLE_INSUFFICIENT',
+          message: 'Vous ne pouvez annuler que vos propres transactions.',
+        },
         { status: 403, headers: { 'x-request-id': ctx.requestId } },
       );
     }
 
     if (existing.statut === 'annulee') {
       return NextResponse.json(
-        { error: 'ALREADY_CANCELLED', message: 'This transaction is already cancelled' },
+        { error: 'ALREADY_CANCELLED', message: 'Cette transaction est déjà annulée.' },
         { status: 409, headers: { 'x-request-id': ctx.requestId } },
       );
     }
@@ -84,6 +88,12 @@ export async function POST(
         annulationParId: auth.user.sub,
         annulationAt: new Date(),
       },
+    });
+
+    // § 6.3 (rafale) — évalué immédiatement après chaque annulation.
+    await checkAnnulationsRafale(prisma, {
+      organizationId: auth.orgMember.organizationId,
+      transactionId: cancelled.id,
     });
 
     return NextResponse.json(
