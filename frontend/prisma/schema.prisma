@@ -64,6 +64,9 @@ model User {
   equipmentLinesUpdated            EquipmentLine[]
   visiteReunionLinesUpdated        VisiteReunionLine[]
   reportsFiled                     Report[]
+  guichetTransactionsEmises        GuichetTransaction[] @relation("GuichetTransactionsEmises")
+  guichetTransactionsAnnulees      GuichetTransaction[] @relation("GuichetTransactionsAnnulees")
+  clotureCaissesEmises             ClotureCaisse[]      @relation("ClotureCaisseGuichetier")
 
   // Multi-tenancy: MediAfrica is a multi-tenant SaaS — each User belongs to
   // exactly one Organization (health center) via `memberships`
@@ -155,6 +158,10 @@ model Organization {
   subscription        Subscription?
   orders              Order[]
   reports             Report[]
+  guichetTransactions GuichetTransaction[]
+  typesRecette        TypeRecette[]
+  guichetAlertes      GuichetAlerte[]
+  clotureCaisses      ClotureCaisse[]
 
   @@index([ownerId])
 }
@@ -427,6 +434,7 @@ model Patient {
   vaccinations             Vaccination[]
   hospitalisations         Hospitalisation[]
   planificationsFamiliales PlanificationFamiliale[]
+  guichetTransactions      GuichetTransaction[]
 
   @@index([nom, prenom])
   @@index([communeResidence])
@@ -1556,4 +1564,107 @@ model Report {
 
   @@index([status, createdAt])
   @@index([organizationId])
+}
+
+// ───────────────────────────────────────────────────────────────────────
+// Guichet & transparence financière — front-desk receipt-issuance module
+// (see .planning/prd-guichet-entree.md). Core anti-fraud invariant:
+// `createdAt`/`numeroSequence` are server-derived and never accepted from
+// the client (see lib/server/guichet/numero-sequence.ts); a
+// GuichetTransaction is immutable once emitted (statut = "emise") — only
+// POST .../annuler transitions it to "annulee", never a raw PUT/PATCH.
+// Montants en Int (FCFA, pas de décimales) — même invariant que le reste
+// de MediAfrica.
+// ───────────────────────────────────────────────────────────────────────
+model TypeRecette {
+  id             String       @id @default(cuid())
+  organizationId String
+  organization   Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  libelle        String
+  tarif          Int // FCFA
+  actif          Boolean      @default(true)
+  createdAt      DateTime     @default(now())
+  updatedAt      DateTime     @updatedAt
+
+  transactions GuichetTransaction[]
+
+  @@index([organizationId, actif])
+}
+
+model GuichetTransaction {
+  id             String       @id @default(cuid())
+  organizationId String
+  organization   Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  // Strictly sequential per organization, gap-free except for a
+  // corresponding "annulee" row — see generateNumeroSequence().
+  numeroSequence Int
+
+  patientNom String
+  patientId  String?
+  patient    Patient? @relation(fields: [patientId], references: [id], onDelete: SetNull)
+
+  typeRecetteId String
+  // onDelete: Restrict — a TypeRecette with issued transactions can be
+  // deactivated (actif=false) but never deleted, preserving history.
+  typeRecette   TypeRecette @relation(fields: [typeRecetteId], references: [id], onDelete: Restrict)
+  // Snapshot of the tariff actually applied at emission time (independent
+  // of later changes to typeRecette.tarif).
+  montant       Int // FCFA
+  modePaiement  String // especes | mobile_money | exoneration
+
+  guichetierId String
+  guichetier   User   @relation("GuichetTransactionsEmises", fields: [guichetierId], references: [id], onDelete: Restrict)
+
+  statut String @default("emise") // emise | annulee
+
+  annulationMotif String?
+  annulationParId String?
+  annulationPar   User?     @relation("GuichetTransactionsAnnulees", fields: [annulationParId], references: [id], onDelete: SetNull)
+  annulationAt    DateTime?
+
+  // Écart tracé par rapport au tarif standard — jamais un montant libre non
+  // justifié (voir règle d'alerte "montant hors grille").
+  remiseAppliquee Int?
+  remiseMotif     String?
+
+  createdAt DateTime @default(now())
+
+  @@unique([organizationId, numeroSequence])
+  @@index([organizationId, createdAt])
+  @@index([organizationId, guichetierId, createdAt])
+}
+
+// Phase 4 consumes this (alert-generation cron); the model ships in Phase 1
+// alongside the other 3 tables per the PRD's phasing.
+model GuichetAlerte {
+  id             String       @id @default(cuid())
+  organizationId String
+  organization   Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  typeAlerte     String // ecart_caisse | hors_horaires | annulations_suspectes | inactivite | rupture_sequence | montant_hors_grille
+  severite       String // info | attention | critique
+  details        Json?
+  vue            Boolean  @default(false)
+  resolue        Boolean  @default(false)
+  resolutionNote String?
+  createdAt      DateTime @default(now())
+
+  @@index([organizationId, resolue, createdAt])
+  @@index([organizationId, severite])
+}
+
+// Phase 2 consumes this (clôture de caisse UI); the model ships in Phase 1
+// alongside the other 3 tables per the PRD's phasing.
+model ClotureCaisse {
+  id               String       @id @default(cuid())
+  organizationId   String
+  organization     Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  guichetierId     String
+  guichetier       User         @relation("ClotureCaisseGuichetier", fields: [guichetierId], references: [id], onDelete: Restrict)
+  dateService      DateTime
+  recetteTheorique Int
+  recetteRemise    Int
+  ecart            Int
+  createdAt        DateTime     @default(now())
+
+  @@index([organizationId, dateService])
 }
