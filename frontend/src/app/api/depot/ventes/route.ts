@@ -23,6 +23,7 @@ import { requireActiveSubscription } from '@/lib/server/subscriptions/access-gua
 import { prisma } from '@/lib/server/prisma';
 import { generateNumeroSequence } from '@/lib/server/depot/numero-sequence';
 import { applyStockMovement, StockInsuffisantError } from '@/lib/server/depot/stock';
+import { checkRuptureStock } from '@/lib/server/depot/alertes';
 import { makeRequestContext, withRequestContext } from '@/lib/server/observability/request-context';
 
 const MODES_PAIEMENT = ['especes', 'mobile_money', 'exoneration'] as const;
@@ -209,6 +210,25 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
           );
         if (!isSequenceCollision || attempt === MAX_ATTEMPTS) throw err;
       }
+    }
+
+    // § 6.1 — évalué immédiatement après la vente, sur le stock post-
+    // décrément de chaque produit vendu (jamais à l'intérieur de la
+    // transaction de vente elle-même — même principe que checkHorsHoraires
+    // côté Guichet, qui s'exécute après coup avec le client `prisma`
+    // top-level, pas le `tx` de la vente).
+    const freshProduits = await prisma.medicamentProduit.findMany({
+      where: { id: { in: produitIds } },
+      select: { id: true, nom: true, stockActuel: true, seuilAlerteStock: true },
+    });
+    for (const p of freshProduits) {
+      await checkRuptureStock(prisma, {
+        organizationId,
+        produitId: p.id,
+        produitNom: p.nom,
+        stockApres: p.stockActuel,
+        seuilAlerteStock: p.seuilAlerteStock,
+      });
     }
 
     return NextResponse.json(serialize(vente!), {

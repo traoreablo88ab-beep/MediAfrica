@@ -18,6 +18,7 @@ import { ORG_ROLE_RANK } from '@/lib/server/middleware/require-org-role';
 import { requireActiveSubscription } from '@/lib/server/subscriptions/access-guard';
 import { prisma } from '@/lib/server/prisma';
 import { applyStockMovement, StockInsuffisantError } from '@/lib/server/depot/stock';
+import { checkRuptureStock } from '@/lib/server/depot/alertes';
 import { clampLimit, cursorWhere, buildPage, decodeCursor } from '@/lib/server/pagination/paginate';
 import { makeRequestContext, withRequestContext } from '@/lib/server/observability/request-context';
 
@@ -92,6 +93,19 @@ export async function POST(
         });
         return tx.medicamentProduit.findUniqueOrThrow({ where: { id } });
       });
+
+      // § 6.1 — une sortie manuelle peut aussi provoquer une rupture/un
+      // seuil ; une entrée ne peut jamais en déclencher une (elle augmente
+      // le stock), donc inutile de vérifier dans ce cas.
+      if (parsed.data.type === 'sortie') {
+        await checkRuptureStock(prisma, {
+          organizationId,
+          produitId: produit.id,
+          produitNom: produit.nom,
+          stockApres: produit.stockActuel,
+          seuilAlerteStock: produit.seuilAlerteStock,
+        });
+      }
 
       return NextResponse.json(
         {

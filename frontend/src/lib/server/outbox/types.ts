@@ -17,7 +17,8 @@ export type OutboxEvent =
   | EmailSubscriptionRenewalDueEvent
   | EmailSubscriptionReminderEvent
   | EmailAdminPromotedEvent
-  | GuichetAlerteEvent;
+  | GuichetAlerteEvent
+  | DepotAlerteEvent;
 
 export interface NotificationPaymentReceivedEvent {
   kind: 'notification.payment_received';
@@ -118,6 +119,28 @@ export interface EmailAdminPromotedEvent {
  */
 export interface GuichetAlerteEvent {
   kind: 'guichet.alerte';
+  payload: {
+    alerteId: string;
+    organizationId: string;
+    typeAlerte: string;
+    severite: 'attention' | 'critique';
+    ownerId: string;
+    ownerEmail: string;
+    title: string;
+    body: string;
+  };
+}
+
+/**
+ * Emitted by lib/server/depot/alertes.ts's fireDepotAlerte() whenever a
+ * DepotAlerte is created with severite 'attention' or 'critique' (never
+ * 'info' — those stay report/historique-only per
+ * .planning/prd-depot-medicaments.md § 6.4). Consumed by the email-queue
+ * cron: always creates the in-app Notification; additionally sends an email
+ * for severite 'critique'.
+ */
+export interface DepotAlerteEvent {
+  kind: 'depot.alerte';
   payload: {
     alerteId: string;
     organizationId: string;

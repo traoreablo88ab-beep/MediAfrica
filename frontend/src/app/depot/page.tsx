@@ -249,16 +249,30 @@ export default function DepotPage() {
             <h1 className="text-2xl font-bold text-[#0b0b0b]">Dépôt de vente de médicaments</h1>
             <p className="mt-1 text-sm text-[#52514e]">{clinicName}</p>
           </div>
-          {isAdmin && (
-            <div className="flex flex-wrap gap-3">
+          <div className="flex flex-wrap gap-3">
+            <Link
+              href="/depot/cloture"
+              className="rounded-md border border-[#e1e0d9] bg-white px-4 py-2 text-sm font-medium text-[#0b0b0b] hover:bg-[#f9f9f7]"
+            >
+              Clôturer ma caisse
+            </Link>
+            {isAdmin && (
               <Link
                 href="/depot/produits"
                 className="rounded-md border border-[#e1e0d9] bg-white px-4 py-2 text-sm font-medium text-[#0b0b0b] hover:bg-[#f9f9f7]"
               >
                 Catalogue & fiche de stock
               </Link>
-            </div>
-          )}
+            )}
+            {user?.orgRole === 'OWNER' && (
+              <Link
+                href="/depot/alertes"
+                className="rounded-md border border-[#e1e0d9] bg-white px-4 py-2 text-sm font-medium text-[#0b0b0b] hover:bg-[#f9f9f7]"
+              >
+                Centre de notifications
+              </Link>
+            )}
+          </div>
         </div>
 
         {error && (

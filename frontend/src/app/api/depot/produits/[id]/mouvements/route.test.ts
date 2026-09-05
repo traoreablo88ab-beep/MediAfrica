@@ -161,6 +161,56 @@ describe('POST /api/depot/produits/[id]/mouvements', () => {
     const body = await res.json();
     expect(body.stockActuel).toBe(15);
   });
+
+  it('an entrée never checks rupture_stock, even when the result is still under the seuil', async () => {
+    prismaMock.medicamentProduit.findUniqueOrThrow
+      .mockResolvedValueOnce({ stockActuel: 5 } as never)
+      .mockResolvedValueOnce({
+        id: 'p-1',
+        nom: 'Paracétamol',
+        stockActuel: 15,
+        seuilAlerteStock: 100,
+      } as never);
+    await callPost({ type: 'entree', quantite: 10, motif: 'Réception PPM' });
+    expect(prismaMock.depotAlerte.create).not.toHaveBeenCalled();
+  });
+
+  it('a sortie that drains the product to 0 fires a rupture_stock alert (§ 6.1)', async () => {
+    prismaMock.medicamentProduit.findUniqueOrThrow
+      .mockResolvedValueOnce({ stockActuel: 10 } as never)
+      .mockResolvedValueOnce({
+        id: 'p-1',
+        nom: 'Paracétamol',
+        stockActuel: 0,
+        seuilAlerteStock: 5,
+      } as never);
+    prismaMock.organization.findUnique.mockResolvedValue({
+      owner: { id: 'owner-1', email: 'owner@example.com' },
+    } as never);
+    prismaMock.depotAlerte.create.mockResolvedValue({ id: 'al-1' } as never);
+
+    const res = await callPost({ type: 'sortie', quantite: 10, motif: 'Casse' });
+    expect(res.status).toBe(201);
+    expect(prismaMock.depotAlerte.create).toHaveBeenCalledWith(
+      expect.objectContaining({
+        data: expect.objectContaining({ typeAlerte: 'rupture_stock', severite: 'critique' }),
+      }),
+    );
+  });
+
+  it('a sortie that leaves stock above the seuil fires no alert', async () => {
+    prismaMock.medicamentProduit.findUniqueOrThrow
+      .mockResolvedValueOnce({ stockActuel: 50 } as never)
+      .mockResolvedValueOnce({
+        id: 'p-1',
+        nom: 'Paracétamol',
+        stockActuel: 40,
+        seuilAlerteStock: 5,
+      } as never);
+    const res = await callPost({ type: 'sortie', quantite: 10, motif: 'Casse' });
+    expect(res.status).toBe(201);
+    expect(prismaMock.depotAlerte.create).not.toHaveBeenCalled();
+  });
 });
 
 describe('GET /api/depot/produits/[id]/mouvements', () => {

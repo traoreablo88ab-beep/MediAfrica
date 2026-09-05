@@ -295,6 +295,46 @@ describe('POST /api/depot/ventes', () => {
     expect(res.status).toBe(201);
     expect(prismaMock.depotVente.create).toHaveBeenCalledTimes(2);
   });
+
+  it('a sale that drains a product to 0 fires a rupture_stock alert (§ 6.1)', async () => {
+    // Same mocked findMany answers both the pre-sale validation call and the
+    // post-sale fresh re-read (checkRuptureStock) — include everything both
+    // call sites need; the "0" here simulates the post-sale state that
+    // checkRuptureStock is meant to see.
+    prismaMock.medicamentProduit.findMany.mockResolvedValue([
+      produitRow({ stockActuel: 0, seuilAlerteStock: 10 }),
+    ] as never);
+    prismaMock.organization.findUnique.mockResolvedValue({
+      owner: { id: 'owner-1', email: 'owner@example.com' },
+    } as never);
+    prismaMock.depotAlerte.create.mockResolvedValue({ id: 'al-1' } as never);
+
+    const res = await POST(
+      makePost({
+        patientNom: 'Awa Traoré',
+        modePaiement: 'especes',
+        lignes: [{ produitId: 'prod-1', quantite: 3 }],
+      }),
+    );
+    expect(res.status).toBe(201);
+    expect(prismaMock.depotAlerte.create).toHaveBeenCalledWith(
+      expect.objectContaining({
+        data: expect.objectContaining({ typeAlerte: 'rupture_stock', severite: 'critique' }),
+      }),
+    );
+  });
+
+  it('a sale that leaves stock comfortably above the seuil fires no alert', async () => {
+    const res = await POST(
+      makePost({
+        patientNom: 'Awa Traoré',
+        modePaiement: 'especes',
+        lignes: [{ produitId: 'prod-1', quantite: 3 }],
+      }),
+    );
+    expect(res.status).toBe(201);
+    expect(prismaMock.depotAlerte.create).not.toHaveBeenCalled();
+  });
 });
 
 describe('GET /api/depot/ventes', () => {
