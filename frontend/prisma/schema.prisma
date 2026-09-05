@@ -67,6 +67,10 @@ model User {
   guichetTransactionsEmises        GuichetTransaction[] @relation("GuichetTransactionsEmises")
   guichetTransactionsAnnulees      GuichetTransaction[] @relation("GuichetTransactionsAnnulees")
   clotureCaissesEmises             ClotureCaisse[]      @relation("ClotureCaisseGuichetier")
+  depotVentesEmises                DepotVente[]         @relation("DepotVenteGerant")
+  depotVentesAnnulees              DepotVente[]         @relation("DepotVenteAnnulationPar")
+  depotMouvementsStock             DepotMouvementStock[]
+  depotClotures                    DepotCloture[]       @relation("DepotClotureGerant")
 
   // Multi-tenancy: MediAfrica is a multi-tenant SaaS — each User belongs to
   // exactly one Organization (health center) via `memberships`
@@ -169,6 +173,12 @@ model Organization {
   typesRecette        TypeRecette[]
   guichetAlertes      GuichetAlerte[]
   clotureCaisses      ClotureCaisse[]
+  medicamentProduits    MedicamentProduit[]
+  depotVentes           DepotVente[]
+  depotVenteLignes      DepotVenteLigne[]
+  depotMouvementsStock  DepotMouvementStock[]
+  depotAlertes          DepotAlerte[]
+  depotClotures         DepotCloture[]
 
   @@index([ownerId])
 }
@@ -442,6 +452,7 @@ model Patient {
   hospitalisations         Hospitalisation[]
   planificationsFamiliales PlanificationFamiliale[]
   guichetTransactions      GuichetTransaction[]
+  depotVentes              DepotVente[]
 
   @@index([nom, prenom])
   @@index([communeResidence])
@@ -1679,5 +1690,157 @@ model ClotureCaisse {
   createdAt        DateTime     @default(now())
 
   @@unique([organizationId, guichetierId, dateService])
+  @@index([organizationId, dateService])
+}
+
+// ───────────────────────────────────────────────────────────────────────
+// Dépôt de vente de médicaments — .planning/prd-depot-medicaments.md.
+// Same anti-fraud skeleton as Guichet (server-derived amounts, strict
+// sequential numbering, traced cancellation-only mutation) but structured
+// as a multi-product cart with a live stock count, instead of one fixed
+// tariff per transaction. Distinct from the Stock register (RMA § 6, a
+// monthly regulatory aggregate) — this tracks the actual per-sale stock.
+
+model MedicamentProduit {
+  id             String       @id @default(cuid())
+  organizationId String
+  organization   Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  nom            String
+  prixUnitaire   Int // FCFA — snapshotted onto each DepotVenteLigne at sale time
+  stockActuel    Int          @default(0)
+  // "Attention" threshold — nullable; undeclared = no early-warning alert
+  // for this product, same "not declared = no-op" principle as
+  // ClinicSettings.heureOuverture. A total rupture (stockActuel = 0) is
+  // always Critique regardless of this field.
+  seuilAlerteStock Int?
+  actif            Boolean  @default(true)
+  createdAt        DateTime @default(now())
+  updatedAt        DateTime @updatedAt
+
+  venteLignes DepotVenteLigne[]
+  mouvements  DepotMouvementStock[]
+
+  @@index([organizationId, actif])
+}
+
+model DepotVente {
+  id             String       @id @default(cuid())
+  organizationId String
+  organization   Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  // Strictly sequential per organization, same mechanic as
+  // GuichetTransaction.numeroSequence.
+  numeroSequence Int
+
+  patientNom String
+  patientId  String?
+  patient    Patient? @relation(fields: [patientId], references: [id], onDelete: SetNull)
+
+  // Server-derived = Σ DepotVenteLigne.sousTotal — never accepted from the client.
+  montantTotal Int
+  modePaiement String // especes | mobile_money | exoneration
+
+  gerantId String
+  gerant   User   @relation("DepotVenteGerant", fields: [gerantId], references: [id], onDelete: Restrict)
+
+  statut String @default("emise") // emise | annulee
+
+  annulationMotif String?
+  annulationParId String?
+  annulationPar   User?     @relation("DepotVenteAnnulationPar", fields: [annulationParId], references: [id], onDelete: SetNull)
+  annulationAt    DateTime?
+
+  createdAt DateTime @default(now())
+
+  lignes     DepotVenteLigne[]
+  mouvements DepotMouvementStock[]
+
+  @@unique([organizationId, numeroSequence])
+  @@index([organizationId, createdAt])
+  @@index([organizationId, gerantId, createdAt])
+}
+
+model DepotVenteLigne {
+  id             String       @id @default(cuid())
+  organizationId String
+  organization   Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  depotVenteId   String
+  depotVente     DepotVente   @relation(fields: [depotVenteId], references: [id], onDelete: Cascade)
+  produitId      String
+  // onDelete: Restrict — a product with sale history can be deactivated
+  // (actif=false) but never deleted, preserving history (same as TypeRecette).
+  produit        MedicamentProduit @relation(fields: [produitId], references: [id], onDelete: Restrict)
+
+  quantite             Int
+  // Snapshot of MedicamentProduit.prixUnitaire at sale time — independent
+  // of later catalogue price changes.
+  prixUnitaireApplique Int
+  sousTotal            Int // quantite × prixUnitaireApplique, server-derived
+
+  @@index([organizationId, produitId])
+  @@index([depotVenteId])
+}
+
+// Single audit ledger for every MedicamentProduit.stockActuel change — sales,
+// cancellations, manual receipts/outflows alike. Nothing writes stockActuel
+// directly; every mutation goes through applyStockMovement(), which writes
+// both the new stockActuel AND this row in the same transaction.
+model DepotMouvementStock {
+  id             String       @id @default(cuid())
+  organizationId String
+  organization   Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  produitId      String
+  produit        MedicamentProduit @relation(fields: [produitId], references: [id], onDelete: Restrict)
+
+  type     String // vente | annulation_vente | entree | sortie
+  quantite Int // always positive — `type` determines the sign of the effect
+  // Required for entree/sortie (manual movements); not applicable for
+  // vente/annulation_vente, where venteId is the reference instead.
+  motif    String?
+  venteId  String?
+  vente    DepotVente? @relation(fields: [venteId], references: [id], onDelete: SetNull)
+
+  stockAvant Int
+  stockApres Int
+
+  auteurId String
+  auteur   User   @relation(fields: [auteurId], references: [id], onDelete: Restrict)
+
+  createdAt DateTime @default(now())
+
+  @@index([organizationId, produitId, createdAt])
+}
+
+model DepotAlerte {
+  id             String       @id @default(cuid())
+  organizationId String
+  organization   Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  typeAlerte     String // rupture_stock | ecart_caisse
+  severite       String // info | attention | critique
+  details        Json?
+  vue            Boolean  @default(false)
+  resolue        Boolean  @default(false)
+  resolutionNote String?
+  createdAt      DateTime @default(now())
+
+  @@index([organizationId, resolue, createdAt])
+  @@index([organizationId, severite])
+}
+
+// dateService always normalized to midnight, same @@unique-enforces-one-
+// closure-per-day convention as ClotureCaisse — a separate till from
+// Guichet's, tenu par le gérant de dépôt.
+model DepotCloture {
+  id               String       @id @default(cuid())
+  organizationId   String
+  organization     Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  gerantId         String
+  gerant           User         @relation("DepotClotureGerant", fields: [gerantId], references: [id], onDelete: Restrict)
+  dateService      DateTime
+  recetteTheorique Int
+  recetteRemise    Int
+  ecart            Int
+  createdAt        DateTime     @default(now())
+
+  @@unique([organizationId, gerantId, dateService])
   @@index([organizationId, dateService])
 }

@@ -36,6 +36,7 @@ export type AppNavTab =
   | 'patients'
   | 'consultations'
   | 'guichet'
+  | 'depot'
   | 'registres'
   | 'rapports'
   | 'commentaires';
@@ -45,6 +46,7 @@ const TABS: Array<{ key: AppNavTab; label: string; href: string }> = [
   { key: 'patients', label: 'Patients', href: '/patients' },
   { key: 'consultations', label: 'Consultations', href: '/consultations' },
   { key: 'guichet', label: 'Guichet', href: '/guichet' },
+  { key: 'depot', label: 'Dépôt', href: '/depot' },
   { key: 'registres', label: 'Registres', href: '/registres' },
   { key: 'rapports', label: 'Rapports', href: '/rapports' },
   { key: 'commentaires', label: 'Commentaires', href: '/commentaires' },
@@ -135,6 +137,21 @@ function GuichetIcon({ className }: IconProps) {
       />
       <circle cx="12" cy="13" r="1.6" stroke="currentColor" strokeWidth="1.8" />
       <path d="M12 14.6V16" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" />
+    </svg>
+  );
+}
+
+function DepotIcon({ className }: IconProps) {
+  return (
+    <svg viewBox="0 0 24 24" fill="none" className={className} aria-hidden="true">
+      <rect x="4" y="8.5" width="16" height="11" rx="1.5" stroke="currentColor" strokeWidth="1.8" />
+      <path
+        d="M4 8.5l2.5-4h11l2.5 4"
+        stroke="currentColor"
+        strokeWidth="1.8"
+        strokeLinejoin="round"
+      />
+      <path d="M12 12v4M10 14h4" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" />
     </svg>
   );
 }
@@ -270,6 +287,7 @@ const TAB_ICONS: Record<AppNavTab, ComponentType<IconProps>> = {
   patients: PatientsIcon,
   consultations: ConsultationsIcon,
   guichet: GuichetIcon,
+  depot: DepotIcon,
   registres: RegistresIcon,
   rapports: RapportsIcon,
   commentaires: CommentairesIcon,
