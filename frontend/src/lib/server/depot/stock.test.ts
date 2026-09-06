@@ -48,6 +48,7 @@ describe('applyStockMovement', () => {
         quantite: 3,
         motif: null,
         venteId: 'vente-1',
+        lotId: null,
         stockAvant: 10,
         stockApres: 7,
         auteurId: 'user-1',
@@ -141,5 +142,32 @@ describe('applyStockMovement', () => {
     await expect(
       applyStockMovement(prismaMock, { ...BASE, type: 'vente', quantite: 1, venteId: 'vente-1' }),
     ).resolves.toBeUndefined();
+  });
+
+  it('writes the given lotId on the ledger row', async () => {
+    mockStockActuel(10);
+    await applyStockMovement(prismaMock, {
+      ...BASE,
+      type: 'entree',
+      quantite: 5,
+      motif: 'Réception PPM',
+      lotId: 'lot-1',
+    });
+    expect(prismaMock.depotMouvementStock.create).toHaveBeenCalledWith(
+      expect.objectContaining({ data: expect.objectContaining({ lotId: 'lot-1' }) }),
+    );
+  });
+
+  it('defaults lotId to null when not given (backward-compat)', async () => {
+    mockStockActuel(10);
+    await applyStockMovement(prismaMock, {
+      ...BASE,
+      type: 'entree',
+      quantite: 5,
+      motif: 'Réception PPM',
+    });
+    expect(prismaMock.depotMouvementStock.create).toHaveBeenCalledWith(
+      expect.objectContaining({ data: expect.objectContaining({ lotId: null }) }),
+    );
   });
 });

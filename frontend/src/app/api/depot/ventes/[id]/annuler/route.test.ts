@@ -65,6 +65,16 @@ beforeEach(() => {
   mockRequireOrgMember.mockResolvedValue(ctxWith('MEMBER'));
   prismaMock.depotVente.findFirst.mockResolvedValue(venteRow() as never);
   prismaMock.medicamentProduit.findUniqueOrThrow.mockResolvedValue({ stockActuel: 10 } as never);
+  // reverseVenteConsumption replays the ledger rows the sale actually wrote
+  // — default to venteRow()'s own lignes (prod-1: 3, prod-2: 1), no lot.
+  prismaMock.depotMouvementStock.findMany.mockImplementation((args: unknown) => {
+    const produitId = (args as { where?: { produitId?: string } })?.where?.produitId;
+    const quantiteByProduit: Record<string, number> = { 'prod-1': 3, 'prod-2': 1 };
+    const quantite = produitId ? quantiteByProduit[produitId] : undefined;
+    return Promise.resolve(
+      quantite !== undefined ? [{ id: `m-${produitId}`, quantite, lotId: null }] : [],
+    ) as never;
+  });
   prismaMock.$transaction.mockImplementation((cb: unknown) => {
     if (typeof cb === 'function') {
       return (cb as (tx: typeof prismaMock) => unknown)(prismaMock) as Promise<unknown>;
@@ -194,5 +204,44 @@ describe('POST /api/depot/ventes/[id]/annuler', () => {
     const body = await res.json();
     expect(body.statut).toBe('annulee');
     expect(body.annulationAt).toBe('2026-01-12T09:00:00.000Z');
+  });
+
+  it('restores every lot a FEFO-split line touched', async () => {
+    prismaMock.depotVente.findFirst.mockResolvedValue(
+      venteRow({ lignes: [{ id: 'l-1', produitId: 'prod-1', quantite: 5 }] }) as never,
+    );
+    prismaMock.depotMouvementStock.findMany.mockResolvedValueOnce([
+      { id: 'm1', quantite: 3, lotId: 'lot-a' },
+      { id: 'm2', quantite: 2, lotId: 'lot-b' },
+    ] as never);
+    prismaMock.depotVente.update.mockResolvedValue(venteRow({ statut: 'annulee' }) as never);
+
+    const res = await callPost({ motif: 'Erreur de saisie' });
+    expect(res.status).toBe(200);
+    expect(prismaMock.medicamentLot.update).toHaveBeenNthCalledWith(1, {
+      where: { id: 'lot-a' },
+      data: { quantiteRestante: { increment: 3 } },
+    });
+    expect(prismaMock.medicamentLot.update).toHaveBeenNthCalledWith(2, {
+      where: { id: 'lot-b' },
+      data: { quantiteRestante: { increment: 2 } },
+    });
+  });
+
+  it('a legacy sale (lotId=null on its ledger rows) still restores the aggregate', async () => {
+    prismaMock.depotVente.findFirst.mockResolvedValue(
+      venteRow({ lignes: [{ id: 'l-1', produitId: 'prod-1', quantite: 3 }] }) as never,
+    );
+    prismaMock.depotMouvementStock.findMany.mockResolvedValueOnce([
+      { id: 'm1', quantite: 3, lotId: null },
+    ] as never);
+    prismaMock.depotVente.update.mockResolvedValue(venteRow({ statut: 'annulee' }) as never);
+
+    const res = await callPost({ motif: 'Erreur de saisie' });
+    expect(res.status).toBe(200);
+    expect(prismaMock.medicamentLot.update).not.toHaveBeenCalled();
+    expect(prismaMock.depotMouvementStock.create).toHaveBeenCalledWith({
+      data: expect.objectContaining({ type: 'annulation_vente', quantite: 3, lotId: null }),
+    });
   });
 });

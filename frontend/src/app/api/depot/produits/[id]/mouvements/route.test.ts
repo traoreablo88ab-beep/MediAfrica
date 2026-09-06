@@ -55,6 +55,8 @@ function mouvementRow(overrides: Record<string, unknown> = {}) {
     quantite: 10,
     motif: 'Réception livraison PPM',
     venteId: null,
+    lotId: null,
+    lot: null,
     stockAvant: 0,
     stockApres: 10,
     auteur: { name: 'Awa Gérante', email: 'gerante@example.com' },
@@ -121,26 +123,52 @@ describe('POST /api/depot/produits/[id]/mouvements', () => {
 
   it('not found in this org → 404', async () => {
     prismaMock.medicamentProduit.findFirst.mockResolvedValue(null);
-    const res = await callPost({ type: 'entree', quantite: 10, motif: 'Livraison' }, 'p-missing');
+    const res = await callPost({ type: 'sortie', quantite: 10, motif: 'Livraison' }, 'p-missing');
     expect(res.status).toBe(404);
   });
 
+  it('entrée missing numeroLot/datePeremption → 400 VALIDATION_FAILED', async () => {
+    const res = await callPost({ type: 'entree', quantite: 10, motif: 'Réception PPM' });
+    expect(res.status).toBe(400);
+    const body = await res.json();
+    expect(body.error).toBe('VALIDATION_FAILED');
+    expect(prismaMock.medicamentLot.create).not.toHaveBeenCalled();
+  });
+
   it('stock insuffisant on a sortie → 400 STOCK_INSUFFISANT', async () => {
-    // applyStockMovement reads stockActuel via findUniqueOrThrow, then
-    // throws StockInsuffisantError once the sortie would go negative.
-    prismaMock.medicamentProduit.findUniqueOrThrow.mockResolvedValue({ stockActuel: 2 } as never);
+    // consumeFefo reads lots via medicamentLot.findMany and throws
+    // StockInsuffisantError once the sum of quantiteRestante is too low.
+    prismaMock.medicamentLot.findMany.mockResolvedValue([
+      { id: 'lot-1', numeroLot: 'L1', datePeremption: null, quantiteRestante: 2 },
+    ] as never);
     const res = await callPost({ type: 'sortie', quantite: 10, motif: 'Inventaire' });
     expect(res.status).toBe(400);
     const body = await res.json();
     expect(body.error).toBe('STOCK_INSUFFISANT');
   });
 
-  it('happy path: entrée increments stock via applyStockMovement, 201', async () => {
+  it('happy path: entrée creates a lot and increments stock, 201', async () => {
+    prismaMock.medicamentLot.create.mockResolvedValue({ id: 'lot-created' } as never);
     prismaMock.medicamentProduit.findUniqueOrThrow
       .mockResolvedValueOnce({ stockActuel: 5 } as never)
       .mockResolvedValueOnce({ id: 'p-1', nom: 'Paracétamol', stockActuel: 15 } as never);
-    const res = await callPost({ type: 'entree', quantite: 10, motif: 'Réception PPM' });
+    const res = await callPost({
+      type: 'entree',
+      quantite: 10,
+      motif: 'Réception PPM',
+      numeroLot: 'LOT-045',
+      datePeremption: '2027-01-01',
+    });
     expect(res.status).toBe(201);
+    expect(prismaMock.medicamentLot.create).toHaveBeenCalledWith({
+      data: expect.objectContaining({
+        organizationId: 'org-1',
+        produitId: 'p-1',
+        numeroLot: 'LOT-045',
+        quantiteInitiale: 10,
+        quantiteRestante: 10,
+      }),
+    });
     expect(prismaMock.medicamentProduit.update).toHaveBeenCalledWith({
       where: { id: 'p-1' },
       data: { stockActuel: 15 },
@@ -153,6 +181,7 @@ describe('POST /api/depot/produits/[id]/mouvements', () => {
         quantite: 10,
         motif: 'Réception PPM',
         venteId: null,
+        lotId: 'lot-created',
         stockAvant: 5,
         stockApres: 15,
         auteurId: 'user-1',
@@ -160,9 +189,11 @@ describe('POST /api/depot/produits/[id]/mouvements', () => {
     });
     const body = await res.json();
     expect(body.stockActuel).toBe(15);
+    expect(body.lotId).toBe('lot-created');
   });
 
   it('an entrée never checks rupture_stock, even when the result is still under the seuil', async () => {
+    prismaMock.medicamentLot.create.mockResolvedValue({ id: 'lot-created' } as never);
     prismaMock.medicamentProduit.findUniqueOrThrow
       .mockResolvedValueOnce({ stockActuel: 5 } as never)
       .mockResolvedValueOnce({
@@ -171,11 +202,20 @@ describe('POST /api/depot/produits/[id]/mouvements', () => {
         stockActuel: 15,
         seuilAlerteStock: 100,
       } as never);
-    await callPost({ type: 'entree', quantite: 10, motif: 'Réception PPM' });
+    await callPost({
+      type: 'entree',
+      quantite: 10,
+      motif: 'Réception PPM',
+      numeroLot: 'LOT-045',
+      datePeremption: '2027-01-01',
+    });
     expect(prismaMock.depotAlerte.create).not.toHaveBeenCalled();
   });
 
   it('a sortie that drains the product to 0 fires a rupture_stock alert (§ 6.1)', async () => {
+    prismaMock.medicamentLot.findMany.mockResolvedValue([
+      { id: 'lot-1', numeroLot: 'L1', datePeremption: null, quantiteRestante: 10 },
+    ] as never);
     prismaMock.medicamentProduit.findUniqueOrThrow
       .mockResolvedValueOnce({ stockActuel: 10 } as never)
       .mockResolvedValueOnce({
@@ -199,6 +239,9 @@ describe('POST /api/depot/produits/[id]/mouvements', () => {
   });
 
   it('a sortie that leaves stock above the seuil fires no alert', async () => {
+    prismaMock.medicamentLot.findMany.mockResolvedValue([
+      { id: 'lot-1', numeroLot: 'L1', datePeremption: null, quantiteRestante: 50 },
+    ] as never);
     prismaMock.medicamentProduit.findUniqueOrThrow
       .mockResolvedValueOnce({ stockActuel: 50 } as never)
       .mockResolvedValueOnce({
@@ -255,12 +298,29 @@ describe('GET /api/depot/produits/[id]/mouvements', () => {
       quantite: 10,
       motif: 'Réception livraison PPM',
       venteId: null,
+      lotId: null,
+      numeroLot: null,
+      datePeremption: null,
       stockAvant: 0,
       stockApres: 10,
       auteurName: 'Awa Gérante',
       createdAt: '2026-01-12T09:00:00.000Z',
     });
     expect(body.items[1].auteurName).toBe('sans-nom@example.com');
+  });
+
+  it('serializes the lot a movement touched, when present', async () => {
+    prismaMock.depotMouvementStock.findMany.mockResolvedValue([
+      mouvementRow({
+        lotId: 'lot-1',
+        lot: { numeroLot: 'LOT-045', datePeremption: new Date('2027-01-01T00:00:00Z') },
+      }),
+    ] as never);
+    const res = await callGet();
+    const body = await res.json();
+    expect(body.items[0].lotId).toBe('lot-1');
+    expect(body.items[0].numeroLot).toBe('LOT-045');
+    expect(body.items[0].datePeremption).toBe('2027-01-01');
   });
 
   it('pagination: 21 rows + ?limit=20 → items.length=20, nextCursor set', async () => {

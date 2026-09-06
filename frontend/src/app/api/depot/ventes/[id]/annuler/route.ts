@@ -1,10 +1,12 @@
 // POST /api/depot/ventes/[id]/annuler — the ONLY state transition exposed
 // on a DepotVente once emitted (immutable otherwise, same principle as
 // GuichetTransaction — see .planning/prd-depot-medicaments.md § 2, 4.2).
-// Motif is mandatory. Restores each line's quantite to the corresponding
-// product's stock via applyStockMovement (type annulation_vente), in the
-// same transaction as the status change. A MEMBER (gérant) may only cancel
-// their own sale; ADMIN/OWNER may cancel any sale in their org.
+// Motif is mandatory. Restores each line's stock via
+// reverseVenteConsumption(), which replays the ledger rows the original sale
+// actually wrote (not the line's quantite) — this correctly restores a line
+// that FEFO split across multiple lots — in the same transaction as the
+// status change. A MEMBER (gérant) may only cancel their own sale; ADMIN/
+// OWNER may cancel any sale in their org.
 export const runtime = 'nodejs';
 
 import 'server-only';
@@ -15,7 +17,7 @@ import { requireOrgMember } from '@/lib/server/middleware';
 import { ORG_ROLE_RANK } from '@/lib/server/middleware/require-org-role';
 import { requireActiveSubscription } from '@/lib/server/subscriptions/access-guard';
 import { prisma } from '@/lib/server/prisma';
-import { applyStockMovement } from '@/lib/server/depot/stock';
+import { reverseVenteConsumption } from '@/lib/server/depot/fefo';
 import { makeRequestContext, withRequestContext } from '@/lib/server/observability/request-context';
 
 const AnnulerBody = z.object({
@@ -85,13 +87,11 @@ export async function POST(
 
     const cancelled = await prisma.$transaction(async (tx) => {
       for (const ligne of existing.lignes) {
-        await applyStockMovement(tx, {
+        await reverseVenteConsumption(tx, {
           organizationId,
-          produitId: ligne.produitId,
-          type: 'annulation_vente',
-          quantite: ligne.quantite,
-          auteurId: auth.user.sub,
           venteId: id,
+          produitId: ligne.produitId,
+          auteurId: auth.user.sub,
         });
       }
       return tx.depotVente.update({

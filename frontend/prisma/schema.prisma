@@ -174,6 +174,7 @@ model Organization {
   guichetAlertes      GuichetAlerte[]
   clotureCaisses      ClotureCaisse[]
   medicamentProduits    MedicamentProduit[]
+  medicamentLots        MedicamentLot[]
   depotVentes           DepotVente[]
   depotVenteLignes      DepotVenteLigne[]
   depotMouvementsStock  DepotMouvementStock[]
@@ -1719,8 +1720,44 @@ model MedicamentProduit {
 
   venteLignes DepotVenteLigne[]
   mouvements  DepotMouvementStock[]
+  lots        MedicamentLot[]
 
   @@index([organizationId, actif])
+}
+
+// Un lot par événement de réception (pas un lot par numéro fabricant dans le
+// temps : deux entrées séparées pour le même numéro de lot créent deux
+// MedicamentLot — receiveLot() reste un simple insert, sans ambiguïté de
+// "lot correspondant"). La consommation FEFO ne se soucie que de
+// datePeremption/ordre de création, jamais de numeroLot.
+model MedicamentLot {
+  id             String       @id @default(cuid())
+  organizationId String
+  organization   Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  produitId      String
+  produit        MedicamentProduit @relation(fields: [produitId], references: [id], onDelete: Restrict)
+
+  numeroLot String
+  // Null = lot de migration/legacy non daté ("Stock initial") — trié en
+  // DERNIER dans l'ordre FEFO (orderBy datePeremption asc, nulls last).
+  datePeremption DateTime?
+
+  quantiteInitiale Int // tel que reçu, immuable après création
+  quantiteRestante Int // décrémenté par consumeFefo, jamais < 0
+
+  // Un flag par palier d'alerte — même motif que
+  // Subscription.reminder7dSentAt/... — pour que le cron quotidien de
+  // péremption ne re-déclenche jamais la même alerte tant qu'elle reste vraie.
+  alerteProchePeremptionEnvoyeeAt DateTime?
+  alerteExpireEnvoyeeAt           DateTime?
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  mouvements DepotMouvementStock[]
+
+  @@index([organizationId, produitId, datePeremption])
+  @@index([organizationId, produitId, numeroLot])
 }
 
 model DepotVente {
@@ -1798,6 +1835,12 @@ model DepotMouvementStock {
   motif    String?
   venteId  String?
   vente    DepotVente? @relation(fields: [venteId], references: [id], onDelete: SetNull)
+  // Quel lot cette ligne de ledger a touché — nullable pour les mouvements
+  // antérieurs au FEFO et pour tout mouvement qui ne concerne pas un lot
+  // précis. Une vente/sortie qui traverse plusieurs lots écrit une ligne par
+  // lot touché (même venteId, lotId distinct).
+  lotId String?
+  lot   MedicamentLot? @relation(fields: [lotId], references: [id], onDelete: SetNull)
 
   stockAvant Int
   stockApres Int

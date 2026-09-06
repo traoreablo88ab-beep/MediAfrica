@@ -10,7 +10,7 @@ import { useToast } from '@/contexts/ToastContext';
 import { useAuth } from '@/contexts/AuthContext';
 
 type Severite = 'info' | 'attention' | 'critique';
-type TypeAlerte = 'rupture_stock' | 'ecart_caisse';
+type TypeAlerte = 'rupture_stock' | 'ecart_caisse' | 'peremption_lot';
 
 interface Alerte {
   id: string;
@@ -26,6 +26,7 @@ interface Alerte {
 const TYPE_LABELS: Record<TypeAlerte, string> = {
   rupture_stock: 'Rupture de stock',
   ecart_caisse: 'Écart de caisse',
+  peremption_lot: 'Péremption de lot',
 };
 
 const SEVERITE_STYLES: Record<Severite, { label: string; className: string }> = {
@@ -218,7 +219,8 @@ export default function DepotAlertesPage() {
         <div className="mb-6">
           <h1 className="text-2xl font-bold text-[#0b0b0b]">Centre de notifications</h1>
           <p className="mt-1 text-sm text-[#52514e]">
-            Alertes automatiques du Dépôt — ruptures de stock, écarts de caisse.
+            Alertes automatiques du Dépôt — ruptures de stock, écarts de caisse, lots proches de la
+            péremption ou expirés.
           </p>
         </div>
 

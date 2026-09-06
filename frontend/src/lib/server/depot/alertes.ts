@@ -11,7 +11,9 @@ import 'server-only';
 import type { Prisma, PrismaClient } from '@prisma/client';
 import { enqueueOutbox } from '../outbox';
 
-export type DepotAlerteType = 'rupture_stock' | 'ecart_caisse';
+// 'peremption_lot' is fired by the daily depot/peremption.ts cron sweep, not
+// by this file's two synchronous checks — see peremption.ts's header.
+export type DepotAlerteType = 'rupture_stock' | 'ecart_caisse' | 'peremption_lot';
 export type DepotAlerteSeverite = 'info' | 'attention' | 'critique';
 
 // Same écart thresholds as Guichet's alertes.ts (PRD § 6.2 explicitly reuses

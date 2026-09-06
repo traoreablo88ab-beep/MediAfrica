@@ -1,12 +1,15 @@
 // POST /api/depot/produits/[id]/mouvements — record a manual stock movement
 // (entrée/sortie) for a product — the "fiche de stock" from
-// .planning/prd-depot-medicaments.md § 5.2. Requires ADMIN+. Goes through
-// applyStockMovement(), the single point of entry for any stockActuel
-// change — never a raw update of the field.
+// .planning/prd-depot-medicaments.md § 5.2. Requires ADMIN+. An entrée
+// always creates a new MedicamentLot (numeroLot/datePeremption required —
+// FEFO addendum) via receiveLot(); a sortie draws FEFO via consumeFefo(),
+// same as a sale. Both ultimately go through applyStockMovement(), the
+// single point of entry for any stockActuel change — never a raw update of
+// the field.
 //
 // GET /api/depot/produits/[id]/mouvements — chronological movement history
-// for a product (entrées/sorties/ventes/annulations alike), cursor-paginated.
-// Readable by any org member.
+// for a product (entrées/sorties/ventes/annulations alike), cursor-paginated,
+// including which lot each movement touched. Readable by any org member.
 export const runtime = 'nodejs';
 
 import 'server-only';
@@ -17,16 +20,26 @@ import { requireOrgMember } from '@/lib/server/middleware';
 import { ORG_ROLE_RANK } from '@/lib/server/middleware/require-org-role';
 import { requireActiveSubscription } from '@/lib/server/subscriptions/access-guard';
 import { prisma } from '@/lib/server/prisma';
-import { applyStockMovement, StockInsuffisantError } from '@/lib/server/depot/stock';
+import { StockInsuffisantError } from '@/lib/server/depot/stock';
+import { receiveLot, consumeFefo } from '@/lib/server/depot/fefo';
 import { checkRuptureStock } from '@/lib/server/depot/alertes';
 import { clampLimit, cursorWhere, buildPage, decodeCursor } from '@/lib/server/pagination/paginate';
 import { makeRequestContext, withRequestContext } from '@/lib/server/observability/request-context';
 
-const MovementBody = z.object({
-  type: z.enum(['entree', 'sortie']),
-  quantite: z.number().int().positive(),
-  motif: z.string().trim().min(3).max(500),
-});
+const MovementBody = z.discriminatedUnion('type', [
+  z.object({
+    type: z.literal('entree'),
+    quantite: z.number().int().positive(),
+    motif: z.string().trim().min(3).max(500),
+    numeroLot: z.string().trim().min(1).max(100),
+    datePeremption: z.coerce.date(),
+  }),
+  z.object({
+    type: z.literal('sortie'),
+    quantite: z.number().int().positive(),
+    motif: z.string().trim().min(3).max(500),
+  }),
+]);
 
 export async function POST(
   req: NextRequest,
@@ -61,7 +74,8 @@ export async function POST(
       return NextResponse.json(
         {
           error: 'VALIDATION_FAILED',
-          message: 'Le type, la quantité et un motif (3 caractères minimum) sont requis.',
+          message:
+            'Le type, la quantité et un motif (3 caractères minimum) sont requis ; une entrée exige aussi un numéro de lot et une date de péremption.',
           issues: parsed.error.issues,
         },
         { status: 400, headers: { 'x-request-id': ctx.requestId } },
@@ -82,16 +96,33 @@ export async function POST(
     }
 
     try {
-      const produit = await prisma.$transaction(async (tx) => {
-        await applyStockMovement(tx, {
-          organizationId,
-          produitId: id,
-          type: parsed.data.type,
-          quantite: parsed.data.quantite,
-          motif: parsed.data.motif,
-          auteurId: auth.user.sub,
-        });
-        return tx.medicamentProduit.findUniqueOrThrow({ where: { id } });
+      const { produit, lotId } = await prisma.$transaction(async (tx) => {
+        let createdLotId: string | null = null;
+        if (parsed.data.type === 'entree') {
+          const { lotId: newLotId } = await receiveLot(tx, {
+            organizationId,
+            produitId: id,
+            numeroLot: parsed.data.numeroLot,
+            datePeremption: parsed.data.datePeremption,
+            quantite: parsed.data.quantite,
+            auteurId: auth.user.sub,
+            motif: parsed.data.motif,
+          });
+          createdLotId = newLotId;
+        } else {
+          await consumeFefo(tx, {
+            organizationId,
+            produitId: id,
+            type: 'sortie',
+            quantite: parsed.data.quantite,
+            auteurId: auth.user.sub,
+            motif: parsed.data.motif,
+          });
+        }
+        return {
+          produit: await tx.medicamentProduit.findUniqueOrThrow({ where: { id } }),
+          lotId: createdLotId,
+        };
       });
 
       // § 6.1 — une sortie manuelle peut aussi provoquer une rupture/un
@@ -112,6 +143,7 @@ export async function POST(
           id: produit.id,
           nom: produit.nom,
           stockActuel: produit.stockActuel,
+          lotId,
         },
         { status: 201, headers: { 'x-request-id': ctx.requestId } },
       );
@@ -169,6 +201,8 @@ export async function GET(
         quantite: true,
         motif: true,
         venteId: true,
+        lotId: true,
+        lot: { select: { numeroLot: true, datePeremption: true } },
         stockAvant: true,
         stockApres: true,
         auteur: { select: { name: true, email: true } },
@@ -185,6 +219,9 @@ export async function GET(
           quantite: m.quantite,
           motif: m.motif,
           venteId: m.venteId,
+          lotId: m.lotId,
+          numeroLot: m.lot?.numeroLot ?? null,
+          datePeremption: m.lot?.datePeremption?.toISOString().slice(0, 10) ?? null,
           stockAvant: m.stockAvant,
           stockApres: m.stockApres,
           auteurName: m.auteur.name ?? m.auteur.email,

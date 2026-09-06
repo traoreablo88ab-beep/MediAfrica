@@ -97,6 +97,11 @@ beforeEach(() => {
   prismaMock.depotVente.findFirst.mockResolvedValue(null); // no prior row → next seq = 1
   prismaMock.medicamentProduit.findMany.mockResolvedValue([produitRow()] as never);
   prismaMock.medicamentProduit.findUniqueOrThrow.mockResolvedValue({ stockActuel: 50 } as never);
+  // Generous lot capacity by default — consumeFefo draws from this for
+  // every product line unless a test overrides it (e.g. stock insuffisant).
+  prismaMock.medicamentLot.findMany.mockResolvedValue([
+    { id: 'lot-1', numeroLot: 'L1', datePeremption: null, quantiteRestante: 1000 },
+  ] as never);
   prismaMock.depotVente.create.mockResolvedValue({ id: 'v-1' } as never);
   prismaMock.depotVente.findUniqueOrThrow.mockResolvedValue(venteRow() as never);
 });
@@ -202,7 +207,9 @@ describe('POST /api/depot/ventes', () => {
   });
 
   it('stock insuffisant → 400 STOCK_INSUFFISANT, does not create the sale', async () => {
-    prismaMock.medicamentProduit.findUniqueOrThrow.mockResolvedValue({ stockActuel: 1 } as never);
+    prismaMock.medicamentLot.findMany.mockResolvedValue([
+      { id: 'lot-1', numeroLot: 'L1', datePeremption: null, quantiteRestante: 1 },
+    ] as never);
     const res = await POST(
       makePost({
         patientNom: 'Awa Traoré',
@@ -238,7 +245,7 @@ describe('POST /api/depot/ventes', () => {
     expect(body.montantTotal).toBe(600);
   });
 
-  it('multi-line cart: each line decrements its own product via applyStockMovement', async () => {
+  it('multi-line cart: each line decrements its own product via consumeFefo', async () => {
     prismaMock.medicamentProduit.findMany.mockResolvedValue([
       produitRow({ id: 'prod-1', prixUnitaire: 200 }),
       produitRow({ id: 'prod-2', nom: 'Amoxicilline', prixUnitaire: 500 }),
@@ -260,6 +267,40 @@ describe('POST /api/depot/ventes', () => {
       data: { montantTotal: number };
     };
     expect(createArgs.data.montantTotal).toBe(2 * 200 + 1 * 500);
+  });
+
+  it('a sale line that spans 2 lots (FEFO) writes 2 ledger rows in expiration order', async () => {
+    prismaMock.medicamentLot.findMany.mockResolvedValue([
+      {
+        id: 'lot-a',
+        numeroLot: 'LOT-A',
+        datePeremption: new Date('2026-02-01T00:00:00Z'),
+        quantiteRestante: 2,
+      },
+      {
+        id: 'lot-b',
+        numeroLot: 'LOT-B',
+        datePeremption: new Date('2026-06-01T00:00:00Z'),
+        quantiteRestante: 10,
+      },
+    ] as never);
+    const res = await POST(
+      makePost({
+        patientNom: 'Awa Traoré',
+        modePaiement: 'especes',
+        lignes: [{ produitId: 'prod-1', quantite: 3 }],
+      }),
+    );
+    expect(res.status).toBe(201);
+    expect(prismaMock.medicamentLot.update).toHaveBeenNthCalledWith(1, {
+      where: { id: 'lot-a' },
+      data: { quantiteRestante: { decrement: 2 } },
+    });
+    expect(prismaMock.medicamentLot.update).toHaveBeenNthCalledWith(2, {
+      where: { id: 'lot-b' },
+      data: { quantiteRestante: { decrement: 1 } },
+    });
+    expect(prismaMock.depotMouvementStock.create).toHaveBeenCalledTimes(2);
   });
 
   it('numeroSequence derives from max+1, not a row count', async () => {

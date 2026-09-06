@@ -19,6 +19,10 @@ export interface ApplyStockMovementInput {
   auteurId: string;
   motif?: string;
   venteId?: string;
+  // Which MedicamentLot this movement drew from/replenished — set by
+  // fefo.ts (consumeFefo/receiveLot/reverseVenteConsumption). Optional so
+  // every existing caller stays backward-compatible.
+  lotId?: string;
 }
 
 // entree/annulation_vente increase stock; vente/sortie decrease it.
@@ -75,6 +79,7 @@ export async function applyStockMovement(
       quantite: input.quantite,
       motif: input.motif ?? null,
       venteId: input.venteId ?? null,
+      lotId: input.lotId ?? null,
       stockAvant,
       stockApres,
       auteurId: input.auteurId,

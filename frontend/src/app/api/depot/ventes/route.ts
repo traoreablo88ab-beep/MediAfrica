@@ -4,8 +4,10 @@
 // createdAt are always server-derived; montantTotal and each line's
 // sousTotal are always derived from the catalogue's current prixUnitaire,
 // never accepted from the client. Stock is decremented atomically per line
-// via applyStockMovement — a request for more than what's in stock is
-// refused, never partially fulfilled. Any org member (MEMBER+) can sell.
+// via consumeFefo (FEFO addendum) — draws from the soonest-to-expire lot(s)
+// first, splitting across lots when needed; a request for more than what's
+// in stock across every lot is refused, never partially fulfilled. Any org
+// member (MEMBER+) can sell.
 //
 // GET /api/depot/ventes?date=YYYY-MM-DD — that day's sales for the caller's
 // org (defaults to today). A MEMBER only ever sees their own; ADMIN/OWNER
@@ -22,7 +24,8 @@ import { ORG_ROLE_RANK } from '@/lib/server/middleware/require-org-role';
 import { requireActiveSubscription } from '@/lib/server/subscriptions/access-guard';
 import { prisma } from '@/lib/server/prisma';
 import { generateNumeroSequence } from '@/lib/server/depot/numero-sequence';
-import { applyStockMovement, StockInsuffisantError } from '@/lib/server/depot/stock';
+import { StockInsuffisantError } from '@/lib/server/depot/stock';
+import { consumeFefo } from '@/lib/server/depot/fefo';
 import { checkRuptureStock } from '@/lib/server/depot/alertes';
 import { makeRequestContext, withRequestContext } from '@/lib/server/observability/request-context';
 
@@ -178,7 +181,7 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
                 sousTotal: l.sousTotal,
               },
             });
-            await applyStockMovement(tx, {
+            await consumeFefo(tx, {
               organizationId,
               produitId: l.produitId,
               type: 'vente',

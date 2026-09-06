@@ -30,6 +30,21 @@ interface Mouvement {
   createdAt: string;
 }
 
+interface Lot {
+  id: string;
+  numeroLot: string;
+  datePeremption: string | null;
+  quantiteInitiale: number;
+  quantiteRestante: number;
+  statut: 'expire' | 'proche_peremption' | 'ok';
+}
+
+const LOT_STATUT_STYLES: Record<Lot['statut'], { label: string; className: string }> = {
+  expire: { label: 'Expiré', className: 'bg-[#d03b3b]/10 text-[#d03b3b]' },
+  proche_peremption: { label: 'Proche péremption', className: 'bg-[#d08a1c]/10 text-[#d08a1c]' },
+  ok: { label: 'OK', className: 'bg-[#0ca30c]/10 text-[#0ca30c]' },
+};
+
 const MOUVEMENT_LABELS: Record<Mouvement['type'], string> = {
   vente: 'Vente',
   annulation_vente: 'Annulation de vente',
@@ -79,8 +94,14 @@ export default function DepotProduitsPage() {
   const [movType, setMovType] = useState<'entree' | 'sortie'>('entree');
   const [movQuantite, setMovQuantite] = useState('');
   const [movMotif, setMovMotif] = useState('');
+  const [movNumeroLot, setMovNumeroLot] = useState('');
+  const [movDatePeremption, setMovDatePeremption] = useState('');
   const [movSubmitting, setMovSubmitting] = useState(false);
   const [movError, setMovError] = useState<string | null>(null);
+
+  const [lots, setLots] = useState<Lot[]>([]);
+  const [lotsLoading, setLotsLoading] = useState(false);
+  const [lotsError, setLotsError] = useState<string | null>(null);
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -119,13 +140,28 @@ export default function DepotProduitsPage() {
     }
   }, []);
 
+  const loadLots = useCallback(async (produitId: string) => {
+    if (!produitId) return;
+    setLotsLoading(true);
+    setLotsError(null);
+    try {
+      const res = await api<{ lots: Lot[] }>(`/api/depot/produits/${produitId}/lots`);
+      setLots(res.lots);
+    } catch (err) {
+      setLotsError(friendlyError(err));
+    } finally {
+      setLotsLoading(false);
+    }
+  }, []);
+
   useEffect(() => {
     if (selectedProduitId) {
       setMouvements([]);
       setMouvementsCursor(null);
       void loadMouvements(selectedProduitId);
+      void loadLots(selectedProduitId);
     }
-  }, [selectedProduitId, loadMouvements]);
+  }, [selectedProduitId, loadMouvements, loadLots]);
 
   async function onCreate(e: FormEvent) {
     e.preventDefault();
@@ -239,11 +275,29 @@ export default function DepotProduitsPage() {
       setMovError('Le motif doit contenir au moins 3 caractères.');
       return;
     }
+    if (movType === 'entree' && !movNumeroLot.trim()) {
+      setMovError('Le numéro de lot est obligatoire pour une entrée.');
+      return;
+    }
+    if (movType === 'entree' && !movDatePeremption) {
+      setMovError('La date de péremption est obligatoire pour une entrée.');
+      return;
+    }
     setMovSubmitting(true);
     try {
       const updated = await api<{ id: string; nom: string; stockActuel: number }>(
         `/api/depot/produits/${selectedProduitId}/mouvements`,
-        { method: 'POST', body: { type: movType, quantite: qty, motif: movMotif.trim() } },
+        {
+          method: 'POST',
+          body: {
+            type: movType,
+            quantite: qty,
+            motif: movMotif.trim(),
+            ...(movType === 'entree'
+              ? { numeroLot: movNumeroLot.trim(), datePeremption: movDatePeremption }
+              : {}),
+          },
+        },
       );
       setProduits((prev) =>
         prev.map((p) => (p.id === updated.id ? { ...p, stockActuel: updated.stockActuel } : p)),
@@ -251,9 +305,12 @@ export default function DepotProduitsPage() {
       toast(`${movType === 'entree' ? 'Entrée' : 'Sortie'} enregistrée.`);
       setMovQuantite('');
       setMovMotif('');
+      setMovNumeroLot('');
+      setMovDatePeremption('');
       setMouvements([]);
       setMouvementsCursor(null);
       void loadMouvements(selectedProduitId);
+      void loadLots(selectedProduitId);
     } catch (err) {
       setMovError(friendlyError(err));
     } finally {
@@ -482,7 +539,7 @@ export default function DepotProduitsPage() {
             <>
               <form
                 onSubmit={onSubmitMouvement}
-                className="mt-4 flex flex-col gap-3 rounded-md border border-[#e1e0d9] p-4 sm:flex-row sm:items-end"
+                className="mt-4 flex flex-col flex-wrap gap-3 rounded-md border border-[#e1e0d9] p-4 sm:flex-row sm:items-end"
               >
                 <div className="sm:w-36">
                   <label className="mb-1 block text-xs font-medium uppercase tracking-wide text-[#898781]">
@@ -509,6 +566,32 @@ export default function DepotProduitsPage() {
                     onChange={(e) => setMovQuantite(e.target.value)}
                   />
                 </div>
+                {movType === 'entree' && (
+                  <>
+                    <div className="sm:w-40">
+                      <label className="mb-1 block text-xs font-medium uppercase tracking-wide text-[#898781]">
+                        Numéro de lot *
+                      </label>
+                      <input
+                        className={inputClass}
+                        placeholder="Ex: LOT-2026-045"
+                        value={movNumeroLot}
+                        onChange={(e) => setMovNumeroLot(e.target.value)}
+                      />
+                    </div>
+                    <div className="sm:w-40">
+                      <label className="mb-1 block text-xs font-medium uppercase tracking-wide text-[#898781]">
+                        Date de péremption *
+                      </label>
+                      <input
+                        type="date"
+                        className={inputClass}
+                        value={movDatePeremption}
+                        onChange={(e) => setMovDatePeremption(e.target.value)}
+                      />
+                    </div>
+                  </>
+                )}
                 <div className="flex-1">
                   <label className="mb-1 block text-xs font-medium uppercase tracking-wide text-[#898781]">
                     Motif *
@@ -599,6 +682,62 @@ export default function DepotProduitsPage() {
                 >
                   {mouvementsLoading ? 'Chargement…' : 'Charger plus'}
                 </button>
+              )}
+
+              <h3 className="mb-2 mt-6 text-sm font-semibold text-[#0b0b0b]">Lots en stock</h3>
+              <div className="overflow-hidden overflow-x-auto rounded-xl border border-[#e1e0d9]">
+                <table className="w-full text-left text-sm">
+                  <thead>
+                    <tr className="border-b border-[#e1e0d9] text-xs uppercase tracking-wide text-[#898781]">
+                      <th className="px-4 py-2 font-medium">Numéro de lot</th>
+                      <th className="px-4 py-2 font-medium">Date de péremption</th>
+                      <th className="px-4 py-2 font-medium">Restant / initial</th>
+                      <th className="px-4 py-2 font-medium">Statut</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {lotsLoading && lots.length === 0 && (
+                      <tr>
+                        <td className="px-4 py-3" colSpan={4}>
+                          <Skeleton className="h-4 w-full" />
+                        </td>
+                      </tr>
+                    )}
+                    {!lotsLoading && lots.length === 0 && (
+                      <tr>
+                        <td colSpan={4} className="px-4 py-6 text-center text-sm text-[#898781]">
+                          Aucun lot enregistré.
+                        </td>
+                      </tr>
+                    )}
+                    {lots.map((l) => {
+                      const sty = LOT_STATUT_STYLES[l.statut];
+                      return (
+                        <tr key={l.id} className="border-b border-[#e1e0d9] last:border-0">
+                          <td className="px-4 py-2 font-medium text-[#0b0b0b]">{l.numeroLot}</td>
+                          <td className="px-4 py-2 text-[#52514e] [font-variant-numeric:tabular-nums]">
+                            {l.datePeremption ?? '—'}
+                          </td>
+                          <td className="px-4 py-2 text-[#52514e] [font-variant-numeric:tabular-nums]">
+                            {l.quantiteRestante} / {l.quantiteInitiale}
+                          </td>
+                          <td className="px-4 py-2">
+                            <span
+                              className={`inline-flex items-center rounded-full px-2 py-0.5 text-xs font-medium ${sty.className}`}
+                            >
+                              {sty.label}
+                            </span>
+                          </td>
+                        </tr>
+                      );
+                    })}
+                  </tbody>
+                </table>
+              </div>
+              {lotsError && (
+                <p role="alert" className="mt-2 text-sm text-[#d03b3b]">
+                  {lotsError}
+                </p>
               )}
             </>
           )}
