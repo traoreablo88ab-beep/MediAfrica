@@ -35,6 +35,7 @@ export async function GET(req: NextRequest): Promise<NextResponse> {
           currency: p.currency,
           billingIntervalDays: p.billingIntervalDays,
           isActive: p.isActive,
+          chariowProductId: p.chariowProductId,
           subscriberCount: p._count.subscriptions,
           createdAt: p.createdAt.toISOString(),
         })),
@@ -49,6 +50,7 @@ const CreatePlanBody = z.object({
   priceAmount: z.number().int().nonnegative(),
   currency: z.string().length(3).default('XOF'),
   billingIntervalDays: z.number().int().positive().default(30),
+  chariowProductId: z.string().trim().min(1).max(200).optional(),
 });
 
 export async function POST(req: NextRequest): Promise<NextResponse> {
@@ -75,18 +77,31 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
       );
     }
 
-    const plan = await prisma.plan.create({ data: parsed.data });
+    const { chariowProductId, ...rest } = parsed.data;
+    const plan = await prisma.plan.create({
+      data: { ...rest, ...(chariowProductId !== undefined ? { chariowProductId } : {}) },
+    });
 
     await logAdminAction(prisma, {
       actorId: auth.admin.id,
       action: 'plan.create',
       targetType: 'Plan',
       targetId: plan.id,
-      metadata: { name: plan.name, priceAmount: plan.priceAmount, currency: plan.currency },
+      metadata: {
+        name: plan.name,
+        priceAmount: plan.priceAmount,
+        currency: plan.currency,
+        chariowProductId: plan.chariowProductId,
+      },
     });
 
     return NextResponse.json(
-      { id: plan.id, name: plan.name, priceAmount: plan.priceAmount },
+      {
+        id: plan.id,
+        name: plan.name,
+        priceAmount: plan.priceAmount,
+        chariowProductId: plan.chariowProductId,
+      },
       { status: 201, headers: { 'x-request-id': ctx.requestId } },
     );
   });

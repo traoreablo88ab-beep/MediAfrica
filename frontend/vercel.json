@@ -8,6 +8,7 @@
     { "path": "/api/cron/email-job-purge", "schedule": "0 0 * * *" },
     { "path": "/api/cron/subscription-billing", "schedule": "0 6 * * *" },
     { "path": "/api/cron/guichet-alertes", "schedule": "0 7 * * *" },
-    { "path": "/api/cron/depot-peremption", "schedule": "0 8 * * *" }
+    { "path": "/api/cron/depot-peremption", "schedule": "0 8 * * *" },
+    { "path": "/api/cron/subscription-reconcile", "schedule": "0 5 * * *" }
   ]
 }

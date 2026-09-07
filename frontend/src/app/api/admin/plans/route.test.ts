@@ -52,6 +52,7 @@ function planRow(overrides: Partial<Record<string, unknown>> = {}) {
     currency: 'XOF',
     billingIntervalDays: 30,
     isActive: true,
+    chariowProductId: null,
     _count: { subscriptions: 5 },
     createdAt: new Date('2026-01-01T00:00:00Z'),
     ...overrides,
@@ -107,10 +108,24 @@ describe('POST /api/admin/plans', () => {
     const res = await POST(makePost({ name: 'Pro', priceAmount: 25000 }));
     expect(res.status).toBe(201);
     const body = await res.json();
-    expect(body).toEqual({ id: 'plan-2', name: 'Pro', priceAmount: 15000 });
+    expect(body).toEqual({ id: 'plan-2', name: 'Pro', priceAmount: 15000, chariowProductId: null });
     expect(mockLogAdminAction).toHaveBeenCalledWith(
       expect.anything(),
       expect.objectContaining({ actorId: 'admin-1', action: 'plan.create', targetType: 'Plan' }),
     );
+  });
+
+  it('creates a plan with a chariowProductId', async () => {
+    prismaMock.plan.create.mockResolvedValue(
+      planRow({ id: 'plan-3', name: 'Pro', chariowProductId: 'prod_abc' }) as never,
+    );
+    const res = await POST(
+      makePost({ name: 'Pro', priceAmount: 25000, chariowProductId: 'prod_abc' }),
+    );
+    expect(res.status).toBe(201);
+    const body = await res.json();
+    expect(body.chariowProductId).toBe('prod_abc');
+    const createArgs = prismaMock.plan.create.mock.calls[0]?.[0];
+    expect(createArgs?.data).toMatchObject({ chariowProductId: 'prod_abc' });
   });
 });

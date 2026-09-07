@@ -12,6 +12,7 @@ interface Plan {
   currency: string;
   billingIntervalDays: number;
   isActive: boolean;
+  chariowProductId: string | null;
   subscriberCount: number;
   createdAt: string;
 }
@@ -28,11 +29,14 @@ export default function AdminPlansPage() {
   const [editingId, setEditingId] = useState<string | null>(null);
   const [editPrice, setEditPrice] = useState('');
   const [busyId, setBusyId] = useState<string | null>(null);
+  const [editingChariowId, setEditingChariowId] = useState<string | null>(null);
+  const [editChariowProductId, setEditChariowProductId] = useState('');
 
   const [showCreate, setShowCreate] = useState(false);
   const [newName, setNewName] = useState('');
   const [newPrice, setNewPrice] = useState('');
   const [newInterval, setNewInterval] = useState('30');
+  const [newChariowProductId, setNewChariowProductId] = useState('');
   const [creating, setCreating] = useState(false);
 
   async function load() {
@@ -81,6 +85,29 @@ export default function AdminPlansPage() {
     }
   }
 
+  function startEditChariow(plan: Plan) {
+    setEditingChariowId(plan.id);
+    setEditChariowProductId(plan.chariowProductId ?? '');
+  }
+
+  async function saveChariowProductId(plan: Plan) {
+    const trimmed = editChariowProductId.trim();
+    setBusyId(plan.id);
+    try {
+      const updated = await api<Plan>(`/api/admin/plans/${plan.id}`, {
+        method: 'PATCH',
+        body: { chariowProductId: trimmed.length > 0 ? trimmed : null },
+      });
+      setPlans((prev) => prev.map((p) => (p.id === plan.id ? { ...p, ...updated } : p)));
+      setEditingChariowId(null);
+      toast('ID produit Chariow mis à jour.');
+    } catch (err) {
+      toast(friendlyError(err), 'error');
+    } finally {
+      setBusyId(null);
+    }
+  }
+
   async function toggleActive(plan: Plan) {
     setBusyId(plan.id);
     try {
@@ -109,11 +136,17 @@ export default function AdminPlansPage() {
     try {
       await api('/api/admin/plans', {
         method: 'POST',
-        body: { name: newName.trim(), priceAmount: amount, billingIntervalDays: interval },
+        body: {
+          name: newName.trim(),
+          priceAmount: amount,
+          billingIntervalDays: interval,
+          ...(newChariowProductId.trim() ? { chariowProductId: newChariowProductId.trim() } : {}),
+        },
       });
       setNewName('');
       setNewPrice('');
       setNewInterval('30');
+      setNewChariowProductId('');
       setShowCreate(false);
       toast('Forfait créé.');
       await load();
@@ -180,6 +213,17 @@ export default function AdminPlansPage() {
               onChange={(e) => setNewInterval(e.target.value)}
               inputMode="numeric"
               className="mt-1 w-28 rounded-md border border-[#e1e0d9] px-3 py-2 text-sm focus:border-[#2a78d6] focus:outline-none"
+            />
+          </div>
+          <div className="flex-1">
+            <label className="text-xs font-medium text-[#52514e]">
+              ID produit Chariow (optionnel)
+            </label>
+            <input
+              value={newChariowProductId}
+              onChange={(e) => setNewChariowProductId(e.target.value)}
+              placeholder="prod_xxxxxxxx"
+              className="mt-1 w-full rounded-md border border-[#e1e0d9] px-3 py-2 text-sm focus:border-[#2a78d6] focus:outline-none"
             />
           </div>
           <button
@@ -280,6 +324,50 @@ export default function AdminPlansPage() {
                 <p className="mt-1 text-xs text-[#898781]">
                   tous les {plan.billingIntervalDays} jours
                 </p>
+              </div>
+
+              <div className="mt-4 border-t border-[#e1e0d9] pt-3">
+                <label className="text-xs font-medium text-[#52514e]">ID produit Chariow</label>
+                {editingChariowId === plan.id ? (
+                  <div className="mt-1 flex flex-col gap-2">
+                    <input
+                      value={editChariowProductId}
+                      onChange={(e) => setEditChariowProductId(e.target.value)}
+                      placeholder="prod_xxxxxxxx"
+                      autoFocus
+                      className="w-full rounded-md border border-[#2a78d6] px-2 py-1 text-sm focus:outline-none"
+                    />
+                    <div className="flex items-center gap-3">
+                      <button
+                        type="button"
+                        onClick={() => saveChariowProductId(plan)}
+                        disabled={busyId === plan.id}
+                        className="text-xs font-medium text-[#2a78d6] hover:underline disabled:opacity-50"
+                      >
+                        Enregistrer
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => setEditingChariowId(null)}
+                        className="text-xs font-medium text-[#898781] hover:underline"
+                      >
+                        Annuler
+                      </button>
+                    </div>
+                  </div>
+                ) : (
+                  <button
+                    type="button"
+                    onClick={() => startEditChariow(plan)}
+                    className="mt-1 block text-left text-sm text-[#0b0b0b] hover:text-[#2a78d6]"
+                  >
+                    {plan.chariowProductId ?? (
+                      <span className="rounded-full bg-[#d03b3b]/10 px-2 py-0.5 text-xs font-medium text-[#d03b3b]">
+                        Chariow non configuré
+                      </span>
+                    )}
+                  </button>
+                )}
               </div>
 
               <div className="mt-5 flex items-center justify-between border-t border-[#e1e0d9] pt-4">

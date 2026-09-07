@@ -180,6 +180,7 @@ model Organization {
   depotMouvementsStock  DepotMouvementStock[]
   depotAlertes          DepotAlerte[]
   depotClotures         DepotCloture[]
+  subscriptionPayments  SubscriptionPayment[]
 
   @@index([ownerId])
 }
@@ -1528,10 +1529,18 @@ model Plan {
   currency            String   @default("XOF")
   billingIntervalDays Int      @default(30)
   isActive            Boolean  @default(true)
+  // Chariow product configured in the merchant's own Chariow dashboard for
+  // this plan's price. Nullable: a plan can exist before it's wired up to
+  // Chariow — /api/billing/pay returns 503 PLAN_NOT_CHARIOW_CONFIGURED until
+  // an admin sets this via PATCH /api/admin/plans/[id]. Chariow enforces the
+  // price of THIS product server-side — priceAmount above stays informational
+  // /display-only and must be kept in sync by the admin manually.
+  chariowProductId    String?
   createdAt           DateTime @default(now())
   updatedAt           DateTime @updatedAt
 
-  subscriptions Subscription[]
+  subscriptions        Subscription[]
+  subscriptionPayments SubscriptionPayment[]
 }
 
 model Subscription {
@@ -1554,9 +1563,58 @@ model Subscription {
   createdAt             DateTime     @default(now())
   updatedAt             DateTime     @updatedAt
 
-  orders Order[]
+  orders   Order[]
+  payments SubscriptionPayment[]
 
   @@index([status, currentPeriodEnd])
+}
+
+// ───────────────────────────────────────────────────────────────────────
+// Chariow subscription checkout attempts — parallel to Order (used by the
+// separate /api/orders patient flow) but NOT the same model: Chariow has no
+// arbitrary-amount charge call (fixed per-product price in Chariow's own
+// dashboard), and this integration follows a "webhook nudges only, never
+// credits" rule that Order/Bictorys does not — see subscriptions/reconcile.ts.
+// ───────────────────────────────────────────────────────────────────────
+model SubscriptionPayment {
+  id             String       @id @default(cuid())
+  subscriptionId String
+  subscription   Subscription @relation(fields: [subscriptionId], references: [id], onDelete: Cascade)
+  organizationId String
+  organization   Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  planId         String
+  plan           Plan         @relation(fields: [planId], references: [id], onDelete: Restrict)
+
+  provider       String @default("chariow")
+  providerSaleId String // Chariow purchase/sale id (data.purchase.id)
+  checkoutUrl    String?
+  // Informational snapshot of what Chariow reported (purchase.amount /
+  // GET /sales/{id} amount) — never used to compute what to charge; Chariow
+  // enforces its own product price. Nullable until the checkout call returns.
+  amount   Int?
+  currency String?
+  status   String @default("PENDING") // PENDING | SUCCEEDED | FAILED | ABANDONED | EXPIRED
+
+  // Billing-contact snapshot required by Chariow's /checkout payload. Also
+  // doubles as the "last known contact" cache so a future payment attempt
+  // can skip re-prompting the admin (see /api/billing/pay's fallback logic).
+  customerEmail            String
+  customerFirstName        String
+  customerLastName         String
+  customerPhoneLocal       String
+  customerPhoneCountryIso2 String
+
+  succeededAt      DateTime?
+  lastReconciledAt DateTime?
+  lastWebhookAt    DateTime? // set by the webhook's DB-only onPaid nudge — never used to credit
+  expiresAt        DateTime // PENDING expiry; reconcile cron's last-chance-then-EXPIRE cutoff
+  createdAt        DateTime  @default(now())
+  updatedAt        DateTime  @updatedAt
+
+  @@unique([provider, providerSaleId])
+  @@index([subscriptionId, createdAt])
+  @@index([status, expiresAt])
+  @@index([organizationId, createdAt])
 }
 
 // Staff-submitted reports/flags (bugs, support requests, billing issues) —

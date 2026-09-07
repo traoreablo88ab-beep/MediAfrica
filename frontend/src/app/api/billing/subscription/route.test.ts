@@ -54,7 +54,7 @@ describe('GET /api/billing/subscription', () => {
 
   it('scopes the lookup to the caller organization', async () => {
     prismaMock.subscription.findUnique.mockResolvedValue(subscriptionRow() as never);
-    prismaMock.order.findMany.mockResolvedValue([] as never);
+    prismaMock.subscriptionPayment.findMany.mockResolvedValue([] as never);
     await GET(makeGet());
     const args = prismaMock.subscription.findUnique.mock.calls[0]?.[0];
     expect(args?.where).toEqual({ organizationId: 'org-1' });
@@ -68,16 +68,16 @@ describe('GET /api/billing/subscription', () => {
     expect(body.error).toBe('SUBSCRIPTION_NOT_FOUND');
   });
 
-  it('returns subscription, plan, and payment history', async () => {
+  it('returns subscription, plan, and payment history (aliased from SubscriptionPayment)', async () => {
     prismaMock.subscription.findUnique.mockResolvedValue(subscriptionRow() as never);
-    prismaMock.order.findMany.mockResolvedValue([
+    prismaMock.subscriptionPayment.findMany.mockResolvedValue([
       {
-        id: 'order-1',
+        id: 'pay-1',
         amount: 15000,
         currency: 'XOF',
-        status: 'PAID',
-        paymentUrl: null,
-        paidAt: new Date('2026-07-01T00:00:00Z'),
+        status: 'SUCCEEDED',
+        checkoutUrl: null,
+        succeededAt: new Date('2026-07-01T00:00:00Z'),
         createdAt: new Date('2026-07-01T00:00:00Z'),
       },
     ] as never);
@@ -88,6 +88,30 @@ describe('GET /api/billing/subscription', () => {
     expect(body.subscription).toMatchObject({ id: 'sub-1', status: 'ACTIVE' });
     expect(body.plan).toMatchObject({ id: 'plan-1', name: 'Standard', priceAmount: 15000 });
     expect(body.history).toHaveLength(1);
-    expect(body.history[0]).toMatchObject({ id: 'order-1', status: 'PAID' });
+    expect(body.history[0]).toMatchObject({
+      id: 'pay-1',
+      status: 'SUCCEEDED',
+      paymentUrl: null,
+      paidAt: '2026-07-01T00:00:00.000Z',
+    });
+  });
+
+  it('falls back to the plan price/currency when a payment row has none snapshotted', async () => {
+    prismaMock.subscription.findUnique.mockResolvedValue(subscriptionRow() as never);
+    prismaMock.subscriptionPayment.findMany.mockResolvedValue([
+      {
+        id: 'pay-2',
+        amount: null,
+        currency: null,
+        status: 'PENDING',
+        checkoutUrl: 'https://payment.chariow.com/x',
+        succeededAt: null,
+        createdAt: new Date('2026-07-01T00:00:00Z'),
+      },
+    ] as never);
+
+    const res = await GET(makeGet());
+    const body = await res.json();
+    expect(body.history[0]).toMatchObject({ amount: 15000, currency: 'XOF', paidAt: null });
   });
 });

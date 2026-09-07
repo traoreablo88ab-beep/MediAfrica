@@ -27,7 +27,7 @@ export async function GET(req: NextRequest): Promise<NextResponse> {
       );
     }
 
-    const orders = await prisma.order.findMany({
+    const payments = await prisma.subscriptionPayment.findMany({
       where: { organizationId: auth.orgMember.organizationId },
       orderBy: { createdAt: 'desc' },
       take: HISTORY_LIMIT,
@@ -36,8 +36,8 @@ export async function GET(req: NextRequest): Promise<NextResponse> {
         amount: true,
         currency: true,
         status: true,
-        paymentUrl: true,
-        paidAt: true,
+        checkoutUrl: true,
+        succeededAt: true,
         createdAt: true,
       },
     });
@@ -57,14 +57,14 @@ export async function GET(req: NextRequest): Promise<NextResponse> {
           currency: subscription.plan.currency,
           billingIntervalDays: subscription.plan.billingIntervalDays,
         },
-        history: orders.map((o) => ({
-          id: o.id,
-          amount: o.amount,
-          currency: o.currency,
-          status: o.status,
-          paymentUrl: o.paymentUrl,
-          paidAt: o.paidAt?.toISOString() ?? null,
-          createdAt: o.createdAt.toISOString(),
+        history: payments.map((p) => ({
+          id: p.id,
+          amount: p.amount ?? subscription.plan.priceAmount,
+          currency: p.currency ?? subscription.plan.currency,
+          status: p.status,
+          paymentUrl: p.checkoutUrl,
+          paidAt: p.succeededAt?.toISOString() ?? null,
+          createdAt: p.createdAt.toISOString(),
         })),
       },
       { headers: { 'x-request-id': ctx.requestId } },

@@ -51,6 +51,7 @@ function existingPlan(overrides: Partial<Record<string, unknown>> = {}) {
     currency: 'XOF',
     billingIntervalDays: 30,
     isActive: true,
+    chariowProductId: null,
     ...overrides,
   };
 }
@@ -105,8 +106,8 @@ describe('PATCH /api/admin/plans/[id]', () => {
       expect.objectContaining({
         action: 'plan.update',
         metadata: {
-          from: { priceAmount: 15000, isActive: true },
-          to: { priceAmount: 20000, isActive: true },
+          from: { priceAmount: 15000, isActive: true, chariowProductId: null },
+          to: { priceAmount: 20000, isActive: true, chariowProductId: null },
         },
       }),
     );
@@ -122,5 +123,37 @@ describe('PATCH /api/admin/plans/[id]', () => {
     expect(res.status).toBe(200);
     const body = await res.json();
     expect(body.isActive).toBe(false);
+  });
+
+  it('sets chariowProductId', async () => {
+    prismaMock.plan.findUnique.mockResolvedValue(existingPlan() as never);
+    prismaMock.plan.update.mockResolvedValue(
+      existingPlan({ chariowProductId: 'prod_abc' }) as never,
+    );
+
+    const { req, ctx } = makePatch('plan-1', { chariowProductId: 'prod_abc' });
+    const res = await PATCH(req, ctx);
+
+    expect(res.status).toBe(200);
+    const body = await res.json();
+    expect(body.chariowProductId).toBe('prod_abc');
+    const updateArgs = prismaMock.plan.update.mock.calls[0]?.[0];
+    expect(updateArgs?.data).toMatchObject({ chariowProductId: 'prod_abc' });
+  });
+
+  it('clears chariowProductId back to null', async () => {
+    prismaMock.plan.findUnique.mockResolvedValue(
+      existingPlan({ chariowProductId: 'prod_abc' }) as never,
+    );
+    prismaMock.plan.update.mockResolvedValue(existingPlan({ chariowProductId: null }) as never);
+
+    const { req, ctx } = makePatch('plan-1', { chariowProductId: null });
+    const res = await PATCH(req, ctx);
+
+    expect(res.status).toBe(200);
+    const body = await res.json();
+    expect(body.chariowProductId).toBeNull();
+    const updateArgs = prismaMock.plan.update.mock.calls[0]?.[0];
+    expect(updateArgs?.data).toMatchObject({ chariowProductId: null });
   });
 });

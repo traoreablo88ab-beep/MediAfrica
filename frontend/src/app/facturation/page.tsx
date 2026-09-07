@@ -1,9 +1,9 @@
 'use client';
 
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState, type FormEvent } from 'react';
 import { useSearchParams } from 'next/navigation';
 import { Suspense } from 'react';
-import { api } from '@/lib/api';
+import { api, ApiError } from '@/lib/api';
 import { friendlyError } from '@/lib/errorMessages';
 import { AppHeader } from '@/components/AppHeader';
 import { Skeleton } from '@/components/Skeleton';
@@ -51,8 +51,9 @@ const STATUS_BADGE: Record<string, string> = {
 
 const ORDER_STATUS_LABEL: Record<string, string> = {
   PENDING: 'En attente',
-  PAID: 'Payé',
+  SUCCEEDED: 'Payé',
   FAILED: 'Échoué',
+  ABANDONED: 'Abandonné',
   EXPIRED: 'Expiré',
   REFUNDED: 'Remboursé',
 };
@@ -71,11 +72,130 @@ function formatAmount(amount: number, currency: string): string {
 
 const ORDER_STATUS_DOT: Record<string, string> = {
   PENDING: 'bg-[#d08a1c]',
-  PAID: 'bg-[#0ca30c]',
+  SUCCEEDED: 'bg-[#0ca30c]',
   FAILED: 'bg-[#d03b3b]',
+  ABANDONED: 'bg-[#d03b3b]',
   EXPIRED: 'bg-[#c9c8c1]',
   REFUNDED: 'bg-[#2a78d6]',
 };
+
+const CHARIOW_COUNTRIES = [
+  { iso2: 'ML', label: 'Mali' },
+  { iso2: 'SN', label: 'Sénégal' },
+  { iso2: 'CI', label: "Côte d'Ivoire" },
+  { iso2: 'BF', label: 'Burkina Faso' },
+  { iso2: 'BJ', label: 'Bénin' },
+  { iso2: 'TG', label: 'Togo' },
+];
+
+interface BillingContact {
+  firstName: string;
+  lastName: string;
+  phoneLocal: string;
+  phoneCountryIso2: string;
+}
+
+function BillingContactModal({
+  submitting,
+  onSubmit,
+  onCancel,
+}: {
+  submitting: boolean;
+  onSubmit: (contact: BillingContact) => void;
+  onCancel: () => void;
+}) {
+  const [firstName, setFirstName] = useState('');
+  const [lastName, setLastName] = useState('');
+  const [phoneLocal, setPhoneLocal] = useState('');
+  const [phoneCountryIso2, setPhoneCountryIso2] = useState('ML');
+
+  function handleSubmit(e: FormEvent) {
+    e.preventDefault();
+    onSubmit({
+      firstName: firstName.trim(),
+      lastName: lastName.trim(),
+      phoneLocal: phoneLocal.trim(),
+      phoneCountryIso2,
+    });
+  }
+
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 px-4">
+      <div className="w-full max-w-md rounded-2xl bg-white p-6 shadow-xl">
+        <h2 className="text-lg font-bold text-[#0b0b0b]">Coordonnées de facturation</h2>
+        <p className="mt-1 text-sm text-[#52514e]">
+          Chariow a besoin de ces informations pour créer votre paiement.
+        </p>
+        <form onSubmit={handleSubmit} className="mt-4 flex flex-col gap-3">
+          <div className="grid grid-cols-2 gap-3">
+            <div>
+              <label className="text-xs font-medium text-[#52514e]">Prénom</label>
+              <input
+                required
+                value={firstName}
+                onChange={(e) => setFirstName(e.target.value)}
+                className="mt-1 w-full rounded-md border border-[#e1e0d9] px-3 py-2 text-sm focus:border-[#2a78d6] focus:outline-none"
+              />
+            </div>
+            <div>
+              <label className="text-xs font-medium text-[#52514e]">Nom</label>
+              <input
+                required
+                value={lastName}
+                onChange={(e) => setLastName(e.target.value)}
+                className="mt-1 w-full rounded-md border border-[#e1e0d9] px-3 py-2 text-sm focus:border-[#2a78d6] focus:outline-none"
+              />
+            </div>
+          </div>
+          <div>
+            <label className="text-xs font-medium text-[#52514e]">Pays</label>
+            <select
+              value={phoneCountryIso2}
+              onChange={(e) => setPhoneCountryIso2(e.target.value)}
+              className="mt-1 w-full rounded-md border border-[#e1e0d9] bg-white px-3 py-2 text-sm focus:border-[#2a78d6] focus:outline-none"
+            >
+              {CHARIOW_COUNTRIES.map((c) => (
+                <option key={c.iso2} value={c.iso2}>
+                  {c.label}
+                </option>
+              ))}
+            </select>
+          </div>
+          <div>
+            <label className="text-xs font-medium text-[#52514e]">Numéro de téléphone local</label>
+            <input
+              required
+              inputMode="numeric"
+              value={phoneLocal}
+              onChange={(e) => setPhoneLocal(e.target.value)}
+              placeholder="70123456"
+              className="mt-1 w-full rounded-md border border-[#e1e0d9] px-3 py-2 text-sm focus:border-[#2a78d6] focus:outline-none"
+            />
+            <p className="mt-1 text-xs text-[#898781]">
+              Sans le 0 initial ni l&apos;indicatif pays.
+            </p>
+          </div>
+          <div className="mt-2 flex items-center justify-end gap-3">
+            <button
+              type="button"
+              onClick={onCancel}
+              className="text-sm font-medium text-[#898781] hover:underline"
+            >
+              Annuler
+            </button>
+            <button
+              type="submit"
+              disabled={submitting}
+              className="rounded-md bg-[#2a78d6] px-4 py-2 text-sm font-medium text-white hover:bg-[#256abf] disabled:opacity-50"
+            >
+              {submitting ? 'Redirection…' : 'Continuer vers Chariow'}
+            </button>
+          </div>
+        </form>
+      </div>
+    </div>
+  );
+}
 
 export default function FacturationPage() {
   return (
@@ -92,6 +212,9 @@ function FacturationContent() {
   const [data, setData] = useState<SubscriptionData | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [paying, setPaying] = useState(false);
+  const [showContactModal, setShowContactModal] = useState(false);
+  const [verifying, setVerifying] = useState(false);
+  const pollBudget = useRef(0);
 
   async function load() {
     try {
@@ -102,30 +225,66 @@ function FacturationContent() {
     }
   }
 
+  async function pollChariowReturn() {
+    setVerifying(true);
+    pollBudget.current = 15; // ~15 × 3s = 45s, mirrors Chariow.md.md's guard-rail
+    const tick = async () => {
+      pollBudget.current -= 1;
+      try {
+        const res = await api<{ status: string }>('/api/billing/pay/verify', { method: 'POST' });
+        if (res.status === 'SUCCEEDED') {
+          setVerifying(false);
+          toast('Paiement confirmé — votre abonnement est actif.');
+          await load();
+          return;
+        }
+        if (res.status === 'FAILED' || res.status === 'ABANDONED' || res.status === 'EXPIRED') {
+          setVerifying(false);
+          toast('Le paiement a échoué ou a été annulé.', 'error');
+          await load();
+          return;
+        }
+      } catch {
+        // transient — keep polling until the budget runs out
+      }
+      if (pollBudget.current <= 0) {
+        setVerifying(false);
+        toast('Toujours en attente de confirmation — la page se mettra à jour automatiquement.');
+        await load();
+        return;
+      }
+      setTimeout(() => void tick(), 3000);
+    };
+    void tick();
+  }
+
   useEffect(() => {
     void load();
-    if (searchParams.get('paid') === '1') {
-      toast('Paiement en cours de confirmation — la page se mettra à jour automatiquement.');
-    } else if (searchParams.get('failed') === '1') {
-      toast('Le paiement a échoué ou a été annulé.', 'error');
+    if (searchParams.get('chariow_return') === '1') {
+      void pollChariowReturn();
     }
   }, []);
 
-  async function onPay() {
+  async function onPay(contact?: BillingContact) {
     setPaying(true);
     try {
       const res = await api<{ id: string; paymentUrl: string | null; status: string }>(
         '/api/billing/pay',
-        { method: 'POST', body: {} },
+        { method: 'POST', body: contact ?? {} },
       );
+      setShowContactModal(false);
       if (res.paymentUrl) {
         window.location.href = res.paymentUrl;
       } else {
-        toast('Paiement initié. Actualisez la page dans quelques instants.');
+        toast('Paiement confirmé — votre abonnement est actif.');
         await load();
       }
     } catch (err) {
-      toast(friendlyError(err), 'error');
+      if (err instanceof ApiError && err.code === 'BILLING_CONTACT_REQUIRED') {
+        setShowContactModal(true);
+      } else {
+        toast(friendlyError(err), 'error');
+      }
     } finally {
       setPaying(false);
     }
@@ -150,6 +309,13 @@ function FacturationContent() {
             className="mt-6 rounded-xl bg-[#d03b3b]/10 px-4 py-3 text-sm text-[#d03b3b]"
           >
             {error}
+          </p>
+        )}
+
+        {verifying && (
+          <p className="mt-6 flex items-center gap-2 rounded-xl bg-[#2a78d6]/10 px-4 py-3 text-sm text-[#2a78d6]">
+            <span className="h-1.5 w-1.5 animate-pulse rounded-full bg-current" />
+            Confirmation du paiement en cours…
           </p>
         )}
 
@@ -244,7 +410,7 @@ function FacturationContent() {
                 {canPay ? (
                   <button
                     type="button"
-                    onClick={onPay}
+                    onClick={() => onPay()}
                     disabled={paying}
                     className="mt-5 flex items-center justify-center gap-2 rounded-md bg-[#2a78d6] px-4 py-2.5 text-sm font-medium text-white transition-colors hover:bg-[#256abf] disabled:opacity-50"
                   >
@@ -316,6 +482,14 @@ function FacturationContent() {
           </>
         )}
       </div>
+
+      {showContactModal && (
+        <BillingContactModal
+          submitting={paying}
+          onSubmit={(contact) => void onPay(contact)}
+          onCancel={() => setShowContactModal(false)}
+        />
+      )}
     </main>
   );
 }

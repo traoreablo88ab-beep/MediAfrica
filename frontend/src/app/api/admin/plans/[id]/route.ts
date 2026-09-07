@@ -21,6 +21,9 @@ const PatchPlanBody = z.object({
   currency: z.string().length(3).optional(),
   billingIntervalDays: z.number().int().positive().optional(),
   isActive: z.boolean().optional(),
+  // Nullable (not just optional) so an admin can explicitly clear a plan
+  // back to "not wired up to Chariow" — distinct from "leave unchanged".
+  chariowProductId: z.string().trim().min(1).max(200).nullable().optional(),
 });
 
 export async function PATCH(
@@ -71,6 +74,7 @@ export async function PATCH(
           ? { billingIntervalDays: d.billingIntervalDays }
           : {}),
         ...(d.isActive !== undefined ? { isActive: d.isActive } : {}),
+        ...(d.chariowProductId !== undefined ? { chariowProductId: d.chariowProductId } : {}),
       },
     });
 
@@ -80,8 +84,16 @@ export async function PATCH(
       targetType: 'Plan',
       targetId: id,
       metadata: {
-        from: { priceAmount: existing.priceAmount, isActive: existing.isActive },
-        to: { priceAmount: updated.priceAmount, isActive: updated.isActive },
+        from: {
+          priceAmount: existing.priceAmount,
+          isActive: existing.isActive,
+          chariowProductId: existing.chariowProductId,
+        },
+        to: {
+          priceAmount: updated.priceAmount,
+          isActive: updated.isActive,
+          chariowProductId: updated.chariowProductId,
+        },
       },
     });
 
@@ -93,6 +105,7 @@ export async function PATCH(
         currency: updated.currency,
         billingIntervalDays: updated.billingIntervalDays,
         isActive: updated.isActive,
+        chariowProductId: updated.chariowProductId,
       },
       { headers: { 'x-request-id': reqCtx.requestId } },
     );
