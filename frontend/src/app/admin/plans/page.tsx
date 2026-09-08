@@ -29,6 +29,8 @@ export default function AdminPlansPage() {
   const [editingId, setEditingId] = useState<string | null>(null);
   const [editPrice, setEditPrice] = useState('');
   const [busyId, setBusyId] = useState<string | null>(null);
+  const [editingNameId, setEditingNameId] = useState<string | null>(null);
+  const [editName, setEditName] = useState('');
   const [editingChariowId, setEditingChariowId] = useState<string | null>(null);
   const [editChariowProductId, setEditChariowProductId] = useState('');
 
@@ -78,6 +80,33 @@ export default function AdminPlansPage() {
       toast(
         'Prix mis à jour. Les abonnés actuels ne sont pas affectés avant leur prochain renouvellement.',
       );
+    } catch (err) {
+      toast(friendlyError(err), 'error');
+    } finally {
+      setBusyId(null);
+    }
+  }
+
+  function startEditName(plan: Plan) {
+    setEditingNameId(plan.id);
+    setEditName(plan.name);
+  }
+
+  async function saveName(plan: Plan) {
+    const trimmed = editName.trim();
+    if (!trimmed) {
+      toast('Le nom ne peut pas être vide.', 'error');
+      return;
+    }
+    setBusyId(plan.id);
+    try {
+      const updated = await api<Plan>(`/api/admin/plans/${plan.id}`, {
+        method: 'PATCH',
+        body: { name: trimmed },
+      });
+      setPlans((prev) => prev.map((p) => (p.id === plan.id ? { ...p, ...updated } : p)));
+      setEditingNameId(null);
+      toast('Nom du forfait mis à jour.');
     } catch (err) {
       toast(friendlyError(err), 'error');
     } finally {
@@ -256,7 +285,39 @@ export default function AdminPlansPage() {
             />
             <div className="p-5">
               <div className="flex items-start justify-between gap-2">
-                <h2 className="text-base font-semibold text-[#0b0b0b]">{plan.name}</h2>
+                {editingNameId === plan.id ? (
+                  <div className="flex flex-1 items-center gap-1">
+                    <input
+                      value={editName}
+                      onChange={(e) => setEditName(e.target.value)}
+                      autoFocus
+                      className="w-full rounded-md border border-[#2a78d6] px-2 py-1 text-base font-semibold focus:outline-none"
+                    />
+                    <button
+                      type="button"
+                      onClick={() => saveName(plan)}
+                      disabled={busyId === plan.id}
+                      className="text-xs font-medium text-[#2a78d6] hover:underline disabled:opacity-50"
+                    >
+                      OK
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => setEditingNameId(null)}
+                      className="text-xs font-medium text-[#898781] hover:underline"
+                    >
+                      Annuler
+                    </button>
+                  </div>
+                ) : (
+                  <button
+                    type="button"
+                    onClick={() => startEditName(plan)}
+                    className="text-left text-base font-semibold text-[#0b0b0b] hover:text-[#2a78d6]"
+                  >
+                    {plan.name}
+                  </button>
+                )}
                 <span
                   className={`rounded-full px-2 py-0.5 text-xs font-medium ${
                     plan.isActive ? 'bg-[#0ca30c]/10 text-[#0ca30c]' : 'bg-[#e1e0d9] text-[#52514e]'
